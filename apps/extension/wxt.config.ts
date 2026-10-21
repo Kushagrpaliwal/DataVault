@@ -40,7 +40,7 @@ export default defineConfig({
     name: "DataVault",
     description: "Capture and save web text, snippets, and data directly to your DataVault.",
     version: "0.1.0",
-    permissions: ["contextMenus", "storage", "identity", "sidePanel", "activeTab", "scripting", "notifications", "alarms"],
+    permissions: ["contextMenus", "storage", "identity", "sidePanel", "activeTab", "scripting", "alarms"],
     host_permissions: [`${apiOrigin}/*`],
     action: { default_title: "DataVault" },
     side_panel: { default_path: "sidepanel.html" },

@@ -21,8 +21,13 @@ function validateRedirect(env: ServerEnvironment, redirectUri: string) {
  */
 const REFRESH_GRACE_MS = 30_000;
 
-async function signAccessToken(env: ServerEnvironment, userId: string, sessionId: string) {
-  return new SignJWT({ sid: sessionId }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setSubject(userId).setIssuer(env.API_URL).setAudience("data-vault-extension").setJti(crypto.randomUUID()).setIssuedAt().setExpirationTime("15m").sign(new TextEncoder().encode(env.JWT_SECRET));
+async function signAccessToken(env: ServerEnvironment, userId: string, sessionId: string, organizationId: string) {
+  /**
+   * The workspace is in the token itself, so the token only works for the
+   * workspace it was authorised for. Without it, a token that was taken
+   * could be used against any workspace the person happens to be in.
+   */
+  return new SignJWT({ sid: sessionId, org: organizationId }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setSubject(userId).setIssuer(env.API_URL).setAudience("data-vault-extension").setJti(crypto.randomUUID()).setIssuedAt().setExpirationTime("15m").sign(new TextEncoder().encode(env.JWT_SECRET));
 }
 
 export function startExtensionAuthorization(env: ServerEnvironment, input: { redirectUri: string; codeChallenge: string; state: string }) {
@@ -56,7 +61,7 @@ export async function exchangeExtensionCode(env: ServerEnvironment, request: Req
     if (!session) throw new Error("Extension session insert failed");
     const refreshToken = randomToken(48);
     await tx.insert(extensionRefreshTokens).values({ sessionId: session.id, tokenHash: await sha256(refreshToken), expiresAt: session.expiresAt });
-    return { accessToken: await signAccessToken(env, session.userId, session.id), refreshToken, expiresIn: 900, sessionId: session.id, organizationId: session.organizationId };
+    return { accessToken: await signAccessToken(env, session.userId, session.id, session.organizationId), refreshToken, expiresIn: 900, sessionId: session.id, organizationId: session.organizationId };
   });
 }
 
@@ -87,7 +92,7 @@ export async function refreshExtensionSession(env: ServerEnvironment, refreshTok
     const [replacement] = await tx.insert(extensionRefreshTokens).values({ sessionId: session.id, tokenHash: await sha256(nextRefresh), expiresAt: session.expiresAt }).returning();
     await tx.update(extensionRefreshTokens).set({ consumedAt: new Date(), replacedById: replacement?.id }).where(eq(extensionRefreshTokens.id, token.id));
     await tx.update(extensionSessions).set({ lastUsedAt: new Date() }).where(eq(extensionSessions.id, session.id));
-    return { accessToken: await signAccessToken(env, session.userId, session.id), refreshToken: nextRefresh, expiresIn: 900, sessionId: session.id, organizationId: session.organizationId };
+    return { accessToken: await signAccessToken(env, session.userId, session.id, session.organizationId), refreshToken: nextRefresh, expiresIn: 900, sessionId: session.id, organizationId: session.organizationId };
   });
 }
 

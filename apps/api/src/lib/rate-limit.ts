@@ -53,25 +53,3 @@ export async function consumeRateLimit({ key, limit, windowSeconds }: BucketOpti
     retryAfter: Math.max(1, Math.ceil((expires.getTime() - Date.now()) / 1000)),
   };
 }
-
-/** Read the current count without consuming the budget. */
-export async function peekRateLimit({ key, limit }: Omit<BucketOptions, "windowSeconds">): Promise<RateLimitResult> {
-  if (limit <= 0) return { allowed: true, remaining: Number.POSITIVE_INFINITY, retryAfter: 0 };
-  const db = getDatabase();
-  const rows = await db.execute<{ hits: number; reset_at: string }>(sql`
-    select hits::int as hits, reset_at from rate_limit_buckets where key = ${key}
-  `);
-  const row = (rows as unknown as { rows?: { hits: number; reset_at: string }[] }).rows?.[0];
-  const count = Number(row?.hits ?? 0);
-  const expires = row?.reset_at ? new Date(row.reset_at) : new Date();
-  return {
-    allowed: count < limit,
-    remaining: Math.max(0, limit - count),
-    retryAfter: Math.max(1, Math.ceil((expires.getTime() - Date.now()) / 1000)),
-  };
-}
-
-/** Drop buckets whose window has closed. */
-export async function pruneRateLimitBuckets(): Promise<void> {
-  await getDatabase().execute(sql`delete from rate_limit_buckets where reset_at < now() - interval '1 hour'`);
-}

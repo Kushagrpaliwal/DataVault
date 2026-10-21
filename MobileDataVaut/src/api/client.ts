@@ -5,9 +5,7 @@ import type {
   DashboardData,
   Organization,
   PaginationResult,
-  PaymentInput,
   RecordDetail,
-  ReferenceData,
   SavedRecord,
   SavedRecordInput,
   Vault,
@@ -184,24 +182,6 @@ export class DataVaultApiClient {
       body: JSON.stringify(body),
     })
 
-  listPayments = (query?: Record<string, QueryValue>) =>
-    this.request<PaginationResult<Record<string, unknown>>>('/api/v1/payments', {}, query)
-
-  createPayment = (body: PaymentInput) =>
-    this.request<Record<string, unknown>>('/api/v1/payments', {
-      method: 'POST',
-      headers: { 'Idempotency-Key': makeIdempotencyKey() },
-      body: JSON.stringify({
-        taxAmount: '0.00',
-        feeAmount: '0.00',
-        discountAmount: '0.00',
-        status: 'completed',
-        ...body,
-      }),
-    })
-
-  listInvoices = (query?: Record<string, QueryValue>) =>
-    this.request<PaginationResult<Record<string, unknown>>>('/api/v1/invoices', {}, query)
-
-  referenceData = () => this.request<ReferenceData>('/api/v1/settings/reference-data')
+  listRecords = (query?: Record<string, QueryValue>) =>
+    this.request<PaginationResult<Record<string, unknown>>>('/api/v1/saved-records', {}, query)
 }

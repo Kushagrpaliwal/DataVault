@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import {
   aiConsents, aiCreditLedger, aiCreditPeriods, aiGlobalCounters, aiUsageEvents, getDatabase, users,
   type DatabaseTransaction, withUser,
@@ -355,18 +355,4 @@ export async function listCreditActivity(context: CreditContext, limit = 20): Pr
     .orderBy(desc(aiCreditLedger.createdAt))
     .limit(limit);
   return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
-}
-
-/**
- * The ledger rows that belong to a set of requests.
- *
- * Used to work out whether a request was refunded, which decides if a retry
- * is a fresh attempt or a replay of one that already happened.
- */
-export async function ledgerForRequests(requestIds: string[]): Promise<{ requestId: string | null; kind: string; credits: number }[]> {
-  if (!requestIds.length) return [];
-  return getDatabase()
-    .select({ requestId: aiCreditLedger.requestId, kind: aiCreditLedger.kind, credits: aiCreditLedger.credits })
-    .from(aiCreditLedger)
-    .where(inArray(aiCreditLedger.requestId, requestIds));
 }

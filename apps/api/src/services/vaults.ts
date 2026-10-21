@@ -1,4 +1,4 @@
-import { and, count, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, getTableColumns, inArray, isNull, sql } from "drizzle-orm";
 import { savedRecordCollections, savedRecords, savedRecordTags, tags, vaultCollections, vaults, withTenant } from "@data-vault/database";
 import type { Vault, VaultCollection, VaultTag } from "@data-vault/types";
 import type { z } from "zod";
@@ -45,7 +45,7 @@ export async function listVaults(context: TenantContext): Promise<Vault[]> {
     const rows = await tx.select({
       ...getTableColumns(vaults),
       itemCount: count(savedRecords.id),
-    }).from(vaults).leftJoin(savedRecords, eq(savedRecords.vaultId, vaults.id)).where(eq(vaults.organizationId, context.organizationId)).groupBy(vaults.id).orderBy(desc(vaults.isDefault), vaults.name);
+    }).from(vaults).leftJoin(savedRecords, and(eq(savedRecords.vaultId, vaults.id), isNull(savedRecords.deletedAt))).where(eq(vaults.organizationId, context.organizationId)).groupBy(vaults.id).orderBy(desc(vaults.isDefault), vaults.name);
     return rows.map((row) => ({ ...mapVault(row), itemCount: Number(row.itemCount) }));
   });
 }

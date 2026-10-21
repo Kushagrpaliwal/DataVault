@@ -36,7 +36,7 @@ The Gemini key never leaves the server. Answers are cached, so the same request 
 
 **Docs** are long-form notes, written like a document and fed by the browser. The editor on the website has the full set of tools you would expect: headings, fonts, sizes, colours, lists, checklists, tables, quotes, code, links, images, a slash menu, a drag handle for reordering, and an outline of the headings.
 
-Select text on any page and press `Ctrl+Shift+D`. The piece goes straight into the current doc, with its formatting kept. No right-click, no review panel, no popup. Press `Ctrl+Shift+D` again on another page and the piece goes into the same doc under a new section. Press `Alt+Shift+N` to start a fresh doc, and the pieces that follow go into it.
+Select text on any page and press `Alt+Shift+D`. The piece goes straight into the current doc, with its formatting kept. No right-click, no review panel, no popup. Press `Alt+Shift+D` again on another page and the piece goes into the same doc under a new section. Press `Alt+Shift+F` to start a fresh doc, and the pieces that follow go into it.
 
 Pieces are arranged by page by default. A doc can be arranged by website or by day instead, **Organize with AI** sorts the whole doc into topics, and **Write it up as sentences** turns the pieces into writing — sentences that follow each other, grouped into paragraphs. Both show you what they would do before they do it, and the earlier version is kept so you can undo it. The doc can be exported as Markdown or HTML, printed to PDF, and put back to an earlier version.
 
@@ -117,7 +117,7 @@ The popup offers the same two actions directly: **Save this page** and **Save hi
 
 The extension keeps failed quick saves in a durable local retry queue, and retries them every five minutes. Items that are waiting for the connection show up under **Waiting to sync** in the side panel, where they can be retried or thrown away. Explicit review captures stay pending until the user confirms them, and each confirmed save creates a new saved item even when the source text matches an earlier capture. Deleting a saved item moves it to recoverable Trash; restore it from the **Saved** page on the website.
 
-The extension also has two keyboard shortcuts. `Ctrl+Shift+D` adds the selected text to the current doc, and `Alt+Shift+N` starts a new one. The keys can be changed on the browser's own shortcut page; the popup and the side panel show the keys that are actually bound.
+The extension also has two keyboard shortcuts. `Alt+Shift+D` adds the selected text to the current doc, and `Alt+Shift+F` starts a new one. The keys can be changed on the browser's own shortcut page; the popup and the side panel show the keys that are actually bound.
 
 For a stable production extension ID, configure the Chromium manifest key or store identity, set `EXTENSION_REDIRECT_URL` to `https://<extension-id>.chromiumapp.org/data-vault-auth`, and rebuild. See [docs/extension.md](docs/extension.md).
 
@@ -142,7 +142,7 @@ bun run test
 bun run build
 ```
 
-The integration suite covers auth, organization isolation, RBAC, decimal calculations, state transitions, refunds, invoice balances, captures, extension authorization and revocation, sign-in renewal races, docs, idempotency, validation, and tenant-scoped search.
+The integration suite covers auth, organization isolation, RBAC, captures, extension authorization and revocation, sign-in renewal races, docs, idempotency, validation, tenant-scoped search, the credit allowance, and the checks that keep one workspace from reaching into another.
 
 With the API and web development servers running, set `SMOKE_EMAIL` and `SMOKE_PASSWORD` to a real account, then run `bun run smoke:web` to verify login and the saved-captures library.
 

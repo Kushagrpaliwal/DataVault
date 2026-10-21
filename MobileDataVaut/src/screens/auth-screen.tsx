@@ -40,7 +40,7 @@ export function AuthScreen() {
     ? 'Save the things you need to remember, then find them when it matters.'
     : mode === 'forgot'
       ? 'Enter your email and DataVault will send a secure reset link.'
-      : 'A calm, searchable home for captures, receipts, payments, and evidence.'
+      : 'A calm, searchable home for the pages and passages you collect.'
 
   return (
     <scroll-view className="auth-scroll" scroll-orientation="vertical">

@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   forgotPasswordSchema, loginSchema, organizationCreateSchema, registerSchema, resetPasswordSchema, setPasswordSchema,
 } from "@data-vault/schemas";
+import { browserWorkspaceDefaults } from "@data-vault/config";
 import { Button, Input, Label } from "@data-vault/ui";
 import { Eye, EyeOff, MailCheck } from "lucide-react";
 import type { z } from "zod";
@@ -325,7 +326,12 @@ export function OnboardingPage() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [error, setError] = useState("");
-  const form = useForm<z.input<typeof organizationCreateSchema>, unknown, z.output<typeof organizationCreateSchema>>({ resolver: zodResolver(organizationCreateSchema), defaultValues: { name: "", slug: "", currency: "INR", locale: "en-IN", timeZone: "Asia/Kolkata" } });
+  /**
+   * A new workspace takes its locale, its time zone and its currency from
+   * the browser, so it feels like it belongs to the person who made it.
+   */
+  const defaults = browserWorkspaceDefaults();
+  const form = useForm<z.input<typeof organizationCreateSchema>, unknown, z.output<typeof organizationCreateSchema>>({ resolver: zodResolver(organizationCreateSchema), defaultValues: { name: "", slug: "", ...defaults } });
   /**
    * The page the user was heading for is kept through the whole journey, so
    * an extension waiting to be connected still finds its way back.

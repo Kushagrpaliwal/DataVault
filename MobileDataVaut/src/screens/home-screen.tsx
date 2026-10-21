@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { useSession } from '../auth/session.js'
-import { RecordRow, formatMoney } from '../components/record-row.js'
+import { RecordRow } from '../components/record-row.js'
 import { Button, ErrorState, LoadingState, SectionTitle } from '../components/primitives.js'
 import type { DashboardData, SavedRecord } from '../api/types.js'
 
@@ -58,9 +58,9 @@ function DashboardContent({ data, onOpenVault, onOpenRecord }: {
     <view className="screen-content">
       <SectionTitle eyebrow="AT A GLANCE" title="The pulse of your vault" action={<view bindtap={onOpenVault}><text className="text-link">Open vault</text></view>} />
       <scroll-view className="stat-scroll" scroll-orientation="horizontal">
-        <view className="stat-card stat-card--peach"><text className="stat-card__label">Received</text><text className="stat-card__value">{formatMoney(summary.totalReceived)}</text><text className="stat-card__hint">All incoming payments</text></view>
-        <view className="stat-card stat-card--lavender"><text className="stat-card__label">Paid out</text><text className="stat-card__value">{formatMoney(summary.totalPaid)}</text><text className="stat-card__hint">All outgoing payments</text></view>
-        <view className="stat-card stat-card--pink"><text className="stat-card__label">Saved</text><text className="stat-card__value">{summary.savedRecords}</text><text className="stat-card__hint">Items in this workspace</text></view>
+        <view className="stat-card stat-card--peach"><text className="stat-card__label">Saved</text><text className="stat-card__value">{summary.savedRecords}</text><text className="stat-card__hint">Items in this workspace</text></view>
+        <view className="stat-card stat-card--lavender"><text className="stat-card__label">This week</text><text className="stat-card__value">{summary.savedThisWeek}</text><text className="stat-card__hint">Saved in the last 7 days</text></view>
+        <view className="stat-card stat-card--pink"><text className="stat-card__label">Sources</text><text className="stat-card__value">{summary.uniqueSources}</text><text className="stat-card__hint">Websites you saved from</text></view>
       </scroll-view>
       <SectionTitle eyebrow="RECENTLY SAVED" title="Your latest memory" />
       {(data.recentRecords ?? data.recentCaptures).length ? (
@@ -68,7 +68,7 @@ function DashboardContent({ data, onOpenVault, onOpenRecord }: {
           {(data.recentRecords ?? data.recentCaptures).slice(0, 5).map((record) => <RecordRow key={record.id} record={record} onPress={() => onOpenRecord(record)} />)}
         </view>
       ) : (
-        <view className="soft-card"><text className="soft-card__title">Your vault is waiting.</text><text className="soft-card__body">Use New capture to save a note, receipt, link, or payment memory.</text></view>
+        <view className="soft-card"><text className="soft-card__title">Your vault is waiting.</text><text className="soft-card__body">Use New capture to save a page, a passage, or a link.</text></view>
       )}
     </view>
   )

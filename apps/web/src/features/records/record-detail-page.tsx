@@ -13,7 +13,6 @@ import { AiPanel } from "../../components/ai-panel";
 type Detail = SavedRecord & {
   metadata: Record<string, unknown>;
   capture: Record<string, unknown> | null;
-  payment: Record<string, unknown> | null;
   attachments: Attachment[];
   audit: Record<string, unknown>[];
   collections: Array<{ id: string; name: string; color: string }>;

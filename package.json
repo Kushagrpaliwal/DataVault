@@ -27,12 +27,15 @@
     "db:repair-accounts": "bun --env-file=.env run --filter @data-vault/api db:repair-accounts",
     "db:remove-demo": "bun --env-file=.env run --filter @data-vault/database db:remove-demo",
     "db:remove-test-data": "bun --env-file=.env run --filter @data-vault/database db:remove-test-data",
-    "db:check": "bun --env-file=.env run --filter @data-vault/database db:check"
+    "db:check": "bun --env-file=.env run --filter @data-vault/database db:check",
+    "db:inspect-rls": "bun --env-file=.env run --filter @data-vault/database db:inspect-rls",
+    "db:recreate-test": "bun --env-file=.env run --filter @data-vault/database db:recreate-test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@types/bun": "^1.3.10",
+    "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "eslint": "^10.0.1",
     "eslint-plugin-react-hooks": "^7.0.1",

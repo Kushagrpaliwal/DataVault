@@ -24,14 +24,8 @@ Protected business calls require `X-Organization-Id`. Cookie-authenticated mutat
 
 - `GET|POST /saved-records`; `GET|PATCH /saved-records/:id`; `POST /saved-records/:id/archive|restore`
 - `GET|POST /saved-views`; `DELETE /saved-views/:id`
-- `GET|POST /payments`; `GET|PATCH /payments/:id`; `POST /payments/:id/refund`
-- `GET|POST /customers`; `GET|PATCH /customers/:id`
-- `GET|POST /vendors`; `GET|PATCH /vendors/:id`
-- `GET|POST /invoices`; `GET|PATCH /invoices/:id`
-- `GET|POST /recurring-payments`
 - `POST /captures`; `GET /captures/recent`
-- `GET /search`, `/dashboard`, `/reports`, `/audit-logs`
-- `GET /settings/reference-data`; `POST /settings/categories`, `/settings/payment-methods`
+- `GET /search`, `/dashboard`, `/audit-logs`
 - `POST /saved-records/:id/attachments`; `GET /attachments/:id`
 
 ## Organizing
@@ -68,13 +62,14 @@ A doc holds rich text. Its content is the JSON the editor works with, and the pl
 | `PATCH` | `/notes/:id` | Change the title, icon, content, arrange mode, pinned state or parent. Send `baseVersion`; the server answers `409 NOTE_VERSION_CONFLICT` with the newest doc when the version no longer matches. |
 | `DELETE` | `/notes/:id` | Move to Trash. |
 | `POST` | `/notes/:id/restore` | Bring back out of Trash. |
+| `POST` | `/notes/:id/duplicate` | Make a copy of the doc. Needs an `Idempotency-Key`. |
 | `POST` | `/notes/:id/clips` | Add a piece of a web page. The body is `{ html?, text, source: { url?, title, domain }, capturedAt? }`. Answers `{ clipId, sectionTitle, duplicate, noteTitle, noteId, version, clipCount }`. |
 | `DELETE` | `/notes/:id/clips/:clipId` | Take a piece back out. |
 | `POST` | `/notes/:id/rearrange` | Sort the pieces again, using the doc's arrange mode. |
-| `POST` | `/notes/:id/write-up` | Write the pieces up as sentences that follow each other, in paragraphs. Without `apply` it only shows the writing. |
+| `POST` | `/notes/:id/write-up` | Write the pieces up as sentences that follow each other, in paragraphs. Without `apply` it proposes the writing and keeps it on the server, answering `{ preview: true, previewId, title, sections }`. With `{ apply: true, previewId }` the proposal that was shown is written into the doc, without asking the model again. |
 | `GET` | `/notes/:id/revisions` | The earlier versions of the doc. |
 | `POST` | `/notes/:id/revisions/:rid/restore` | Go back to an earlier version. |
-| `POST` | `/notes/:id/organize` | Sort the doc into topics with the AI. Without `apply` it only proposes the topics. |
+| `POST` | `/notes/:id/organize` | Sort the doc into topics with the AI. Without `apply` it proposes the topics and keeps them on the server, answering `{ preview: true, previewId, sections }`. With `{ apply: true, previewId }` the proposal that was shown is written into the doc, without asking the model again. |
 | `GET` | `/notes/current` | The doc the keyboard shortcut adds to. |
 | `PUT` | `/notes/current` | Choose the current doc. |
 | `POST` | `/notes/current/clips` | The keyboard shortcut. It uses the current doc, or makes one named after the page when there is none. |
@@ -93,4 +88,4 @@ The heading names the source of the pieces under it, so the link is written once
 - `GET /extension/sessions`
 - `POST /extension/sessions/:id/revoke`
 
-List/search routes use backend pagination (`page`, `limit`, maximum 100). Saved Data search includes title, description, amount, party, source domain, UTR/reference/invoice identifiers, and original text.
+List/search routes use backend pagination (`page`, `limit`, maximum 100). Search covers the title, the description, the text that was captured, the website it came from and the title of the page. A `%` or an `_` in the search is looked for as text rather than as a wildcard.

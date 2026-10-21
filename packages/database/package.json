@@ -6,12 +6,14 @@
   "exports": { ".": "./src/index.ts", "./schema": "./src/schema/index.ts" },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:generate": "bun ../../scripts/drizzle-generate.ts generate --config drizzle.config.ts",
     "db:migrate": "bun scripts/bootstrap.ts && drizzle-kit migrate --config drizzle.config.ts",
     "db:bootstrap": "bun scripts/bootstrap-permissions.ts",
     "db:remove-demo": "bun scripts/remove-demo-data.ts",
     "db:remove-test-data": "bun scripts/remove-test-data.ts",
-    "db:check": "drizzle-kit check --config drizzle.config.ts"
+    "db:check": "drizzle-kit check --config drizzle.config.ts",
+    "db:inspect-rls": "bun scripts/inspect-rls.ts",
+    "db:recreate-test": "bun scripts/recreate-database.ts data_vault_test"
   },
   "dependencies": {
     "@data-vault/config": "workspace:*",

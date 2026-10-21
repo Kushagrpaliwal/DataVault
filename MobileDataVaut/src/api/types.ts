@@ -86,7 +86,6 @@ export interface SavedRecord {
 export interface RecordDetail extends SavedRecord {
   metadata: Record<string, unknown>
   capture: Record<string, unknown> | null
-  payment: Record<string, unknown> | null
   attachments: Array<{
     id: string
     fileName: string
@@ -108,14 +107,11 @@ export interface RecordDetail extends SavedRecord {
 }
 
 export interface DashboardSummary {
-  totalReceived: string
-  totalPaid: string
-  netCashFlow: string
-  pendingPayments: string
-  outstandingInvoices: string
-  refunds: string
   savedRecords: number
   extensionCaptures: number
+  savedThisWeek: number
+  uniqueSources: number
+  lastSavedAt: string | null
 }
 
 export interface DashboardData {
@@ -152,27 +148,4 @@ export interface SavedRecordInput {
   privacyLevel?: string
 }
 
-export interface PaymentInput {
-  direction: 'incoming' | 'outgoing'
-  amount: string
-  currency: string
-  paymentDate: string
-  status?: string
-  description?: string
-  notes?: string
-  transactionReference?: string | null
-  utr?: string | null
-  customerId?: string | null
-  vendorId?: string | null
-  paymentMethodId?: string | null
-  categoryId?: string | null
-  invoiceId?: string | null
-  taxAmount?: string
-  feeAmount?: string
-  discountAmount?: string
-}
 
-export interface ReferenceData {
-  categories: Array<Record<string, unknown>>
-  paymentMethods: Array<Record<string, unknown>>
-}

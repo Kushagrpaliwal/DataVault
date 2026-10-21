@@ -20,6 +20,8 @@ That means the credit system is not really about the user's own allowance. It is
 
 **Credits are daily, not monthly, and reset at midnight Pacific.** That is the same moment the Gemini quota resets, so a user's allowance and the shared pool they draw from refresh together and nothing is wasted.
 
+**Credits belong to the person, not to the workspace.** The allowance is counted for the account, across every workspace it is in. It used to be counted per workspace, which meant a new workspace was a fresh allowance, and the free credits could be multiplied simply by making another one.
+
 ### The fair-share rule
 
 A fixed personal allowance is not enough on its own. If the daily budget is 900 and one user is allowed 20, fifty users can use everything. If ten users are active, one of them could use two hundred requests and lock out the rest.
@@ -40,7 +42,7 @@ One credit is one request to the model. There are three features:
 | --- | --- |
 | `summarize` | A short summary, key points, and a suggested title. |
 | `classify` | A suggested record type, tags, and a confidence. |
-| `extract` | Structured fields: amount, currency, date, party, reference, payment method. |
+| `extract` | Structured fields: the author, the publication date, the claim the passage makes, and any figure it quotes. |
 
 Answers are cached against a hash of the exact request, so asking the same question twice costs one credit, not two. With a quota this small, that is the single biggest saving available.
 
@@ -59,7 +61,7 @@ Only the text the user asked about is sent. The whole library is never sent, and
 | Farming accounts with throwaway inboxes | Credits need a confirmed address. Disposable domains are on a blocklist, and every other domain must resolve an MX record. |
 | Disposable inbox providers not on the list | The MX check catches them: a domain that cannot receive mail can never be confirmed. |
 | One user burning the shared pool | Per-user daily and per-minute caps, plus the fair-share floor. |
-| Bot sign-ups | Cloudflare Turnstile on sign-up, plus Postgres-backed rate limits on the address and on the account. |
+| Bot sign-ups | Cloudflare Turnstile on sign-up, checked by the sign-up route itself, plus Postgres-backed rate limits on the address and on the account. Better Auth's own sign-up endpoint is not reachable over HTTP. |
 | Spoofing the client address | `X-Forwarded-For` is only believed when `TRUSTED_PROXY_HOPS` says a trusted proxy set it. |
 | Losing the limits on a restart | The counters live in Postgres, not in process memory. |
 | Resetting the limits by waiting | The counters roll over on their own, atomically, in a single statement. |
@@ -68,9 +70,11 @@ Only the text the user asked about is sent. The whole library is never sent, and
 | Stealing the Gemini key | The key is only ever read from the environment inside the API. It never reaches a response, a log, or a client bundle. |
 | Reaching another workspace's content | The context is scoped to the caller's workspace, and the `ai.use` permission is required. |
 | Prompt injection through saved content | Saved text is passed as delimited data. The system instructions live server-side and the model is told to ignore instructions found in the text. |
-| Being charged twice for one request | The `Idempotency-Key` header is recorded with a unique index, so a retry replays instead of charging again. |
+| Being charged twice for one request | The `Idempotency-Key` header is recorded with a unique index, so a retry replays instead of charging again. The key is scoped to the account that sent it, and a key that another account has used is refused. |
 | Being charged for a failed request | Credits are debited only on a successful response, and refunded otherwise. |
-| Reading other tenants' data | Every query is scoped by organization, and the tenant context is resolved from the membership on every request. |
+| Paying twice for one suggestion | The suggestion is kept on the server between the preview and the moment it is applied, so applying it asks the model nothing further and costs no second credit. |
+| Reaching another workspace's content | The context is scoped to the caller's workspace, and the `ai.use` permission is required. |
+| Reading other tenants' data | Every query is scoped by organization, and the tenant context is resolved from the membership on every request. The row-level security rules are forced, so they apply to the owner of the table as well. |
 
 ## Endpoints
 

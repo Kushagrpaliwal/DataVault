@@ -9,7 +9,8 @@ The web client receives a session-derived CSRF token and sends it on mutations. 
 | Route | Purpose |
 | --- | --- |
 | `POST /api/v1/auth/register` | Create an account. Sends the confirmation email. |
-| `POST /api/v1/auth/login` | Sign in with a password. |
+| `POST /api/v1/auth/login` | Sign in with a password. An account with two-factor on is answered with a challenge instead of a session. |
+| `POST /api/v1/auth/two-factor/verify` | Finish a sign-in with the code from the authenticator app. |
 | `POST /api/v1/auth/logout` | End the session. |
 | `POST /api/v1/auth/forgot-password` | Send a reset link. Always reports success, so it cannot be used to find out which addresses have accounts. |
 | `POST /api/v1/auth/reset-password` | Set a new password. |
@@ -20,6 +21,15 @@ The web client receives a session-derived CSRF token and sends it on mutations. 
 | `GET /api/v1/me` | The current session. |
 
 Google sign-in was removed. Accounts that were created with Google were given a single-use password setup link instead of being deleted, so nobody lost their saved items. The maintenance script is `bun run db:repair-accounts`.
+
+## Creating an account
+
+There is one way in, and it is `POST /api/v1/auth/register`. Better Auth's own sign-up endpoint is not reachable over HTTP, because it would skip the two checks that make an account worth having:
+
+- **The captcha is checked here.** Better Auth's captcha plugin only guards requests that arrive over HTTP, and this route calls the sign-up endpoint directly, so the token is verified here instead. The client sends it in the `X-Captcha-Response` header.
+- **The address must be able to receive mail.** Disposable domains are refused outright, and every other domain must resolve an MX record.
+
+A throwaway inbox is the cheapest way to farm accounts, and every account that can be confirmed with one is another set of free credits.
 
 ## Confirming the email address
 
@@ -55,9 +65,14 @@ Two layers, because they protect different things.
 | `captures` | 120 | 1 minute |
 | `emailRequest` | 5 | 1 hour, per address and per account |
 | `passwordSetup` | 10 | 15 minutes |
+| `organizationCreate` | 5 | 1 day |
 | `ai` | `AI_USER_MINUTE_REQUESTS` | 1 minute |
 
 Renewing an extension sign-in and saving a capture have their own budgets. They used to share the sign-in budget, so saving a few items in a row could answer a renewal with a rate-limit error, and the extension then signed the user out. Only Better Auth's own endpoints and the sign-in routes use `internalAuth` now.
+
+A workspace is free, so one could be made in a loop, and each new one is another place to hide behind when a per-workspace allowance is looked at. The number of them is capped per account and per day.
+
+**The bucket follows the caller.** The address the request came from is the right key, but only when it can be trusted. With no proxy in front of the API, every request looks like it came from the same place, so every user shares one budget and a single person can lock everybody else out. When the address cannot be resolved, the budget follows the signed-in account instead. The server says so on start-up when it is running in production without a proxy, because that is the setting to change.
 
 ## Browser extension
 
@@ -65,7 +80,7 @@ The extension never renders a password form. It creates a PKCE verifier and chal
 
 1. The API creates a two-minute, one-use authorization code, stored only as a hash.
 2. The extension exchanges the code plus verifier.
-3. The API issues a fifteen-minute signed access token and a 30-day opaque refresh token.
+3. The API issues a fifteen-minute signed access token and a 30-day opaque refresh token. The token carries the workspace it was authorised for, so a token that was taken cannot be pointed at another one.
 4. Refresh tokens rotate on every use. Reuse revokes the installation session.
 5. Website settings can revoke any extension installation. Protected access stops immediately, because bearer verification checks the database session on every request.
 
@@ -88,7 +103,7 @@ The website's sign-in pages wait for the session to be read before they decide w
 
 ## RBAC
 
-Roles are organization-scoped. Built-ins are Super Admin, Admin, Accountant, Viewer, and Custom. Permissions are granular (`payments.*`, `captures.*`, `invoices.*`, `customers.*`, `vendors.*`, `reports.read`, `users.manage`, `settings.manage`, `ai.use`). Routes resolve permissions from role joins for every protected request. UI visibility is not a security boundary.
+Roles are organization-scoped. Built-ins are Super Admin, Admin, Editor, Viewer, and Custom. Permissions are granular (`captures.*`, `records.*`, `notes.*`, `reports.read`, `users.manage`, `settings.manage`, `ai.use`). Routes resolve permissions from role joins for every protected request. UI visibility is not a security boundary.
 
 `ai.use` is a separate permission so a workspace can be given AI features without giving it everything else.
 

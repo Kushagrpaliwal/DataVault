@@ -8,6 +8,7 @@ import type { DashboardSummary, SavedRecord } from "@data-vault/types";
 import { useAuth } from "../../lib/auth";
 import { PageHeader, StatCard } from "../../components/page";
 import { QueryState } from "../../components/data-state";
+import { ExtensionInstallModal } from "../../components/extension-install";
 
 interface DashboardData {
   summary: DashboardSummary;
@@ -83,7 +84,9 @@ export function DashboardPage() {
  * extension.
  */
 function GettingStarted() {
+  const [installOpen, setInstallOpen] = useState(false);
   return (
+    <>
     <section className="panel overflow-hidden">
       <div className="border-b border-[#eee8da] bg-[#1a3a3a] p-6 text-white">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#a4d4c5]">
@@ -111,7 +114,7 @@ function GettingStarted() {
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-3 p-6">
-        <Button onClick={() => window.open("chrome://extensions", "_blank")}>
+        <Button onClick={() => setInstallOpen(true)}>
           <Puzzle className="size-4" />
           Install the extension
         </Button>
@@ -120,6 +123,8 @@ function GettingStarted() {
         </Link>
       </div>
     </section>
+    <ExtensionInstallModal open={installOpen} onClose={() => setInstallOpen(false)} />
+    </>
   );
 }
 

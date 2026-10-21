@@ -106,9 +106,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const organization = await api.createOrganization({
       name: name.trim(),
       slug: slug || `workspace-${Date.now()}`,
-      currency: 'INR',
-      locale: 'en-IN',
-      timeZone: 'Asia/Kolkata',
+      currency: 'USD',
+      locale: 'en-US',
+      timeZone: 'UTC',
     })
     await refresh()
     await selectOrganization(organization.id)

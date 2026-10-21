@@ -1,7 +1,14 @@
 ---
 version: alpha
 name: Clay-design-analysis
-description: A vibrant claymation-meets-data interface for Clay.com (GTM data-orchestration platform). Anchors on white canvas with dark-navy primary CTAs, custom rounded display type, and saturated single-color feature cards — hot pink, deep teal, lavender, peach, ochre — that punctuate long-scroll explainer pages. Brand voltage comes from 3D-rendered claymation illustrations (mountains, characters, mascots) used as full-bleed hero artifacts and the bright multi-color card surfaces showing product UI fragments.
+description: >-
+  The interface reference DataVault's own tokens came from. It describes the
+  look of a claymation-meets-data interface: a white canvas, dark primary
+  buttons, rounded display type, and saturated single-colour feature cards in
+  hot pink, deep teal, lavender, peach and ochre, with 3D claymation
+  illustrations as full-bleed hero artwork. DataVault keeps the palette, the
+  surfaces and the type. The words in the original description are about
+  another product, so they are left as they were found.
 
 colors:
   primary: "#0a0a0a"

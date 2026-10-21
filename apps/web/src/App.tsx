@@ -14,6 +14,7 @@ const OnboardingPage = lazy(() => authPages().then((module) => ({ default: modul
 const ExtensionAuthorizePage = lazy(() => authPages().then((module) => ({ default: module.ExtensionAuthorizePage })));
 const DashboardPage = lazy(() => import("./features/dashboard/dashboard-page").then((module) => ({ default: module.DashboardPage })));
 const SavedPage = lazy(() => import("./features/records/saved-page").then((module) => ({ default: module.SavedPage })));
+const SharePage = lazy(() => import("./features/records/share-page").then((module) => ({ default: module.SharePage })));
 const DocsPage = lazy(() => import("./features/docs/docs-page").then((module) => ({ default: module.DocsPage })));
 const OrganizePage = lazy(() => import("./features/records/organize-page").then((module) => ({ default: module.OrganizePage })));
 const RecordDetailPage = lazy(() => import("./features/records/record-detail-page").then((module) => ({ default: module.RecordDetailPage })));
@@ -70,6 +71,7 @@ export function App() {
             <Route index element={<DashboardPage/>}/>
             <Route path="saved" element={<SavedPage/>}/>
             <Route path="saved/:id" element={<RecordDetailPage/>}/>
+            <Route path="share" element={<SharePage/>}/>
             <Route path="docs" element={<DocsPage/>}/>
             <Route path="docs/:id" element={<DocsPage/>}/>
             <Route path="organize" element={<OrganizePage/>}/>
