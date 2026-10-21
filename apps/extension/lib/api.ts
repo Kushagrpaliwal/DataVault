@@ -1,5 +1,5 @@
 import { DataVaultApiClient } from "@data-vault/api-client";
-import { getAuth, getPreferences, setAuth, type StoredAuth } from "./storage";
+import { getAuth, setAuth, type StoredAuth } from "./storage";
 
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 export const WEB_URL = import.meta.env.VITE_WEB_URL ?? "http://localhost:5173";
@@ -151,8 +151,10 @@ const tokenProvider = {
 /**
  * The workspace the extension saves into.
  *
- * The sign-in made in one workspace, but a person may choose to save some
- * things in another. The choice is kept in the extension's own settings.
+ * It is the workspace the sign-in was authorised for. The token is bound to
+ * that workspace, so the extension cannot be pointed at another one, and a
+ * token that was taken cannot be used against the rest of the account. To
+ * work in a different workspace, the person signs in again from the website.
  */
 let activeOrganizationId: string | null = null;
 
@@ -175,7 +177,6 @@ export function extensionApi() {
 export async function withOrganization<T>(operation: (client: DataVaultApiClient) => Promise<T>) {
   const auth = await getAuth();
   if (!auth) throw new Error("Sign in to DataVault first.");
-  const preferences = await getPreferences();
-  activeOrganizationId = preferences.organizationId ?? auth.organizationId;
+  activeOrganizationId = auth.organizationId;
   return operation(sharedClient);
 }

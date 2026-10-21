@@ -69,7 +69,7 @@ export async function removeClipFromDoc(noteId: string, clipId: string) {
  * Start a new doc and make it the current one.
  */
 export async function startNewDoc(title?: string) {
-  const name = title ?? `Untitled doc · ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+  const name = title ?? `Untitled doc · ${new Date().toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`;
   const created = await withOrganization((api) => api.createNote({ title: name }));
   await withOrganization((api) => api.setCurrentNote(created.id));
   const preferences = await getPreferences();

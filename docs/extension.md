@@ -77,7 +77,9 @@ Every account is given a personal workspace when it signs up, and every workspac
 
 The workspace list is ordered so that a real workspace comes first and the personal one comes last. The first entry is what the interface falls back to when nothing has been chosen, so a capture does not land in the personal bucket by default just because that bucket was made first. The order is fixed, so the fallback does not move from one request to the next.
 
-The extension's **Where things go** setting has a **Workspace** picker. It changes where everything the extension saves goes, and it is separate from the workspace the sign-in was made in. Changing it puts the chosen folder back to the default of the new workspace, because a folder belongs to one workspace and the server refuses a folder from another one.
+The extension works in the workspace its sign-in was authorised for. The access token carries that workspace, so a token that was taken cannot be pointed at another one, and the server refuses a request that names a different workspace. To work in another workspace, sign in again from the DataVault website and choose it there.
+
+The extension's **Where things go** setting chooses the folder new items go into. A folder belongs to one workspace, so it is only used while the extension is still in that workspace.
 
 ## Free AI credits in the extension
 

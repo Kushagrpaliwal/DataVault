@@ -45,7 +45,7 @@ The heading above a piece names its source, so the link is written once, at the 
 
 Three layers of grouping sit on top of a saved item, and each one is used for a different thing:
 
-- A **folder** (`vaults`) holds the item. Every saved item has exactly one, because the column is not allowed to be empty. Every workspace has a default folder, and the extension can be pointed at another one.
+- A **folder** (`vaults`) holds the item. Every saved item has exactly one, because the column is not allowed to be empty. Every workspace has a default folder, and the extension can be pointed at another one inside the workspace it was signed in for.
 - A **collection** belongs to one folder and groups items inside it. It is for the finer grouping a folder sometimes needs.
 - A **tag** works across every folder, so one item can carry many of them.
 

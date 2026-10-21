@@ -346,7 +346,7 @@ export function SavedPage() {
 
         {query.data ? (
           <div className="flex items-center justify-between border-t border-[#eee8da] p-4 text-sm">
-            <span className="text-[#6a6a6a]">{query.data.total.toLocaleString("en-IN")} saved · Page {query.data.page} of {Math.max(1, query.data.totalPages)}</span>
+            <span className="text-[#6a6a6a]">{query.data.total.toLocaleString()} saved · Page {query.data.page} of {Math.max(1, query.data.totalPages)}</span>
             <div className="flex gap-2">
               <Button size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}><ChevronLeft className="size-4" />Previous</Button>
               <Button size="sm" variant="secondary" disabled={page >= query.data.totalPages} onClick={() => setPage((value) => value + 1)}>Next<ChevronRight className="size-4" /></Button>

@@ -13,13 +13,6 @@ export interface ExtensionPreferences {
   pageCaptureMode: PageCaptureMode;
   defaultVaultId?: string | undefined;
   /**
-   * The workspace the extension saves into.
-   *
-   * It is separate from the workspace the sign-in was made in, because a
-   * person may save some things in one workspace and others in another.
-   */
-  organizationId?: string | undefined;
-  /**
    * The workspace the chosen folder belongs to.
    *
    * A folder belongs to one workspace, so it is only used when the
@@ -112,12 +105,10 @@ export async function getPreferences() {
 /**
  * The workspace the extension saves into.
  *
- * It is the one the person chose in the settings. Until they choose one, it
- * is the workspace the sign-in was made in.
+ * It is the workspace the sign-in was authorised for. The token is bound to
+ * it, so the extension cannot be pointed at another one.
  */
 export async function effectiveWorkspaceId(): Promise<string | undefined> {
-  const preferences = await getPreferences();
-  if (preferences.organizationId) return preferences.organizationId;
   const auth = await getAuth();
   return auth?.organizationId;
 }

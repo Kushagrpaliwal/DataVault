@@ -18,7 +18,6 @@ import { clearExtensionErrors, readExtensionErrors, type RecordedError } from ".
 import { recordAiConsent, summariseItem, useAiCredits } from "../../lib/ai";
 import { signOutExtension } from "../../lib/auth";
 import { WEB_URL, withOrganization } from "../../lib/api";
-import { refreshCurrentDoc } from "../../lib/docs";
 import {
   effectiveWorkspaceId, getAuth, getPreferences, getReviewCapture, getRetryCaptures, clearRetryCaptures, setPendingCapture, setPreferences,
   subscribeStorage, type ExtensionPreferences, type PageCaptureMode, type PendingCapture,
@@ -518,6 +517,7 @@ function QuickDetail({ record, onBack, onDeleted }: { record: SavedRecord; onBac
 
 function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
   const [session, setSession] = useState<AuthSession>();
+  const [workspaceId, setWorkspaceId] = useState<string | undefined>();
   const [vaultOptions, setVaultOptions] = useState<Vault[]>([]);
   const [preferences, setPreferenceState] = useState<ExtensionPreferences>({ quickSaveSelectedText: false, pageCaptureMode: "visible" });
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
@@ -561,39 +561,21 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
     void Promise.all([withOrganization((api) => api.getMe()), withOrganization((api) => api.listVaults())])
       .then(([me, loadedVaults]) => { setSession(me); setVaultOptions(loadedVaults); })
       .catch(() => { /* The account card stays blank until the API responds. */ });
+    void getAuth().then((auth) => setWorkspaceId(auth?.organizationId));
   }, []);
 
   /**
    * The folders belong to one workspace, so they are read again whenever the
-   * workspace changes.
+   * sign-in changes.
    */
   useEffect(() => {
     void withOrganization((api) => api.listVaults()).then(setVaultOptions).catch(() => undefined);
-  }, [preferences.organizationId]);
+  }, [workspaceId]);
 
   const updatePreferences = (updates: Partial<ExtensionPreferences>) => {
     const next = { ...preferences, ...updates };
     setPreferenceState(next);
     void setPreferences(next);
-  };
-
-  /**
-   * Move the extension to another workspace.
-   *
-   * The chosen folder belongs to the old workspace, so it is put back to the
-   * default of the new one rather than being sent and refused.
-   */
-  const changeWorkspace = (organizationId: string) => {
-    const next: ExtensionPreferences = {
-      ...preferences,
-      organizationId,
-      defaultVaultId: undefined,
-      defaultVaultOrganizationId: undefined,
-      currentDocId: undefined,
-      currentDocTitle: undefined,
-    };
-    setPreferenceState(next);
-    void setPreferences(next).then(() => refreshCurrentDoc());
   };
 
   /**
@@ -624,7 +606,7 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
         <div className="grid size-12 place-items-center rounded-2xl bg-[#ff4d8b] text-lg font-semibold">{session?.user.name?.[0] ?? "D"}</div>
         <h2 className="mt-4 text-lg font-semibold">{session?.user.name}</h2>
         <p className="text-sm text-white/70">{session?.user.email}</p>
-        {session?.organizations.length ? <p className="mt-4 text-xs font-semibold uppercase tracking-[.13em] text-[#a4d4c5]">{session.organizations.find((item) => item.id === preferences.organizationId)?.name ?? session.organizations[0]?.name}</p> : null}
+        {session?.organizations.length ? <p className="mt-4 text-xs font-semibold uppercase tracking-[.13em] text-[#a4d4c5]">{session.organizations.find((item) => item.id === workspaceId)?.name ?? "Your workspace"}</p> : null}
         {session && !session.user.emailVerified ? (
           <div className="mt-4 rounded-xl bg-white/10 p-3">
             <p className="text-xs font-semibold">Email address not confirmed</p>
@@ -702,16 +684,15 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
           Everything the extension saves goes into this workspace. Change it here whenever you like.
         </p>
         {session?.organizations.length ? (
-          <label className="mt-3 block">
-            <span className="block font-medium">Workspace</span>
-            <select
-              className="mt-2 h-11 w-full rounded-xl border border-[#ded8ca] bg-[#fffdf8] px-3 text-sm"
-              value={preferences.organizationId ?? session.organizations[0]?.id ?? ""}
-              onChange={(event) => changeWorkspace(event.target.value)}
-            >
-              {session.organizations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-          </label>
+          <div className="mt-3">
+            <p className="block font-medium">Workspace</p>
+            <p className="mt-1 rounded-xl border border-[#ded8ca] bg-[#fffdf8] px-3 py-2.5 text-sm">
+              {session.organizations.find((item) => item.id === workspaceId)?.name ?? "The signed-in workspace"}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-[#6a6a6a]">
+              The extension saves into the workspace it was signed in for. To work in another one, sign in again from the DataVault website.
+            </p>
+          </div>
         ) : null}
         <label className="mt-3 block">
           <span className="block font-medium">Save new items to</span>
