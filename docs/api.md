@@ -71,6 +71,7 @@ A doc holds rich text. Its content is the JSON the editor works with, and the pl
 | `GET` | `/notes/:id/revisions` | The earlier versions of the doc. |
 | `POST` | `/notes/:id/revisions/:rid/restore` | Go back to an earlier version. |
 | `POST` | `/notes/:id/organize` | Sort the doc into topics with the AI. Without `apply` it proposes the topics and keeps them on the server, answering `{ preview: true, previewId, sections }`. With `{ apply: true, previewId }` the proposal that was shown is written into the doc, without asking the model again. |
+| `POST` | `/notes/:id/ai/selection` | Do something with a selection of the doc. The body is `{ action, instruction?, selection: { markdown, clips }, context: { mode, recordIds? } }`. The answer is a list of blocks and it is not written into the doc: the person sees it and accepts it. |
 | `GET` | `/notes/current` | The doc the keyboard shortcut adds to. |
 | `PUT` | `/notes/current` | Choose the current doc. |
 | `POST` | `/notes/current/clips` | The keyboard shortcut. It uses the current doc, or makes one named after the page when there is none. |
@@ -85,12 +86,17 @@ The AI features need a workspace, a confirmed email address and the agreement to
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/ai/credits` | The allowance left today, and why the features are unavailable if they are. |
+| `GET` | `/ai/credits` | The allowance left today, and why the features are unavailable if they are. It also names the provider of the person, when they have connected one. |
 | `GET` | `/ai/activity` | The recent movements of the allowance. |
 | `POST` | `/ai/consent` | Record the agreement to send content to the model provider. |
 | `POST` | `/ai/summarize` | Summarise a saved item or a piece of text. The body is `{ recordId?, text? }`. |
 | `POST` | `/ai/classify` | Suggest a type and some tags. |
 | `POST` | `/ai/extract` | Pull the fields out of a piece of text. |
+| `GET` | `/ai/connections` | The providers the person has connected. The key is never in it, only the last four. |
+| `POST` | `/ai/connections` | Connect a provider. The body is `{ label, kind, preset, baseUrl, model, apiKey?, isDefault? }`. |
+| `PATCH` | `/ai/connections/:id` | Change the name, the model, the address or the key, or make it the one in use. |
+| `DELETE` | `/ai/connections/:id` | Remove a connection. The key goes with it. |
+| `POST` | `/ai/connections/test` | Try a provider and ask it which models it has. The body may name a saved connection or an unsaved one. |
 
 A request that has been made is not made again: send an `Idempotency-Key`, and a retry is charged once. A key that another account has already used is refused.
 
