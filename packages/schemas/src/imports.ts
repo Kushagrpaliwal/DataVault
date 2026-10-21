@@ -5,10 +5,11 @@ import { uuidSchema } from "./common";
  * The kinds of material that can be brought in.
  *
  * `bookmarks` is the file every browser writes when the bookmarks are
- * exported. `urls` is a list of addresses, one to a line. `datavault` is an
- * export of DataVault itself, so a workspace can be moved to another one.
+ * exported. `urls` is a list of addresses, one to a line. `csv` is the file
+ * Pocket, Raindrop and Instapaper write. `datavault` is an export of
+ * DataVault itself, so a workspace can be moved to another one.
  */
-export const importKindSchema = z.enum(["bookmarks", "urls", "datavault"]);
+export const importKindSchema = z.enum(["bookmarks", "urls", "csv", "datavault"]);
 
 export const importCreateSchema = z.object({
   kind: importKindSchema,

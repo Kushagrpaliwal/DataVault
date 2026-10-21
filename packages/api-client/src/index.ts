@@ -64,7 +64,7 @@ export class DataVaultApiClient {
     return payload.data;
   }
 
-  private async requestBlob(path: string, allowRefresh = true): Promise<Blob> {
+  private async requestBlob(path: string, allowRefresh = true, fallback: { code: string; message: string } = { code: "DOWNLOAD_FAILED", message: "The file could not be loaded." }): Promise<Blob> {
     const headers = new Headers();
     const organizationId = this.options.organizationId?.();
     if (organizationId) headers.set("X-Organization-Id", organizationId);
@@ -74,7 +74,7 @@ export class DataVaultApiClient {
     const response = await this.fetcher(`${this.options.baseUrl}${path}`, { headers, credentials: token ? "omit" : "include" });
     if (response.status === 401 && token && allowRefresh && this.options.tokenProvider) {
       this.refreshPromise ??= this.options.tokenProvider.refreshAccessToken().finally(() => { this.refreshPromise = null; });
-      if (await this.refreshPromise) return this.requestBlob(path, false);
+      if (await this.refreshPromise) return this.requestBlob(path, false, fallback);
     }
     if (!response.ok) {
       try {
@@ -83,7 +83,7 @@ export class DataVaultApiClient {
       } catch (error) {
         if (error instanceof DataVaultApiError) throw error;
       }
-      throw new DataVaultApiError("ATTACHMENT_DOWNLOAD_FAILED", "Could not load the attachment.", response.status);
+      throw new DataVaultApiError(fallback.code, fallback.message, response.status);
     }
     return response.blob();
   }
@@ -137,9 +137,9 @@ export class DataVaultApiClient {
   /** The page as it was, when the item was saved. */
   pageSnapshot = (id: string) => this.requestText(`/api/v1/saved-records/${id}/snapshot`);
   /** Everything in the workspace, as one file. */
-  exportWorkspace = () => this.requestText("/api/v1/export");
+  exportWorkspace = () => this.requestBlob("/api/v1/export", true, { code: "EXPORT_FAILED", message: "The workspace could not be taken out." });
   /** Bring material into the workspace. */
-  importItems = (body: { kind: "bookmarks" | "urls" | "datavault"; content: string; name?: string; vaultId?: string }) => this.request<{ imported: number; skipped: number; items: { id: string; title: string; url: string }[] }>("/api/v1/imports", { method: "POST", body: JSON.stringify(body) });
+  importItems = (body: { kind: "bookmarks" | "urls" | "csv" | "datavault"; content: string; name?: string; vaultId?: string }) => this.request<{ imported: number; skipped: number; items: { id: string; title: string; url: string }[] }>("/api/v1/imports", { method: "POST", body: JSON.stringify(body) });
   createSavedRecord = (body: Record<string, unknown>, idempotencyKey: string = crypto.randomUUID()) => this.request<SavedRecord>("/api/v1/saved-records", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
   updateSavedRecord = (id: string, body: Record<string, unknown>) => this.request<SavedRecord>(`/api/v1/saved-records/${id}`, { method: "PATCH", body: JSON.stringify(body) });
   archiveSavedRecord = (id: string) => this.request<void>(`/api/v1/saved-records/${id}/archive`, { method: "POST", body: "{}" });
@@ -178,7 +178,7 @@ export class DataVaultApiClient {
   dashboard = () => this.request<Record<string, unknown>>("/api/v1/dashboard");
   auditLogs = (query?: Record<string, QueryValue>) => this.request<PaginationResult<Record<string, unknown>>>("/api/v1/audit-logs", {}, query);
   uploadScreenshot = (recordId: string, file: File) => { const form = new FormData(); form.set("file", file); return this.request<Record<string, unknown>>(`/api/v1/saved-records/${recordId}/attachments`, { method: "POST", body: form }); };
-  getAttachmentBlob = (id: string) => this.requestBlob(`/api/v1/attachments/${id}`);
+  getAttachmentBlob = (id: string) => this.requestBlob(`/api/v1/attachments/${id}`, true, { code: "ATTACHMENT_DOWNLOAD_FAILED", message: "Could not load the attachment." });
   extensionStart = (body: Record<string, unknown>) => this.request<{ authorizationUrl: string }>("/api/v1/extension/auth/start", { method: "POST", body: JSON.stringify(body) });
   extensionExchange = (body: Record<string, unknown>) => this.request<ExtensionTokenSet>("/api/v1/extension/auth/exchange", { method: "POST", body: JSON.stringify(body) });
   extensionApprove = (body: Record<string, unknown>) => this.request<{ redirectUrl: string }>("/api/v1/extension/auth/approve", { method: "POST", body: JSON.stringify(body) });
