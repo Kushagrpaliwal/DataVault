@@ -26,7 +26,7 @@ export function AiCreditBadge() {
     return (
       <span
         title={credits.data.reason ?? "Confirm your email address to unlock AI credits."}
-        className="flex items-center gap-1.5 rounded-full bg-[#f5f0e0] px-2.5 py-1 text-xs font-medium text-[#6a6a6a]"
+        className="flex items-center gap-1.5 rounded-full bg-soft px-2.5 py-1 text-xs font-medium text-muted"
       >
         <Lock className="size-3.5" />
         AI locked
@@ -36,7 +36,7 @@ export function AiCreditBadge() {
   return (
     <span
       title={`${credits.data.remaining} of ${credits.data.allowance} free AI credits left today`}
-      className="flex items-center gap-1.5 rounded-full bg-[#f5f0e0] px-2.5 py-1 text-xs font-medium text-[#3a3a3a]"
+      className="flex items-center gap-1.5 rounded-full bg-soft px-2.5 py-1 text-xs font-medium text-strong"
     >
       <Sparkles className="size-3.5" />
       {credits.data.remaining} AI
@@ -104,10 +104,10 @@ export function AiPanel({ content, recordId, onApply }: AiPanelProps) {
   if (needsConsent) {
     return (
       <Modal open onClose={() => setDeclined(true)} title="Send content to Google for AI features">
-        <p className="text-sm leading-6 text-[#4a4a4a]">
+        <p className="text-sm leading-6 text-strong">
           AI features work by sending the text you choose to Google&apos;s Gemini model. The free tier we use may allow Google to use that content to improve their products.
         </p>
-        <p className="mt-3 text-sm leading-6 text-[#4a4a4a]">
+        <p className="mt-3 text-sm leading-6 text-strong">
           We send only the text you ask about, never your whole library, and you can stop at any time by not using AI features.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
@@ -128,10 +128,10 @@ export function AiPanel({ content, recordId, onApply }: AiPanelProps) {
   return (
     <section className="panel p-6">
       <div className="flex items-start gap-3">
-        <span className="grid size-10 place-items-center rounded-xl bg-[#f5f0e0]"><Sparkles className="size-5" /></span>
+        <span className="grid size-10 place-items-center rounded-xl bg-soft"><Sparkles className="size-5" /></span>
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-semibold">AI help</h2>
-          <p className="mt-1 text-sm leading-6 text-[#6a6a6a]">
+          <p className="mt-1 text-sm leading-6 text-muted">
             {locked
               ? reason
               : remaining > 0
@@ -154,33 +154,33 @@ export function AiPanel({ content, recordId, onApply }: AiPanelProps) {
       </div>
 
       {summary ? (
-        <div className="mt-5 rounded-2xl bg-[#f5f0e0] p-4">
+        <div className="mt-5 rounded-2xl bg-soft p-4">
           <p className="text-sm leading-6">{summary.summary}</p>
           {summary.keyPoints.length ? (
-            <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-[#4a4a4a]">
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-strong">
               {summary.keyPoints.map((point) => <li key={point}>{point}</li>)}
             </ul>
           ) : null}
-          {summary.suggestedTitle ? <p className="mt-3 text-xs font-semibold uppercase tracking-[.12em] text-[#6a6a6a]">Suggested title · {summary.suggestedTitle}</p> : null}
+          {summary.suggestedTitle ? <p className="mt-3 text-xs font-semibold uppercase tracking-[.12em] text-muted">Suggested title · {summary.suggestedTitle}</p> : null}
         </div>
       ) : null}
 
       {classification ? (
-        <div className="mt-5 rounded-2xl bg-[#f5f0e0] p-4">
+        <div className="mt-5 rounded-2xl bg-soft p-4">
           <p className="text-sm">
             <span className="font-semibold">{classification.recordType}</span>
-            {classification.tags.length ? <span className="text-[#6a6a6a]"> · {classification.tags.map((tag) => `#${tag}`).join(" ")}</span> : null}
+            {classification.tags.length ? <span className="text-muted"> · {classification.tags.map((tag) => `#${tag}`).join(" ")}</span> : null}
           </p>
-          <p className="mt-1 text-xs text-[#6a6a6a]">{classification.reason}</p>
+          <p className="mt-1 text-xs text-muted">{classification.reason}</p>
         </div>
       ) : null}
 
       {extraction ? (
-        <div className="mt-5 rounded-2xl bg-[#f5f0e0] p-4">
+        <div className="mt-5 rounded-2xl bg-soft p-4">
           <dl className="grid gap-2 sm:grid-cols-2">
             {Object.entries(extraction).filter(([, value]) => value).map(([key, value]) => (
               <div key={key}>
-                <dt className="text-xs uppercase tracking-[.12em] text-[#6a6a6a]">{key}</dt>
+                <dt className="text-xs uppercase tracking-[.12em] text-muted">{key}</dt>
                 <dd className="text-sm font-medium">{String(value)}</dd>
               </div>
             ))}

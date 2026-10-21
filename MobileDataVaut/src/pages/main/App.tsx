@@ -9,11 +9,13 @@ import { HomeScreen } from '../../screens/home-screen.js'
 import { RecordDetailScreen } from '../../screens/record-detail-screen.js'
 import { SettingsScreen } from '../../screens/settings-screen.js'
 import { VaultScreen } from '../../screens/vault-screen.js'
+import { useTheme } from '../../theme.js'
 
 type View = 'home' | 'vault' | 'capture' | 'settings'
 
 export function App(props: { onMounted?: () => void } = {}) {
   const { loading, session, organization } = useSession()
+  const { theme } = useTheme()
   const [view, setView] = useState<View>('home')
   const [recordId, setRecordId] = useState<string | null>(null)
 
@@ -21,11 +23,13 @@ export function App(props: { onMounted?: () => void } = {}) {
     props.onMounted?.()
   }, [props.onMounted])
 
-  if (loading) return <LoadingState label="Opening DataVault..." />
-  if (!session) return <AuthScreen />
+  const shell = theme === 'dark' ? 'app-shell theme-dark' : 'app-shell'
+
+  if (loading) return <view className={shell}><LoadingState label="Opening DataVault..." /></view>
+  if (!session) return <view className={shell}><AuthScreen /></view>
 
   if (recordId) {
-    return <RecordDetailScreen id={recordId} onBack={() => setRecordId(null)} />
+    return <view className={shell}><RecordDetailScreen id={recordId} onBack={() => setRecordId(null)} /></view>
   }
 
   const openRecord = (record: { id: string }) => setRecordId(record.id)
@@ -35,7 +39,7 @@ export function App(props: { onMounted?: () => void } = {}) {
   }
 
   return (
-    <view className="app-shell">
+    <view className={shell}>
       {!organization ? <SettingsScreen /> : view === 'home' ? <HomeScreen onOpenCapture={() => openView('capture')} onOpenVault={() => openView('vault')} onOpenRecord={openRecord} /> : null}
       {organization && view === 'vault' ? <VaultScreen onOpenRecord={openRecord} /> : null}
       {organization && view === 'capture' ? <CaptureScreen onSaved={() => openView('home')} /> : null}

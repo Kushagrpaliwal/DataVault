@@ -26,7 +26,21 @@ export async function listSavedRecords(context: TenantContext, query: ListQuery)
     if (query.reviewStatus) conditions.push(eq(savedRecords.reviewStatus, query.reviewStatus));
     if (query.tag) conditions.push(sql`exists (select 1 from saved_record_tags record_tags inner join tags record_tags_tag on record_tags_tag.id = record_tags.tag_id where record_tags.saved_record_id = ${savedRecords.id} and record_tags.organization_id = ${context.organizationId} and lower(record_tags_tag.name) = lower(${query.tag}))`);
     if (query.collectionId) conditions.push(sql`exists (select 1 from saved_record_collections record_collections where record_collections.saved_record_id = ${savedRecords.id} and record_collections.organization_id = ${context.organizationId} and record_collections.collection_id = ${query.collectionId})`);
-    if (query.q) conditions.push(or(ilike(savedRecords.title, likePattern(query.q)), ilike(savedRecords.description, likePattern(query.q)), ilike(savedRecords.originalText, likePattern(query.q)), ilike(savedRecords.sourceDomain, likePattern(query.q)), ilike(savedRecords.sourcePageTitle, likePattern(query.q)))!);
+    if (query.q) conditions.push(or(
+      /**
+       * The words of the item, which is what the index is for.
+       */
+      sql`${savedRecords.searchVector} @@ websearch_to_tsquery('english', ${query.q})`,
+      /**
+       * And the text as it was written, so that a word that is only half
+       * remembered is still found.
+       */
+      ilike(savedRecords.title, likePattern(query.q)),
+      ilike(savedRecords.description, likePattern(query.q)),
+      ilike(savedRecords.originalText, likePattern(query.q)),
+      ilike(savedRecords.sourceDomain, likePattern(query.q)),
+      ilike(savedRecords.sourcePageTitle, likePattern(query.q)),
+    )!);
     const where = and(...conditions);
     const orderColumn = query.sort === "title" ? savedRecords.title : query.sort === "updatedAt" ? savedRecords.updatedAt : query.sort === "recordType" ? savedRecords.recordType : savedRecords.createdAt;
     const [rows, totalRows] = await Promise.all([
@@ -38,15 +52,37 @@ export async function listSavedRecords(context: TenantContext, query: ListQuery)
   });
 }
 
-export async function getSavedRecord(context: TenantContext, id: string) {
+/**
+ * The page as it was, when the item was saved.
+ *
+ * A page changes, and a page that is gone cannot be read again. The
+ * snapshot is the markup of the parts of the page that were kept, so that
+ * the item can always be traced back to what the page said.
+ */
+export async function getPageSnapshot(context: TenantContext, id: string): Promise<{ html: string; title: string | null; url: string | null; capturedAt: string } | null> {
   return withTenant(context.organizationId, async (tx) => {
+    const [snapshot] = await tx.select({ html: evidenceSnapshots.pageHtml, title: evidenceSnapshots.sourceTitle, url: evidenceSnapshots.sourceUrl, capturedAt: evidenceSnapshots.capturedAt })
+      .from(evidenceSnapshots)
+      .where(and(
+        eq(evidenceSnapshots.organizationId, context.organizationId),
+        eq(evidenceSnapshots.savedRecordId, id),
+        isNotNull(evidenceSnapshots.pageHtml),
+      ))
+      .orderBy(desc(evidenceSnapshots.capturedAt))
+      .limit(1);
+    if (!snapshot?.html) return null;
+    return { html: snapshot.html, title: snapshot.title, url: snapshot.url, capturedAt: snapshot.capturedAt.toISOString() };
+  });
+}
+
+export async function getSavedRecord(context: TenantContext, id: string) {  return withTenant(context.organizationId, async (tx) => {
     const [record] = await tx.select().from(savedRecords).where(and(eq(savedRecords.organizationId, context.organizationId), eq(savedRecords.id, id))).limit(1);
     if (!record) throw notFound("saved_record");
     const [capture, files, audit, snapshots, collections, recordTags] = await Promise.all([
       tx.select().from(captureSources).where(and(eq(captureSources.organizationId, context.organizationId), eq(captureSources.savedRecordId, id))).limit(1),
       tx.select({ id: attachments.id, fileName: attachments.fileName, mimeType: attachments.mimeType, byteSize: attachments.byteSize, createdAt: attachments.createdAt }).from(attachments).where(and(eq(attachments.organizationId, context.organizationId), eq(attachments.savedRecordId, id))),
       tx.select().from(auditLogs).where(and(eq(auditLogs.organizationId, context.organizationId), eq(auditLogs.resourceId, id))).orderBy(desc(auditLogs.createdAt)).limit(100),
-      tx.select().from(evidenceSnapshots).where(and(eq(evidenceSnapshots.organizationId, context.organizationId), eq(evidenceSnapshots.savedRecordId, id))).orderBy(desc(evidenceSnapshots.capturedAt)),
+      tx.select({ id: evidenceSnapshots.id, sourceUrl: evidenceSnapshots.sourceUrl, sourceTitle: evidenceSnapshots.sourceTitle, sourceDomain: evidenceSnapshots.sourceDomain, capturedText: evidenceSnapshots.capturedText, contentHash: evidenceSnapshots.contentHash, extractorId: evidenceSnapshots.extractorId, extractorVersion: evidenceSnapshots.extractorVersion, capturedAt: evidenceSnapshots.capturedAt, createdAt: evidenceSnapshots.createdAt }).from(evidenceSnapshots).where(and(eq(evidenceSnapshots.organizationId, context.organizationId), eq(evidenceSnapshots.savedRecordId, id))).orderBy(desc(evidenceSnapshots.capturedAt)),
       tx.select({ id: vaultCollections.id, name: vaultCollections.name, color: vaultCollections.color }).from(savedRecordCollections).innerJoin(vaultCollections, eq(vaultCollections.id, savedRecordCollections.collectionId)).where(and(eq(savedRecordCollections.organizationId, context.organizationId), eq(savedRecordCollections.savedRecordId, id))),
       tx.select({ id: tags.id, name: tags.name, color: tags.color }).from(savedRecordTags).innerJoin(tags, eq(tags.id, savedRecordTags.tagId)).where(and(eq(savedRecordTags.organizationId, context.organizationId), eq(savedRecordTags.savedRecordId, id))),
     ]);

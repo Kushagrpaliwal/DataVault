@@ -5,6 +5,9 @@ import { signInExtension } from "../lib/auth";
 import { addClipToCurrentDoc, addClipToDoc, broadcastNoteUpdate as broadcastNoteChanged, makeCurrentDoc, refreshCurrentDoc, removeClipFromDoc, startNewDoc } from "../lib/docs";
 import { enqueuePendingCapture, getAuth, getDefaultVaultId, getPendingCaptures, getPreferences, removePendingCapture, subscribeStorage, updatePendingCapture, type CaptureQuality, type ExtensionPreferences, type PageDetails, type PendingCapture, type PendingDocClip } from "../lib/storage";
 import { recordExtensionError } from "../lib/errors";
+import { openReviewPanel, openReviewWindow as openReviewPanelWindow } from "../lib/panel";
+import { readPageContent } from "../lib/page-content";
+import { tidyPageText } from "@data-vault/notes";
 
 const menuSaveId = "datavault-save-selection";
 const menuAddToDocId = "datavault-add-to-doc";
@@ -182,11 +185,8 @@ async function selectedTextFromTab(tab: chrome.tabs.Tab, selectedText = "") {
 async function readablePageText(tab: chrome.tabs.Tab) {
   if (!tab.id) return "";
   try {
-    const result = await browser.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => (document.body?.innerText ?? "").replace(/\n{3,}/g, "\n\n").trim().slice(0, 100_000),
-    });
-    return result[0]?.result ?? "";
+    const content = await readPageContent(tab.id);
+    return tidyPageText(content.text);
   } catch {
     return "";
   }
@@ -286,9 +286,10 @@ async function stagePageCapture(tab: chrome.tabs.Tab, page?: PageDetails) {
     if (!selectedText) throw new Error("Select text on the page before using the Selection only capture mode.");
     pending = { ...base, selectedText, contentKind: "selection", attachScreenshot: false };
   } else if (pageCaptureMode === "full-text") {
-    const text = await readablePageText(tab);
+    const content = tab.id ? await readPageContent(tab.id).catch(() => undefined) : undefined;
+    const text = content ? tidyPageText(content.text) : await readablePageText(tab);
     if (!text) throw new Error("DataVault could not read text from this page. Try Visible screenshot + page info instead.");
-    pending = { ...base, selectedText: text, contentKind: "page-text", attachScreenshot: true, captureQuality: await inspectPage(tab, text) };
+    pending = { ...base, selectedText: text, contentKind: "page-text", attachScreenshot: true, captureQuality: await inspectPage(tab, text), ...(content?.html ? { pageHtml: content.html } : {}) };
   } else {
     pending = { ...base, selectedText: selectedText || pageSummary(tab), contentKind: selectedText ? "selection" : "page-info", attachScreenshot: true };
   }
@@ -304,6 +305,7 @@ function capturePayload(pending: PendingCapture, vaultId?: string) {
   return {
     selectedText: pending.selectedText,
     originalText: pending.selectedText,
+    ...(pending.pageHtml ? { pageHtml: pending.pageHtml } : {}),
     source: { url: pending.pageUrl, title: pending.pageTitle, domain: pending.domain },
     capturedAt: pending.capturedAt,
     captureQuality: pending.captureQuality,
@@ -386,7 +388,7 @@ async function ensureAlarm(name: string, periodInMinutes: number) {
  */
 function openSidePanelFromUserGesture(tab: chrome.tabs.Tab) {
   if (tab.windowId === undefined) return Promise.resolve(false);
-  return browser.sidePanel.open({ windowId: tab.windowId }).then(() => true).catch(() => false);
+  return openReviewPanel(tab.windowId);
 }
 
 /**
@@ -397,16 +399,10 @@ function openSidePanelFromUserGesture(tab: chrome.tabs.Tab) {
  * same way, and the item is not left waiting where nobody can see it.
  */
 async function openReviewWindow(tab: chrome.tabs.Tab) {
-  try {
-    const url = chrome.runtime.getURL("sidepanel.html");
-    await browser.windows.create({ url, type: "popup", width: 420, height: 720, focused: true });
-    return true;
-  } catch {
-    if (tab.id !== undefined) {
-      await showInPageToast(tab.id, "DataVault is holding that for review. Open the DataVault side panel to check it.");
-    }
-    return false;
+  if (await openReviewPanelWindow()) return true;  if (tab.id !== undefined) {
+    await showInPageToast(tab.id, "DataVault is holding that for review. Open the DataVault side panel to check it.");
   }
+  return false;
 }
 
 /**

@@ -1,7 +1,7 @@
 import type {
   AiActivityEntry, AiClassificationResult, AiCreditStatus, AiExtractionResult, AiRunResult, AiSummaryResult,
   ApiResponse, AuthMethods, AuthSession, CaptureCreateInput, ExtensionSession, ExtensionTokenSet, Note, NoteClipResult,
-  NoteRevision, NoteSummary, NoteWriteUpSection, Organization, PaginationResult, SavedRecord, Vault,
+  NoteRevision, NoteSummary, NoteWriteUpSection, Organization, PaginationResult, SavedRecord, SearchResult, SemanticResult, Vault,
   VaultCollection, VaultCreateInput, VaultTag,
 } from "@data-vault/types";
 
@@ -88,6 +88,30 @@ export class DataVaultApiClient {
     return response.blob();
   }
 
+  private async requestText(path: string): Promise<string> {
+    const headers = new Headers();
+    const organizationId = this.options.organizationId?.();
+    if (organizationId) headers.set("X-Organization-Id", organizationId);
+    const token = await this.options.tokenProvider?.getAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await this.fetcher(`${this.options.baseUrl}${path}`, { headers, credentials: token ? "omit" : "include" });
+    if (!response.ok) {
+      let code = "SNAPSHOT_FAILED";
+      let message = "The page as it was could not be loaded.";
+      try {
+        const payload = await response.json() as ApiResponse<never>;
+        if (!payload.success) {
+          code = payload.error.code;
+          message = payload.error.message;
+        }
+      } catch {
+        // The answer was not the usual one, so the message above is used.
+      }
+      throw new DataVaultApiError(code, message, response.status);
+    }
+    return response.text();
+  }
+
   getMe = () => this.request<AuthSession>("/api/v1/me");
   authMethods = () => this.request<AuthMethods>("/api/v1/auth/methods");
   login = (body: { email: string; password: string }) => this.request<AuthSession | { twoFactorRequired: true; twoFactorMethods: string[] }>("/api/v1/auth/login", { method: "POST", body: JSON.stringify(body) });
@@ -110,6 +134,12 @@ export class DataVaultApiClient {
   createOrganization = (body: Record<string, unknown>) => this.request<Organization>("/api/v1/organizations", { method: "POST", body: JSON.stringify(body) });
   listSavedRecords = (query?: Record<string, QueryValue>) => this.request<PaginationResult<SavedRecord>>("/api/v1/saved-records", {}, query);
   getSavedRecord = (id: string) => this.request<SavedRecord & Record<string, unknown>>(`/api/v1/saved-records/${id}`);
+  /** The page as it was, when the item was saved. */
+  pageSnapshot = (id: string) => this.requestText(`/api/v1/saved-records/${id}/snapshot`);
+  /** Everything in the workspace, as one file. */
+  exportWorkspace = () => this.requestText("/api/v1/export");
+  /** Bring material into the workspace. */
+  importItems = (body: { kind: "bookmarks" | "urls" | "datavault"; content: string; name?: string; vaultId?: string }) => this.request<{ imported: number; skipped: number; items: { id: string; title: string; url: string }[] }>("/api/v1/imports", { method: "POST", body: JSON.stringify(body) });
   createSavedRecord = (body: Record<string, unknown>, idempotencyKey: string = crypto.randomUUID()) => this.request<SavedRecord>("/api/v1/saved-records", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
   updateSavedRecord = (id: string, body: Record<string, unknown>) => this.request<SavedRecord>(`/api/v1/saved-records/${id}`, { method: "PATCH", body: JSON.stringify(body) });
   archiveSavedRecord = (id: string) => this.request<void>(`/api/v1/saved-records/${id}/archive`, { method: "POST", body: "{}" });
@@ -134,7 +164,11 @@ export class DataVaultApiClient {
   deleteSavedView = (id: string) => this.request<void>(`/api/v1/saved-views/${id}`, { method: "DELETE", body: "{}" });
   createCapture = (body: CaptureCreateInput, idempotencyKey: string = crypto.randomUUID()) => this.request<Record<string, unknown>>("/api/v1/captures", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
   recentCaptures = () => this.request<SavedRecord[]>("/api/v1/captures/recent");
-  search = (q: string, page = 1, limit = 20) => this.request<PaginationResult<Record<string, unknown>>>("/api/v1/search", {}, { q, page, limit });
+  search = (q: string, page = 1, limit = 20) => this.request<PaginationResult<SearchResult>>("/api/v1/search", {}, { q, page, limit });
+  /** A search by meaning: the items that say the same thing as the question. */
+  semanticSearch = (q: string, limit = 20) => this.request<{ items: SemanticResult[]; total: number }>("/api/v1/search/semantic", {}, { q, limit });
+  /** Make the numbers of every item in the workspace again. */
+  reindexSemantic = () => this.request<{ indexed: number; skipped: number }>("/api/v1/search/semantic/reindex", { method: "POST", body: "{}" });
   dashboard = () => this.request<Record<string, unknown>>("/api/v1/dashboard");
   auditLogs = (query?: Record<string, QueryValue>) => this.request<PaginationResult<Record<string, unknown>>>("/api/v1/audit-logs", {}, query);
   uploadScreenshot = (recordId: string, file: File) => { const form = new FormData(); form.set("file", file); return this.request<Record<string, unknown>>(`/api/v1/saved-records/${recordId}/attachments`, { method: "POST", body: form }); };

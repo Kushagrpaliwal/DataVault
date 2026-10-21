@@ -14,7 +14,7 @@ import { useAuth } from "../../lib/auth";
 import { ErrorMessage } from "../../components/feedback";
 
 function AuthFrame({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
-  return <main className="grid min-h-screen bg-[#fffaf0] lg:grid-cols-[1fr_1.05fr]"><section className="flex items-center justify-center p-6 md:p-12"><div className="w-full max-w-md"><NavLink to="/" className="mb-12 flex items-center gap-2 text-lg font-semibold"><span className="grid size-9 place-items-center rounded-xl bg-black text-white">D</span>DataVault</NavLink><h1 className="display text-4xl">{title}</h1><p className="mt-3 text-[#6a6a6a]">{description}</p><div className="mt-8">{children}</div></div></section><aside className="relative hidden overflow-hidden bg-[#1a3a3a] p-12 text-white lg:block"><div className="relative z-10 flex h-full flex-col justify-between"><p className="text-xs font-semibold uppercase tracking-[.18em] text-[#a4d4c5]">Save anything from the web</p><div className="grid items-center gap-6 xl:grid-cols-[1fr_.75fr]"><div><p className="display max-w-xl text-5xl">The detail you saved yesterday is the answer you need today.</p><p className="mt-6 max-w-lg text-lg text-white/75">Save text from any webpage, keep the link it came from, and find it again in seconds.</p></div><img src="/data-vault-clay.png" alt="Illustration of a vault holding saved items" className="mx-auto w-full max-w-sm drop-shadow-2xl"/></div><div className="grid grid-cols-3 gap-3"><div className="h-20 rounded-3xl bg-[#ff4d8b]"/><div className="mt-5 h-20 rounded-3xl bg-[#b8a4ed]"/><div className="h-20 rounded-3xl bg-[#e8b94a]"/></div></div></aside></main>;
+  return <main className="grid min-h-screen bg-canvas lg:grid-cols-[1fr_1.05fr]"><section className="flex items-center justify-center p-6 md:p-12"><div className="w-full max-w-md"><NavLink to="/" className="mb-12 flex items-center gap-2 text-lg font-semibold"><span className="grid size-9 place-items-center rounded-xl bg-black text-white">D</span>DataVault</NavLink><h1 className="display text-4xl">{title}</h1><p className="mt-3 text-muted">{description}</p><div className="mt-8">{children}</div></div></section><aside className="relative hidden overflow-hidden bg-deep p-12 text-white lg:block"><div className="relative z-10 flex h-full flex-col justify-between"><p className="text-xs font-semibold uppercase tracking-[.18em] text-[#a4d4c5]">Save anything from the web</p><div className="grid items-center gap-6 xl:grid-cols-[1fr_.75fr]"><div><p className="display max-w-xl text-5xl">The detail you saved yesterday is the answer you need today.</p><p className="mt-6 max-w-lg text-lg text-white/75">Save text from any webpage, keep the link it came from, and find it again in seconds.</p></div><img src="/data-vault-clay.png" alt="Illustration of a vault holding saved items" className="mx-auto w-full max-w-sm drop-shadow-2xl"/></div><div className="grid grid-cols-3 gap-3"><div className="h-20 rounded-3xl bg-[#ff4d8b]"/><div className="mt-5 h-20 rounded-3xl bg-[#b8a4ed]"/><div className="h-20 rounded-3xl bg-[#e8b94a]"/></div></div></aside></main>;
 }
 
 function authDestination(location: ReturnType<typeof useLocation>, fallback: string) {
@@ -64,7 +64,7 @@ export function LoginPage() {
           <div>
             <Label htmlFor="code">Authenticator code</Label>
             <Input id="code" inputMode="numeric" autoComplete="one-time-code" autoFocus value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="123456" />
-            <p className="mt-1 text-xs text-[#6a6a6a]">The six-digit code from your authenticator app.</p>
+            <p className="mt-1 text-xs text-muted">The six-digit code from your authenticator app.</p>
           </div>
           <Button className="w-full" type="submit">Sign in</Button>
           <button type="button" className="w-full text-center text-sm underline" onClick={() => { setNeedsCode(false); setCode(""); setError(""); }}>Use a different account</button>
@@ -101,11 +101,11 @@ export function LoginPage() {
           </div>
           <div className="relative">
             <Input id="password" autoComplete="current-password" type={showPassword ? "text" : "password"} className="pr-11" {...form.register("password")} />
-            <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6a6a6a] hover:text-[#0a0a0a]" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
+            <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
           </div>
         </div>
         <Button className="w-full" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Signing in…" : "Sign in"}</Button>
-        <p className="text-center text-sm text-[#6a6a6a]">New to DataVault? <NavLink to="/register" state={location.state} className="font-semibold text-black underline">Create an account</NavLink></p>
+        <p className="text-center text-sm text-muted">New to DataVault? <NavLink to="/register" state={location.state} className="font-semibold text-black underline">Create an account</NavLink></p>
       </form>
     </AuthFrame>
   );
@@ -145,13 +145,13 @@ export function RegisterPage() {
           <Label htmlFor="password">Password</Label>
           <div className="relative">
             <Input id="password" autoComplete="new-password" type={showPassword ? "text" : "password"} className="pr-11" {...form.register("password")} />
-            <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6a6a6a] hover:text-[#0a0a0a]" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
+            <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
           </div>
-          <p className="mt-1 text-xs text-[#6a6a6a]">10 or more characters, with upper-case, lower-case, and a number.</p>
+          <p className="mt-1 text-xs text-muted">10 or more characters, with upper-case, lower-case, and a number.</p>
         </div>
         <Button className="w-full" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Creating…" : "Create account"}</Button>
-        <p className="text-center text-sm text-[#6a6a6a]">Already registered? <NavLink to="/login" state={location.state} className="font-semibold text-black underline">Sign in</NavLink></p>
-        <p className="rounded-xl bg-[#f5f0e0] p-3 text-xs leading-5 text-[#6a6a6a]">
+        <p className="text-center text-sm text-muted">Already registered? <NavLink to="/login" state={location.state} className="font-semibold text-black underline">Sign in</NavLink></p>
+        <p className="rounded-xl bg-soft p-3 text-xs leading-5 text-muted">
           We will email you a confirmation link. You can use DataVault straight away, but you need to confirm your address before AI credits unlock.
         </p>
       </form>
@@ -218,7 +218,7 @@ export function ResetPasswordPage() {
           <Label htmlFor="password">New password</Label>
           <div className="relative">
             <Input id="password" autoComplete="new-password" type={showPassword ? "text" : "password"} className="pr-11" {...form.register("password")} />
-            <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6a6a6a] hover:text-[#0a0a0a]" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
+            <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
           </div>
         </div>
         <Button className="w-full">Update password</Button>
@@ -263,7 +263,7 @@ export function SetPasswordPage() {
         })}>
           {error ? <ErrorMessage message={error} /> : null}
           {!token ? (
-            <div className="rounded-2xl bg-[#f5f0e0] p-5 text-sm leading-6 text-[#4a4a4a]">
+            <div className="rounded-2xl bg-soft p-5 text-sm leading-6 text-strong">
               This link is missing its code. Request a new one from the sign-in page.
             </div>
           ) : null}
@@ -272,9 +272,9 @@ export function SetPasswordPage() {
             <Label htmlFor="password">New password</Label>
             <div className="relative">
               <Input id="password" autoComplete="new-password" type={showPassword ? "text" : "password"} className="pr-11" {...form.register("password")} />
-              <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6a6a6a] hover:text-[#0a0a0a]" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
+              <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
             </div>
-            <p className="mt-1 text-xs text-[#6a6a6a]">10 or more characters, with upper-case, lower-case, and a number.</p>
+            <p className="mt-1 text-xs text-muted">10 or more characters, with upper-case, lower-case, and a number.</p>
           </div>
           <Button className="w-full" disabled={form.formState.isSubmitting || !token}>{form.formState.isSubmitting ? "Setting…" : "Set password"}</Button>
         </form>
@@ -310,7 +310,7 @@ export function VerifiedPage() {
         </>
       ) : (
         <>
-          <p className="text-sm leading-6 text-[#4a4a4a]">
+          <p className="text-sm leading-6 text-strong">
             If the link has expired, request a new one from Settings. You can keep using DataVault either way, and your credits unlock as soon as the address is confirmed.
           </p>
           <NavLink to="/settings" className="mt-5 block w-full"><Button className="w-full" variant="secondary">Open settings</Button></NavLink>
@@ -346,7 +346,7 @@ export function OnboardingPage() {
   if (loading) {
     return (
       <AuthFrame title="Create your workspace" description="A workspace keeps your saved items separate from anyone else you share with.">
-        <p className="rounded-2xl bg-[#f5f0e0] p-5 text-sm text-[#6a6a6a]">Checking your sign-in…</p>
+        <p className="rounded-2xl bg-soft p-5 text-sm text-muted">Checking your sign-in…</p>
       </AuthFrame>
     );
   }
@@ -407,7 +407,7 @@ export function ExtensionAuthorizePage() {
   if (loading) {
     return (
       <AuthFrame title="Connecting the extension" description="This browser is connecting to your workspace. You can close this tab once it is done.">
-        <p className="rounded-2xl bg-[#f5f0e0] p-5 text-sm text-[#6a6a6a]">Checking your sign-in…</p>
+        <p className="rounded-2xl bg-soft p-5 text-sm text-muted">Checking your sign-in…</p>
       </AuthFrame>
     );
   }
@@ -415,10 +415,10 @@ export function ExtensionAuthorizePage() {
   if (!session.organizations.length) return <Navigate to="/onboarding" state={{ from: `/extension/authorize?${params.toString()}` }} replace />;
   return (
     <AuthFrame title="Connecting the extension" description="This browser is connecting to your workspace. You can close this tab once it is done.">
-      <div className="rounded-2xl bg-[#f5f0e0] p-5">
-        <p className="text-sm text-[#6a6a6a]">Workspace</p>
+      <div className="rounded-2xl bg-soft p-5">
+        <p className="text-sm text-muted">Workspace</p>
         <p className="mt-1 font-semibold">{organization?.name}</p>
-        <p className="mt-5 flex items-center gap-2 text-sm text-[#4a4a4a]"><MailCheck className="size-4" />Finishing secure connection…</p>
+        <p className="mt-5 flex items-center gap-2 text-sm text-strong"><MailCheck className="size-4" />Finishing secure connection…</p>
       </div>
       {error ? <div className="mt-4"><ErrorMessage message={error} /></div> : null}
       <Button className="mt-5 w-full" variant="secondary" onClick={() => window.close()}>Cancel</Button>

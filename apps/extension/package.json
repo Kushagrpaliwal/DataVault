@@ -7,7 +7,9 @@
     "dev": "wxt ../.. --config apps/extension/wxt.config.ts --browser chrome",
     "build": "wxt build ../.. --config apps/extension/wxt.config.ts --browser chrome",
     "build:edge": "wxt build ../.. --config apps/extension/wxt.config.ts --browser edge",
+    "build:firefox": "wxt build ../.. --config apps/extension/wxt.config.ts --browser firefox",
     "zip": "wxt zip ../.. --config apps/extension/wxt.config.ts --browser chrome",
+    "zip:firefox": "wxt zip ../.. --config apps/extension/wxt.config.ts --browser firefox",
     "typecheck": "tsc --noEmit",
     "postinstall": "wxt prepare ../.. --config apps/extension/wxt.config.ts",
     "test": "bun test"

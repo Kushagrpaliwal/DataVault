@@ -30,10 +30,10 @@ function Protected() {
    */
   if (error && !session) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#fffaf0] p-6">
-        <div className="max-w-md rounded-3xl bg-[#f5f0e0] p-8 text-center">
+      <main className="grid min-h-screen place-items-center bg-canvas p-6">
+        <div className="max-w-md rounded-3xl bg-soft p-8 text-center">
           <h1 className="display text-3xl">Can’t reach DataVault</h1>
-          <p className="mt-3 text-sm leading-6 text-[#6a6a6a]">{error}</p>
+          <p className="mt-3 text-sm leading-6 text-muted">{error}</p>
           <Button className="mt-6" onClick={() => void refresh()}>Retry</Button>
         </div>
       </main>
@@ -96,7 +96,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
   static getDerivedStateFromError(error: Error) { return { error }; }
   override componentDidCatch(error: Error, info: ErrorInfo) { console.error(error, info); }
   override render() {
-    if (this.state.error) return <main className="grid min-h-screen place-items-center bg-[#fffaf0] p-6"><div className="max-w-md rounded-3xl bg-[#ffb084] p-8 text-center"><h1 className="display text-3xl">Something went wrong</h1><p className="mt-3 text-sm">{this.state.error.message}</p><Button className="mt-6" onClick={() => window.location.reload()}>Reload DataVault</Button></div></main>;
+    if (this.state.error) return <main className="grid min-h-screen place-items-center bg-canvas p-6"><div className="max-w-md rounded-3xl bg-[#ffb084] p-8 text-center"><h1 className="display text-3xl">Something went wrong</h1><p className="mt-3 text-sm">{this.state.error.message}</p><Button className="mt-6" onClick={() => window.location.reload()}>Reload DataVault</Button></div></main>;
     return this.props.children;
   }
 }

@@ -78,6 +78,27 @@
       "when": 1792576067809,
       "tag": "0010_ai_request_key_claim",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792579134358,
+      "tag": "0011_saved_records_full_text_search",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792579549321,
+      "tag": "0012_evidence_snapshots_page_html",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792580565080,
+      "tag": "0013_record_embeddings",
+      "breakpoints": true
     }
   ]
 }

@@ -72,7 +72,7 @@ export function DocToolbar({ editor, inTable = false }: ToolbarProps) {
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b border-[#e5dfd1] bg-[#fffdf8] px-3 py-2 text-sm">
+    <div className="flex flex-wrap items-center gap-1 border-b border-line bg-surface px-3 py-2 text-sm">
       <ToolButton label="Undo" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()}><Undo2 className="size-4" /></ToolButton>
       <ToolButton label="Redo" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()}><Redo2 className="size-4" /></ToolButton>
       <Separator />
@@ -109,14 +109,14 @@ export function DocToolbar({ editor, inTable = false }: ToolbarProps) {
       <div className="relative">
         <ToolButton label="Text colour" active={showColours} onClick={() => setShowColours((open) => !open)}><Palette className="size-4" /></ToolButton>
         {showColours ? (
-          <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-2xl border border-[#e5dfd1] bg-white p-3 shadow-lg">
-            <p className="text-xs font-semibold uppercase tracking-[.12em] text-[#6a6a6a]">Text</p>
+          <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-2xl border border-line bg-white p-3 shadow-lg">
+            <p className="text-xs font-semibold uppercase tracking-[.12em] text-muted">Text</p>
             <div className="mt-2 grid grid-cols-8 gap-1">
               {TEXT_COLOURS.map((colour) => (
                 <button key={colour} title={colour} aria-label={`Text colour ${colour}`} className="size-6 rounded-md border border-black/10" style={{ background: colour }} onClick={() => { editor.chain().focus().setColor(colour).run(); setShowColours(false); }} />
               ))}
             </div>
-            <p className="mt-3 text-xs font-semibold uppercase tracking-[.12em] text-[#6a6a6a]">Highlight</p>
+            <p className="mt-3 text-xs font-semibold uppercase tracking-[.12em] text-muted">Highlight</p>
             <div className="mt-2 grid grid-cols-5 gap-1">
               {HIGHLIGHT_COLOURS.map((colour) => (
                 <button key={colour} title={colour} aria-label={`Highlight ${colour}`} className="size-6 rounded-md border border-black/10" style={{ background: colour }} onClick={() => { editor.chain().focus().toggleHighlight({ color: colour }).run(); setShowColours(false); }} />
@@ -159,7 +159,7 @@ function ToolButton({ label, onClick, active, disabled, children }: { label: str
       aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
-      className={cn("grid size-8 place-items-center rounded-lg text-[#3a3a3a] transition-colors hover:bg-[#f5f0e0] disabled:pointer-events-none disabled:opacity-35", active && "bg-[#ebe6d6] text-black")}
+      className={cn("grid size-8 place-items-center rounded-lg text-strong transition-colors hover:bg-soft disabled:pointer-events-none disabled:opacity-35", active && "bg-soft text-black")}
     >
       {children}
     </button>
@@ -178,11 +178,11 @@ function Select({ label, value, options, onChange }: { label: string; value: str
         aria-label={label}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-8 appearance-none rounded-lg border border-transparent bg-transparent py-0 pl-2 pr-6 text-xs font-medium text-[#3a3a3a] hover:bg-[#f5f0e0] focus:border-[#ded8ca]"
+        className="h-8 appearance-none rounded-lg border border-transparent bg-transparent py-0 pl-2 pr-6 text-xs font-medium text-strong hover:bg-soft focus:border-line"
       >
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-1 size-3 text-[#6a6a6a]" />
+      <ChevronDown className="pointer-events-none absolute right-1 size-3 text-muted" />
     </label>
   );
 }

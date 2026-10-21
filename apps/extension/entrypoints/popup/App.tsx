@@ -13,6 +13,7 @@ import { getAuth, getPreferences, setPreferences, subscribeStorage, type PageDet
 import { signOutExtension } from "../../lib/auth";
 import { WEB_URL, withOrganization } from "../../lib/api";
 import { refreshCurrentDoc, renameDoc, startNewDoc } from "../../lib/docs";
+import { openReviewPanel, openReviewWindow } from "../../lib/panel";
 
 /**
  * The popup used to hold a search box, a recent-items list, and three
@@ -62,20 +63,16 @@ export function PopupApp() {
   }, []);
 
   const openSidePanel = async () => {
-    await new Promise<void>((resolve, reject) => {
-      chrome.windows.getCurrent((currentWindow) => {
-        /**
-         * Reading the error stops Chrome from reporting it, even when
-         * nothing went wrong.
-         */
-        void chrome.runtime.lastError;
-        if (currentWindow.id === undefined) {
-          reject(new Error("DataVault could not find the current browser window."));
-          return;
-        }
-        void chrome.sidePanel.open({ windowId: currentWindow.id }).then(resolve, reject);
-      });
-    });
+    /**
+     * Chrome opens its side panel and Firefox opens its sidebar. Both are
+     * the same page, and a small window is used when the browser will not
+     * open its own.
+     */
+    const currentWindow = await browser.windows.getCurrent();
+    if (currentWindow?.id === undefined) throw new Error("DataVault could not find the current browser window.");
+    if (await openReviewPanel(currentWindow.id)) return;
+    if (await openReviewWindow()) return;
+    throw new Error("DataVault could not open the review panel.");
   };
 
   /**

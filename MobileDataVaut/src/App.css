@@ -180,6 +180,23 @@
   --shadow: 0 12px 26px rgba(45, 34, 28, 0.09);
 }
 
+/**
+ * The dark theme.
+ *
+ * The colours are named rather than written out, so the whole app can be
+ * turned over at once.
+ */
+.theme-dark {
+  --cream: #14131a;
+  --paper: #1e1d25;
+  --ink: #f2eef4;
+  --muted: #a49da4;
+  --line: #33303a;
+  --teal: #3fc0b6;
+  --teal-dark: #7bd8cf;
+  --shadow: 0 12px 26px rgba(0, 0, 0, 0.45);
+}
+
 * {
   box-sizing: border-box;
 }

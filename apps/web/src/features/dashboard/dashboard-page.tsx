@@ -88,7 +88,7 @@ function GettingStarted() {
   return (
     <>
     <section className="panel overflow-hidden">
-      <div className="border-b border-[#eee8da] bg-[#1a3a3a] p-6 text-white">
+      <div className="border-b border-line bg-deep p-6 text-white">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#a4d4c5]">
           <Puzzle className="size-4" />
           Get started
@@ -98,18 +98,18 @@ function GettingStarted() {
           DataVault keeps the text you save, along with the page it came from, so you can find it again later.
         </p>
       </div>
-      <div className="grid gap-px bg-[#eee8da] md:grid-cols-3">
+      <div className="grid gap-px bg-line md:grid-cols-3">
         {[
           ["Install the extension", "Load DataVault from your browser’s extension page."],
           ["Select any text", "Highlight a paragraph, price, or link on any page."],
           ["Right-click and save", "Choose “Save to DataVault”. It shows up here instantly."],
         ].map(([title, description], index) => (
-          <div key={title} className="bg-[#fffdf8] p-6">
-            <span className="grid size-8 place-items-center rounded-full bg-[#0a0a0a] text-sm font-semibold text-white">
+          <div key={title} className="bg-surface p-6">
+            <span className="grid size-8 place-items-center rounded-full bg-ink text-sm font-semibold text-white">
               {index + 1}
             </span>
             <h3 className="mt-4 font-semibold">{title}</h3>
-            <p className="mt-1 text-sm leading-6 text-[#6a6a6a]">{description}</p>
+            <p className="mt-1 text-sm leading-6 text-muted">{description}</p>
           </div>
         ))}
       </div>
@@ -139,10 +139,10 @@ function RecentItemsSection({
 }) {
   return (
     <section className="panel overflow-hidden">
-      <div className="flex items-center justify-between border-b border-[#eee8da] p-5">
+      <div className="flex items-center justify-between border-b border-line p-5">
         <div>
           <h2 className="text-lg font-semibold">{title}</h2>
-          <p className="text-sm text-[#6a6a6a]">{subtitle}</p>
+          <p className="text-sm text-muted">{subtitle}</p>
         </div>
         <Badge tone="teal">All saved items</Badge>
       </div>
@@ -154,7 +154,7 @@ function RecentItemsSection({
           />
         </div>
       ) : (
-        <div className="divide-y divide-[#eee8da]">
+        <div className="divide-y divide-line">
           {records.map((record) => (
             <ItemCard key={record.id} record={record} />
           ))}
@@ -178,28 +178,28 @@ function ItemCard({ record }: { record: SavedRecord }) {
   };
 
   return (
-    <div className="p-4 transition-colors hover:bg-[#faf5e8]">
+    <div className="p-4 transition-colors hover:bg-hover">
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-[#f5f0e0]">
-          {record.sourceDomain ? <Globe className="size-4 text-[#4a4a4a]" /> : <RecordTypeIcon type={record.recordType} />}
+        <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-soft">
+          {record.sourceDomain ? <Globe className="size-4 text-strong" /> : <RecordTypeIcon type={record.recordType} />}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <Link to={`/saved/${record.id}`} className="truncate text-sm font-semibold hover:underline">
               {record.title}
             </Link>
-            <span className="shrink-0 text-xs text-[#6a6a6a]">
+            <span className="shrink-0 text-xs text-muted">
               {formatDistanceToNow(new Date(record.createdAt), { addSuffix: true })}
             </span>
           </div>
 
           {record.originalText ? (
-            <p className="mt-1.5 line-clamp-2 rounded-lg border border-[#f0ebdf] bg-[#fffcf5] p-2 font-mono text-xs text-[#4a4a4a]">
+            <p className="mt-1.5 line-clamp-2 rounded-lg border border-line bg-surface p-2 font-mono text-xs text-strong">
               {record.originalText}
             </p>
           ) : null}
 
-          <div className="mt-2.5 flex items-center gap-3 text-xs text-[#6a6a6a]">
+          <div className="mt-2.5 flex items-center gap-3 text-xs text-muted">
             <span className="flex items-center gap-1">
               <RecordTypeIcon type={record.recordType} className="size-3" />
               <RecordTypeLabel type={record.recordType} />
@@ -236,7 +236,7 @@ function ItemCard({ record }: { record: SavedRecord }) {
               </button>
             ) : null}
 
-            <span className="ml-auto shrink-0 text-[#6a6a6a]">{format(new Date(record.createdAt), "dd MMM yyyy")}</span>
+            <span className="ml-auto shrink-0 text-muted">{format(new Date(record.createdAt), "dd MMM yyyy")}</span>
 
             <Link
               to={`/saved/${record.id}`}

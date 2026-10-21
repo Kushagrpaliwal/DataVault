@@ -196,18 +196,18 @@ export function DocsPage() {
   return (
     <div className="flex min-h-[calc(100vh-8rem)] gap-6">
       <aside className="hidden w-72 shrink-0 flex-col lg:flex">
-        <div className="sticky top-24 flex max-h-[calc(100vh-7rem)] flex-col rounded-2xl border border-[#e5dfd1] bg-[#fffdf8] p-3">
+        <div className="sticky top-24 flex max-h-[calc(100vh-7rem)] flex-col rounded-2xl border border-line bg-surface p-3">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-3 size-4 text-[#6a6a6a]" />
+              <Search className="absolute left-3 top-3 size-4 text-muted" />
               <Input className="pl-9" value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Search your docs…" />
             </div>
             <Button size="sm" onClick={() => create.mutate()} disabled={create.isPending} aria-label="New doc"><Plus className="size-4" /></Button>
           </div>
 
           <div className="mt-3 flex items-center justify-between text-xs">
-            <button onClick={() => setShowTrash(false)} className={cn("rounded-full px-2 py-1 font-medium", !showTrash ? "bg-[#ebe6d6] text-black" : "text-[#6a6a6a]")}>Docs</button>
-            <button onClick={() => setShowTrash(true)} className={cn("rounded-full px-2 py-1 font-medium", showTrash ? "bg-[#ebe6d6] text-black" : "text-[#6a6a6a]")}>Trash</button>
+            <button onClick={() => setShowTrash(false)} className={cn("rounded-full px-2 py-1 font-medium", !showTrash ? "bg-soft text-black" : "text-muted")}>Docs</button>
+            <button onClick={() => setShowTrash(true)} className={cn("rounded-full px-2 py-1 font-medium", showTrash ? "bg-soft text-black" : "text-muted")}>Trash</button>
           </div>
 
           <div className="mt-3 flex-1 space-y-1 overflow-y-auto">
@@ -222,7 +222,7 @@ export function DocsPage() {
               />
             ))}
             {!notes.length && !list.isLoading ? (
-              <p className="px-2 py-6 text-center text-sm text-[#6a6a6a]">
+              <p className="px-2 py-6 text-center text-sm text-muted">
                 {showTrash ? "The trash is empty." : "No docs yet. Press the plus button to start one."}
               </p>
             ) : null}
@@ -240,7 +240,7 @@ export function DocsPage() {
                   <MoreHorizontal className="size-4" />Menu
                 </Button>
                 {menuOpen ? (
-                  <div role="menu" className="absolute right-0 top-full z-40 mt-1 w-64 rounded-2xl border border-[#e5dfd1] bg-white p-1.5 shadow-xl">
+                  <div role="menu" className="absolute right-0 top-full z-40 mt-1 w-64 rounded-2xl border border-line bg-white p-1.5 shadow-xl">
                     <MenuHeading>Arrange new clips by</MenuHeading>
                     {Object.entries(ARRANGE_LABELS).map(([value, label]) => (
                       <MenuItem key={value} active={selected?.arrangeMode === value} onClick={() => {
@@ -301,7 +301,7 @@ export function DocsPage() {
             <div className="max-w-md text-center">
               <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#b8a4ed]"><FileText className="size-6" /></span>
               <h2 className="mt-5 text-xl font-semibold">Your docs live here</h2>
-              <p className="mt-2 text-sm leading-6 text-[#6a6a6a]">
+              <p className="mt-2 text-sm leading-6 text-muted">
                 Select text on any page and press the shortcut to add it to a doc. New pieces are sorted into
                 sections by page, website or day.
               </p>
@@ -327,12 +327,12 @@ export function DocsPage() {
       </Modal>
 
       <Modal open={writeUpOpen} title="Write it up as sentences" onClose={() => setWriteUpOpen(false)} width="max-w-2xl">
-        <p className="text-sm leading-6 text-[#6a6a6a]">
+        <p className="text-sm leading-6 text-muted">
           The pieces are joined into sentences that follow each other, and the sentences that belong together are put
           in the same paragraph. Nothing has changed yet.
         </p>
         {writeUpTitle ? <p className="mt-3 font-semibold">{writeUpTitle}</p> : null}
-        <div className="mt-3 max-h-80 space-y-4 overflow-y-auto rounded-2xl bg-[#f5f0e0] p-4">
+        <div className="mt-3 max-h-80 space-y-4 overflow-y-auto rounded-2xl bg-soft p-4">
           {(writeUpPreview ?? []).map((section) => (
             <div key={section.heading || section.paragraphs[0]}>
               {section.heading ? <p className="mb-1 font-semibold">{section.heading}</p> : null}
@@ -347,12 +347,12 @@ export function DocsPage() {
       </Modal>
 
       <Modal open={organizeOpen} title="Sort this doc into topics" onClose={() => setOrganizeOpen(false)}>
-        <p className="text-sm text-[#6a6a6a]">The AI read every piece and grouped them. Nothing has changed yet.</p>
+        <p className="text-sm text-muted">The AI read every piece and grouped them. Nothing has changed yet.</p>
         <ul className="mt-4 space-y-2">
           {(organizePreview ?? []).map((section) => (
-            <li key={section.title} className="rounded-xl bg-[#f5f0e0] p-3">
+            <li key={section.title} className="rounded-xl bg-soft p-3">
               <p className="font-semibold">{section.title}</p>
-              <p className="text-xs text-[#6a6a6a]">{section.clipIds.length} {section.clipIds.length === 1 ? "piece" : "pieces"}</p>
+              <p className="text-xs text-muted">{section.clipIds.length} {section.clipIds.length === 1 ? "piece" : "pieces"}</p>
             </li>
           ))}
         </ul>
@@ -367,15 +367,15 @@ export function DocsPage() {
 
 function DocListItem({ item, active, isCurrent, onOpen, onMakeCurrent }: { item: NoteSummary; active: boolean; isCurrent: boolean; onOpen: () => void; onMakeCurrent: () => void }) {
   return (
-    <div className={cn("group flex items-start gap-1 rounded-xl", active ? "bg-[#ebe6d6]" : "hover:bg-[#f5f0e0]")}>
+    <div className={cn("group flex items-start gap-1 rounded-xl", active ? "bg-soft" : "hover:bg-soft")}>
       <button onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-2 px-2.5 py-2 text-left">
         <span className="mt-0.5 text-base">{item.icon ?? "📄"}</span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
             <span className="truncate text-sm font-medium">{item.title}</span>
-            {item.isPinned ? <Pin className="size-3 shrink-0 text-[#6a6a6a]" /> : null}
+            {item.isPinned ? <Pin className="size-3 shrink-0 text-muted" /> : null}
           </span>
-          <span className="block truncate text-xs text-[#6a6a6a]">{item.excerpt || "Empty doc"}</span>
+          <span className="block truncate text-xs text-muted">{item.excerpt || "Empty doc"}</span>
         </span>
       </button>
       {/**
@@ -387,7 +387,7 @@ function DocListItem({ item, active, isCurrent, onOpen, onMakeCurrent }: { item:
         title={isCurrent ? "This is the doc the extension adds to" : "Use as the doc the extension adds to"}
         aria-label={isCurrent ? `${item.title} is the current doc` : `Make ${item.title} the current doc`}
         aria-pressed={isCurrent}
-        className={cn("mr-1 mt-2 grid size-7 shrink-0 place-items-center rounded-lg text-[#6a6a6a] hover:bg-white", isCurrent ? "text-[#1a3a3a]" : "opacity-0 group-hover:opacity-100")}
+        className={cn("mr-1 mt-2 grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-white", isCurrent ? "text-deep-text" : "opacity-0 group-hover:opacity-100")}
       >
         <Star className={cn("size-3.5", isCurrent && "fill-current")} />
       </button>
@@ -396,16 +396,16 @@ function DocListItem({ item, active, isCurrent, onOpen, onMakeCurrent }: { item:
 }
 
 function MenuHeading({ children }: { children: React.ReactNode }) {
-  return <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-[.12em] text-[#6a6a6a]">{children}</p>;
+  return <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-[.12em] text-muted">{children}</p>;
 }
 
 function MenuDivider() {
-  return <span className="my-1 block h-px bg-[#eee8da]" aria-hidden />;
+  return <span className="my-1 block h-px bg-line" aria-hidden />;
 }
 
 function MenuItem({ children, onClick, active, danger }: { children: React.ReactNode; onClick: () => void; active?: boolean; danger?: boolean }) {
   return (
-    <button role="menuitem" onClick={onClick} className={cn("flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-[#f5f0e0]", active && "bg-[#ebe6d6]", danger && "text-red-700")}>
+    <button role="menuitem" onClick={onClick} className={cn("flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-soft", active && "bg-soft", danger && "text-red-700")}>
       {children}
     </button>
   );
@@ -415,15 +415,15 @@ function VersionHistory({ noteId, onRestore }: { noteId: string; onRestore: (rev
   const { api } = useAuth();
   const query = useQuery({ queryKey: ["note", "revisions", noteId], queryFn: () => api.listNoteRevisions(noteId) });
   const revisions = useMemo(() => query.data ?? [], [query.data]);
-  if (query.isLoading) return <p className="text-sm text-[#6a6a6a]">Loading…</p>;
-  if (!revisions.length) return <p className="text-sm text-[#6a6a6a]">There are no earlier versions yet.</p>;
+  if (query.isLoading) return <p className="text-sm text-muted">Loading…</p>;
+  if (!revisions.length) return <p className="text-sm text-muted">There are no earlier versions yet.</p>;
   return (
     <ul className="space-y-2">
       {revisions.map((revision) => (
-        <li key={revision.id} className="flex items-center gap-3 rounded-xl bg-[#f5f0e0] p-3">
+        <li key={revision.id} className="flex items-center gap-3 rounded-xl bg-soft p-3">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{revision.title}</p>
-            <p className="text-xs text-[#6a6a6a]">Version {revision.version} · {new Date(revision.createdAt).toLocaleString()}</p>
+            <p className="text-xs text-muted">Version {revision.version} · {new Date(revision.createdAt).toLocaleString()}</p>
           </div>
           <Button size="sm" variant="secondary" onClick={() => void onRestore(revision.id)}><RotateCcw className="size-3.5" />Restore</Button>
         </li>

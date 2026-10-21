@@ -54,14 +54,14 @@ export function DocOutline({ editor }: { editor: Editor | null }) {
     <aside className="hidden w-60 shrink-0 xl:block">
       <div className="sticky top-24 space-y-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6a6a6a]">On this page</p>
+          <p className="text-xs font-semibold uppercase tracking-[.14em] text-muted">On this page</p>
           {entries.length ? (
-            <ul className="mt-3 space-y-1 border-l border-[#e5dfd1]">
+            <ul className="mt-3 space-y-1 border-l border-line">
               {entries.map((entry) => (
                 <li key={entry.id}>
                   <button
                     onClick={() => jump(entry)}
-                    className="block w-full truncate py-1 text-left text-sm text-[#4a4a4a] hover:text-black"
+                    className="block w-full truncate py-1 text-left text-sm text-strong hover:text-black"
                     style={{ paddingLeft: `${(entry.level - 1) * 12 + 12}px` }}
                     title={entry.text}
                   >
@@ -71,10 +71,10 @@ export function DocOutline({ editor }: { editor: Editor | null }) {
               ))}
             </ul>
           ) : (
-            <p className="mt-3 text-sm text-[#6a6a6a]">No headings yet.</p>
+            <p className="mt-3 text-sm text-muted">No headings yet.</p>
           )}
         </div>
-        <p className="border-t border-[#e5dfd1] pt-3 text-xs text-[#6a6a6a]">{words} {words === 1 ? "word" : "words"}</p>
+        <p className="border-t border-line pt-3 text-xs text-muted">{words} {words === 1 ? "word" : "words"}</p>
       </div>
     </aside>
   );

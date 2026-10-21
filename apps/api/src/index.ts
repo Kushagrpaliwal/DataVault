@@ -11,6 +11,7 @@ import { createAuthRoutes } from "./routes/auth";
 import { createAiRoutes } from "./routes/ai";
 import { createCaptureRoutes } from "./routes/captures";
 import { createExtensionAuthRoutes } from "./routes/extension-auth";
+import { createImportRoutes } from "./routes/imports";
 import { createMiscRoutes } from "./routes/misc";
 import { createNoteRoutes } from "./routes/notes";
 import { createOrganizationRoutes } from "./routes/organizations";
@@ -136,6 +137,7 @@ export function createApp() {
     .use(createVaultRoutes(auth, env))
     .use(createCaptureRoutes(auth, env))
     .use(createNoteRoutes(auth, env))
+    .use(createImportRoutes(auth, env))
     .use(createExtensionAuthRoutes(auth, env))
     .use(createMiscRoutes(auth, env));
 }

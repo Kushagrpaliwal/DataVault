@@ -1,9 +1,27 @@
+import { sql } from "drizzle-orm";
 import { boolean, customType, index, jsonb, numeric, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { users } from "./auth";
 import { createdViaEnum, recordTypeEnum, sourceTypeEnum } from "./enums";
 import { organizations } from "./tenancy";
 
 const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({ dataType: () => "bytea" });
+
+/**
+ * The words of a saved item, as PostgreSQL understands them.
+ *
+ * The column is worked out by the database itself, so it can never fall
+ * behind the text it was made from.
+ */
+const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
+
+/**
+ * The words of a saved item, in the order they matter.
+ *
+ * A title says more than a description, and a description says more than
+ * the text that was captured, so the three are given different weights. The
+ * search is ordered by the weight, so the best match comes first.
+ */
+const searchVector = sql`setweight(to_tsvector('english', coalesce("title", '')), 'A') || setweight(to_tsvector('english', coalesce("description", '')), 'B') || setweight(to_tsvector('english', coalesce("source_page_title", '')), 'B') || setweight(to_tsvector('english', coalesce("original_text", '')), 'C')`;
 
 export const vaults = pgTable("vaults", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -42,11 +60,20 @@ export const savedRecords = pgTable("saved_records", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
+  /**
+   * The words of the item, kept by the database itself.
+   *
+   * The search looks through this column, and the index on it is what makes
+   * that quick. A generated column cannot be written to, so it cannot fall
+   * behind the text it was made from.
+   */
+  searchVector: tsvector("search_vector").generatedAlwaysAs(searchVector),
 }, (table) => [
   index("saved_records_org_created_idx").on(table.organizationId, table.createdAt),
   index("saved_records_org_type_idx").on(table.organizationId, table.recordType),
   index("saved_records_vault_created_idx").on(table.organizationId, table.vaultId, table.createdAt),
   index("saved_records_source_domain_idx").on(table.organizationId, table.sourceDomain),
+  index("saved_records_search_idx").using("gin", table.searchVector),
 ]);
 
 export const captureSources = pgTable("capture_sources", {
@@ -70,6 +97,14 @@ export const evidenceSnapshots = pgTable("evidence_snapshots", {
   sourceTitle: text("source_title"),
   sourceDomain: text("source_domain"),
   capturedText: text("captured_text"),
+  /**
+   * The page as it was, as the markup of the parts that were kept.
+   *
+   * A page changes, and a page that is gone cannot be read again. The
+   * snapshot is what the item was made of, so the item can always be
+   * traced back to what the page said at the time.
+   */
+  pageHtml: text("page_html"),
   contentHash: text("content_hash").notNull(),
   extractorId: text("extractor_id").notNull(),
   extractorVersion: text("extractor_version").notNull(),

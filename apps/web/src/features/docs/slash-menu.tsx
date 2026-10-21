@@ -120,7 +120,7 @@ export function SlashMenu({ editor }: { editor: Editor | null }) {
   return (
     <div
       style={{ top: position.top, left: position.left }}
-      className="fixed z-50 max-h-80 w-72 overflow-y-auto rounded-2xl border border-[#e5dfd1] bg-white p-1.5 shadow-xl"
+      className="fixed z-50 max-h-80 w-72 overflow-y-auto rounded-2xl border border-line bg-white p-1.5 shadow-xl"
     >
       {matches.length ? matches.map((command, commandIndex) => (
         <button
@@ -128,16 +128,16 @@ export function SlashMenu({ editor }: { editor: Editor | null }) {
           type="button"
           onMouseDown={(event) => { event.preventDefault(); choose(command); }}
           onMouseEnter={() => setIndex(commandIndex)}
-          className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left", commandIndex === index ? "bg-[#f5f0e0]" : "hover:bg-[#faf5e8]")}
+          className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left", commandIndex === index ? "bg-soft" : "hover:bg-hover")}
         >
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#f5f0e0] text-[#3a3a3a]">{command.icon}</span>
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-soft text-strong">{command.icon}</span>
           <span className="min-w-0">
             <span className="block text-sm font-medium">{command.label}</span>
-            <span className="block truncate text-xs text-[#6a6a6a]">{command.hint}</span>
+            <span className="block truncate text-xs text-muted">{command.hint}</span>
           </span>
         </button>
       )) : (
-        <p className="px-3 py-4 text-center text-sm text-[#6a6a6a]">Nothing matches “{term}”.</p>
+        <p className="px-3 py-4 text-center text-sm text-muted">Nothing matches “{term}”.</p>
       )}
     </div>
   );
@@ -162,7 +162,7 @@ export function SelectionMenu({ editor }: { editor: Editor | null }) {
   };
 
   return (
-    <div className="flex items-center gap-0.5 rounded-xl border border-[#e5dfd1] bg-white p-1 shadow-lg">
+    <div className="flex items-center gap-0.5 rounded-xl border border-line bg-white p-1 shadow-lg">
       <BubbleButton label="Bold" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}><span className="text-xs font-bold">B</span></BubbleButton>
       <BubbleButton label="Italic" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}><span className="text-xs italic">I</span></BubbleButton>
       <BubbleButton label="Underline" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}><span className="text-xs underline">U</span></BubbleButton>
@@ -180,7 +180,7 @@ function BubbleButton({ label, onClick, active, children }: { label: string; onC
       title={label}
       aria-label={label}
       onClick={onClick}
-      className={cn("grid size-7 place-items-center rounded-lg text-[#3a3a3a] hover:bg-[#f5f0e0]", active && "bg-[#ebe6d6] text-black")}
+      className={cn("grid size-7 place-items-center rounded-lg text-strong hover:bg-soft", active && "bg-soft text-black")}
     >
       {children}
     </button>

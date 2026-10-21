@@ -1,6 +1,7 @@
-import { index, integer, jsonb, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";import { organizations } from "./tenancy";
+import { index, integer, jsonb, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";import { organizations } from "./tenancy";
 import { users } from "./auth";
 import { notes } from "./notes";
+import { savedRecords } from "./records";
 
 /**
  * The allowance a user holds for one day.
@@ -123,12 +124,30 @@ export const aiGlobalCounters = pgTable("ai_global_counters", {
 ]);
 
 /**
- * An answer the model gave for a doc, waiting to be applied.
+ * The numbers that say what a saved item is about.
  *
- * The preview is kept on the server so that applying it does not need to ask
- * the model again. Asking again cost a second credit, and the second answer
- * was not the one the user had agreed to.
+ * Two texts that mean the same thing have numbers that are close together,
+ * so a search can find an item by what it is about rather than by the words
+ * it happens to use.
+ *
+ * The column is a plain list of numbers rather than the vector type of the
+ * pgvector extension, so that the search works on any PostgreSQL. The table
+ * is the same either way, so the extension can be used later without
+ * changing anything else.
  */
+export const recordEmbeddings = pgTable("record_embeddings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  savedRecordId: uuid("saved_record_id").notNull().references(() => savedRecords.id, { onDelete: "cascade" }),
+  /** The model that made the numbers, so that old numbers are not compared with new ones. */
+  model: text("model").notNull(),
+  /** The numbers themselves. */
+  embedding: real("embedding").array().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("record_embeddings_record_idx").on(table.organizationId, table.savedRecordId),
+  index("record_embeddings_model_idx").on(table.model),
+]);
 export const noteAiPreviews = pgTable("note_ai_previews", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),

@@ -153,7 +153,29 @@ export interface SearchResult {
   resourceType: string;
   title: string;
   subtitle: string | null;
+  /** The website the item came from. */
+  sourceDomain: string | null;
   occurredAt: string | null;
+  /**
+   * The part of the item that answers the query.
+   *
+   * The words that matched are left in place, and the page marks them.
+   */
+  snippet: string | null;
+}
+
+/**
+ * An item found by what it is about rather than by the words it uses.
+ */
+export interface SemanticResult {
+  id: string;
+  title: string;
+  resourceType: string;
+  sourceDomain: string | null;
+  /** How close the item is to the question, between -1 and 1. */
+  similarity: number;
+  snippet: string | null;
+  createdAt: string;
 }
 
 export interface DashboardSummary {

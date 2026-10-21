@@ -38,6 +38,25 @@ export function RecordDetailPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  /**
+   * The page as it was, when the item was saved.
+   */
+  const [snapshot, setSnapshot] = useState<string | null>(null);
+  const [snapshotOpen, setSnapshotOpen] = useState(false);
+  const [snapshotBusy, setSnapshotBusy] = useState(false);
+
+  const showSnapshot = async () => {
+    setSnapshotBusy(true);
+    try {
+      const html = await api.pageSnapshot(id);
+      setSnapshot(html);
+      setSnapshotOpen(true);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "The page as it was could not be loaded.", "error");
+    } finally {
+      setSnapshotBusy(false);
+    }
+  };
 
   const query = useQuery({
     queryKey: ["record", organization?.id, id],
@@ -102,7 +121,7 @@ export function RecordDetailPage() {
 
   return (
     <>
-      <button className="mb-5 flex items-center gap-2 text-sm text-[#6a6a6a] hover:text-black" onClick={() => navigate(-1)}>
+      <button className="mb-5 flex items-center gap-2 text-sm text-muted hover:text-black" onClick={() => navigate(-1)}>
         <ArrowLeft className="size-4" />
         Back to saved items
       </button>
@@ -135,7 +154,7 @@ export function RecordDetailPage() {
                           <Badge tone="teal">Saved from the extension</Badge>
                         ) : null}
                       </div>
-                      {query.data.description ? <p className="mt-3 text-[#6a6a6a]">{query.data.description}</p> : null}
+                      {query.data.description ? <p className="mt-3 text-muted">{query.data.description}</p> : null}
                     </>
                   )}
                 </div>
@@ -175,7 +194,7 @@ export function RecordDetailPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-semibold">Original captured text</h2>
-                    <p className="mt-1 text-sm text-[#6a6a6a]">Preserved exactly as clipped from the web.</p>
+                    <p className="mt-1 text-sm text-muted">Preserved exactly as clipped from the web.</p>
                   </div>
                   <Button
                     size="sm"
@@ -188,19 +207,19 @@ export function RecordDetailPage() {
                     Copy snippet
                   </Button>
                 </div>
-                <pre className="mt-5 overflow-x-auto whitespace-pre-wrap rounded-2xl bg-[#f5f0e0] p-5 font-mono text-sm leading-6">
+                <pre className="mt-5 overflow-x-auto whitespace-pre-wrap rounded-2xl bg-soft p-5 font-mono text-sm leading-6">
                   {query.data.originalText}
                 </pre>
               </section>
             ) : null}
 
-            {query.data.evidence.length ? <section className="panel p-6"><h2 className="text-lg font-semibold">Evidence trail</h2><p className="mt-1 text-sm text-[#6a6a6a]">Immutable source snapshots captured with this item.</p><div className="mt-4 space-y-3">{query.data.evidence.map((evidence) => <div key={evidence.id} className="rounded-xl bg-[#f5f0e0] p-4"><div className="flex flex-wrap items-center gap-2"><p className="font-medium">{evidence.sourceTitle ?? evidence.sourceDomain ?? "Captured evidence"}</p><Badge tone="teal">Verified snapshot</Badge></div><p className="mt-1 break-all font-mono text-[11px] text-[#6a6a6a]">SHA-256 {evidence.contentHash}</p><p className="mt-1 text-xs text-[#6a6a6a]">Captured {format(new Date(evidence.capturedAt), "dd MMM yyyy, h:mm a")}</p>{evidence.sourceUrl ? <a className="mt-2 inline-flex text-sm font-medium underline" href={evidence.sourceUrl} target="_blank" rel="noreferrer">Open source</a> : null}</div>)}</div></section> : null}
+            {query.data.evidence.length ? <section className="panel p-6"><h2 className="text-lg font-semibold">Evidence trail</h2><p className="mt-1 text-sm text-muted">Immutable source snapshots captured with this item.</p><div className="mt-4 space-y-3">{query.data.evidence.map((evidence) => <div key={evidence.id} className="rounded-xl bg-soft p-4"><div className="flex flex-wrap items-center gap-2"><p className="font-medium">{evidence.sourceTitle ?? evidence.sourceDomain ?? "Captured evidence"}</p><Badge tone="teal">Verified snapshot</Badge></div><p className="mt-1 break-all font-mono text-[11px] text-muted">SHA-256 {evidence.contentHash}</p><p className="mt-1 text-xs text-muted">Captured {format(new Date(evidence.capturedAt), "dd MMM yyyy, h:mm a")}</p><div className="mt-2 flex flex-wrap gap-3">{evidence.sourceUrl ? <a className="inline-flex text-sm font-medium underline" href={evidence.sourceUrl} target="_blank" rel="noreferrer">Open source</a> : null}<button type="button" className="inline-flex text-sm font-medium underline" onClick={() => void showSnapshot()} disabled={snapshotBusy}>{snapshotBusy ? "Loading…" : "See the page as it was"}</button></div></div>)}</div></section> : null}
 
             <AiPanel content={query.data.originalText ?? query.data.title} recordId={query.data.id} />
           </div>
 
           <aside className="space-y-6">
-            <section className="rounded-3xl bg-[#1a3a3a] p-6 text-white">
+            <section className="rounded-3xl bg-deep p-6 text-white">
               <h2 className="text-lg font-semibold">Source context</h2>
               <dl className="mt-5 space-y-4">
                 <Field label="Source Domain" value={query.data.sourceDomain ?? "Manual entry"} inverse capitalize={false} />
@@ -228,13 +247,13 @@ export function RecordDetailPage() {
                   {query.data.attachments.map((item) => <AttachmentPreview key={item.id} attachment={item} />)}
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-[#6a6a6a]">No attachments.</p>
+                <p className="mt-3 text-sm text-muted">No attachments.</p>
               )}
             </section>
 
             <section className="panel p-6">
               <h2 className="text-lg font-semibold">Organization</h2>
-              <p className="mt-1 text-sm leading-6 text-[#6a6a6a]">Put this item in a folder, and mark it so you can find it again.</p>
+              <p className="mt-1 text-sm leading-6 text-muted">Put this item in a folder, and mark it so you can find it again.</p>
               <OrganizePanel record={query.data} onSaved={async () => {
                 await client.invalidateQueries({ queryKey: ["record", organization?.id, id] });
                 await client.invalidateQueries({ queryKey: ["records"] });
@@ -246,18 +265,18 @@ export function RecordDetailPage() {
               <div className="mt-5 space-y-5">
                 {query.data.audit.length ? (
                   query.data.audit.map((entry) => (
-                    <div key={String(entry.id)} className="relative border-l-2 border-[#ded8ca] pl-4">
+                    <div key={String(entry.id)} className="relative border-l-2 border-line pl-4">
                       <i className="absolute -left-[5px] top-1 size-2 rounded-full bg-[#ff4d8b]" />
                       <p className="text-sm font-semibold capitalize">
                         {String(entry.action)} {String(entry.resourceType).replaceAll("_", " ")}
                       </p>
-                      <p className="mt-1 text-xs text-[#6a6a6a]">
+                      <p className="mt-1 text-xs text-muted">
                         {format(new Date(String(entry.createdAt)), "dd MMM yyyy, h:mm a")}
                       </p>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-[#6a6a6a]">No history yet.</p>
+                  <p className="text-sm text-muted">No history yet.</p>
                 )}
               </div>
             </section>
@@ -276,6 +295,15 @@ export function RecordDetailPage() {
           }}
         />
       ) : null}
+      <Modal open={snapshotOpen} title="The page as it was" width="max-w-3xl" onClose={() => setSnapshotOpen(false)}>
+        <p className="mb-3 text-sm text-muted">This is the page as it was when the item was saved. It is shown in a sandbox, so nothing in it can run.</p>
+        <iframe
+          title="The page as it was"
+          sandbox=""
+          className="h-[60vh] w-full rounded-xl border border-line bg-white"
+          srcDoc={snapshot ?? ""}
+        />
+      </Modal>
     </>
   );
 }
@@ -321,23 +349,23 @@ function OrganizePanel({ record, onSaved }: { record: Detail; onSaved: () => Pro
   return (
     <div className="mt-4 space-y-4">
       <div>
-        <label htmlFor="organize-folder" className="text-xs font-semibold uppercase tracking-[.12em] text-[#6a6a6a]">Folder</label>
+        <label htmlFor="organize-folder" className="text-xs font-semibold uppercase tracking-[.12em] text-muted">Folder</label>
         <select
           id="organize-folder"
           value={vaultId}
           onChange={(event) => setVaultId(event.target.value)}
-          className="mt-2 h-11 w-full rounded-xl border border-[#ded8ca] bg-white px-3 text-sm"
+          className="mt-2 h-11 w-full rounded-xl border border-line bg-white px-3 text-sm"
         >
           {vaults.data?.map((vault) => <option key={vault.id} value={vault.id}>{vault.name}</option>)}
         </select>
       </div>
 
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[.12em] text-[#6a6a6a]">Collections</p>
+        <p className="text-xs font-semibold uppercase tracking-[.12em] text-muted">Collections</p>
         {collections.data?.length ? (
           <div className="mt-2 space-y-1">
             {collections.data.map((collection) => (
-              <label key={collection.id} className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm hover:bg-[#f5f0e0]">
+              <label key={collection.id} className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm hover:bg-soft">
                 <input
                   type="checkbox"
                   checked={collectionIds.includes(collection.id)}
@@ -351,12 +379,12 @@ function OrganizePanel({ record, onSaved }: { record: Detail; onSaved: () => Pro
             ))}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-[#6a6a6a]">This folder has no collections. They are made in Organize.</p>
+          <p className="mt-2 text-sm text-muted">This folder has no collections. They are made in Organize.</p>
         )}
       </div>
 
       <div>
-        <label htmlFor="organize-tags" className="text-xs font-semibold uppercase tracking-[.12em] text-[#6a6a6a]">Tags</label>
+        <label htmlFor="organize-tags" className="text-xs font-semibold uppercase tracking-[.12em] text-muted">Tags</label>
         <Input
           id="organize-tags"
           className="mt-2"
@@ -364,7 +392,7 @@ function OrganizePanel({ record, onSaved }: { record: Detail; onSaved: () => Pro
           onChange={(event) => setTagText(event.target.value)}
           placeholder="research, to read"
         />
-        <p className="mt-1 text-xs text-[#6a6a6a]">Separate the tags with commas. A tag that does not exist yet is made now.</p>
+        <p className="mt-1 text-xs text-muted">Separate the tags with commas. A tag that does not exist yet is made now.</p>
       </div>
 
       <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
@@ -423,7 +451,7 @@ function AddToDocDialog({
     <Modal open={open} title="Add to a doc" onClose={onClose}>
       {error ? <div className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
       {!notes.length ? (
-        <p className="text-sm text-[#6a6a6a]">You have no docs yet. Create one on the Docs page first.</p>
+        <p className="text-sm text-muted">You have no docs yet. Create one on the Docs page first.</p>
       ) : (
         <ul className="space-y-2">
           {notes.map((note) => (
@@ -431,14 +459,14 @@ function AddToDocDialog({
               <button
                 onClick={() => void add(note.id, note.title)}
                 disabled={busy !== null}
-                className="flex w-full items-center gap-3 rounded-xl bg-[#f5f0e0] p-3 text-left hover:bg-[#ebe6d6] disabled:opacity-60"
+                className="flex w-full items-center gap-3 rounded-xl bg-soft p-3 text-left hover:bg-soft disabled:opacity-60"
               >
                 <span className="text-lg">{note.icon ?? "📄"}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{note.title}</span>
-                  <span className="block truncate text-xs text-[#6a6a6a]">{note.clipCount} pieces</span>
+                  <span className="block truncate text-xs text-muted">{note.clipCount} pieces</span>
                 </span>
-                {busy === note.id ? <span className="text-xs text-[#6a6a6a]">Adding…</span> : null}
+                {busy === note.id ? <span className="text-xs text-muted">Adding…</span> : null}
               </button>
             </li>
           ))}
@@ -465,9 +493,9 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
     return () => URL.revokeObjectURL(objectUrl);
   }, [query.data]);
 
-  return <div className="overflow-hidden rounded-xl bg-[#f5f0e0] p-3 text-sm">
+  return <div className="overflow-hidden rounded-xl bg-soft p-3 text-sm">
     {url ? <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={attachment.fileName} className="mb-3 max-h-72 w-full rounded-lg border bg-white object-contain" /></a> : null}
-    <div className="flex items-center justify-between gap-3"><span className="truncate font-medium">{attachment.fileName}</span><span className="shrink-0 text-xs text-[#6a6a6a]">{formatBytes(attachment.byteSize)}</span></div>
+    <div className="flex items-center justify-between gap-3"><span className="truncate font-medium">{attachment.fileName}</span><span className="shrink-0 text-xs text-muted">{formatBytes(attachment.byteSize)}</span></div>
     {query.isError ? <p className="mt-1 text-xs text-red-700">Screenshot preview could not be loaded.</p> : null}
   </div>;
 }
@@ -492,10 +520,10 @@ function Field({
 }) {
   return (
     <div>
-      <dt className={`text-xs font-semibold uppercase tracking-[.12em] ${inverse ? "text-white/55" : "text-[#6a6a6a]"}`}>
+      <dt className={`text-xs font-semibold uppercase tracking-[.12em] ${inverse ? "text-white/55" : "text-muted"}`}>
         {label}
       </dt>
-      <dd className={`mt-1 text-sm font-medium ${capitalize ? "capitalize" : ""} ${inverse ? "text-white" : "text-[#222]"}`}>
+      <dd className={`mt-1 text-sm font-medium ${capitalize ? "capitalize" : ""} ${inverse ? "text-white" : "text-ink"}`}>
         {value || "—"}
       </dd>
     </div>

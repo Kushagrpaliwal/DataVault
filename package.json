@@ -16,6 +16,7 @@
     "build:web": "bun --env-file=.env run --filter @data-vault/web build",
     "build:api": "bun --env-file=.env run --filter @data-vault/api build",
     "build:extension": "bun --env-file=.env run --filter @data-vault/extension build",
+    "build:extension:firefox": "bun --env-file=.env run --filter @data-vault/extension build:firefox",
     "test": "bun --env-file=.env test apps packages",
     "test:e2e": "bun run scripts/smoke-web.ts",
     "smoke:web": "bun run scripts/smoke-web.ts",

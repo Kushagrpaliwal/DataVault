@@ -31,6 +31,17 @@ The API is split into routes, auth/context, services, and infrastructure helpers
 5. The same transaction keeps a snapshot of the text that was captured, and the tags that were chosen with it.
 6. The extension refreshes recent records; the website sees the same row on its next query/refetch.
 
+When a whole page is captured, the extension reads the page and keeps the part of it that reads like an article, rather than the menus and the banners and the list of other things to read. The markup of the parts that were kept is sent along and kept with the item, so the page can be read again even after the page itself has changed. The item is served as it was, in a sandbox, so nothing in a saved page can run.
+
+## Search
+
+Two searches, and they answer different questions.
+
+- **The words** is a full-text search. The words of a saved item are kept by the database itself, in a generated column, and a GIN index on it is what makes the search quick. The results are ordered by the weight of the words that matched, so a word in the title of an item counts for more than the same word in the text that was captured.
+- **The meaning** is a search by similarity. Every saved item is given a list of numbers that say what it is about, and the numbers of a question are compared with them. An item about the sea is found by a question that never says the word sea.
+
+The numbers are made when an item is saved, and they are made again for the whole workspace when the model has changed or when material has been brought in from somewhere else.
+
 ## Doc flow
 
 1. The extension reads the selection from the page, keeping its formatting and dropping anything that could run on its own.

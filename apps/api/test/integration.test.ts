@@ -161,6 +161,51 @@ describe("DataVault API integration", () => {
     expect(chunked.status).toBe(411);
   });
 
+  test("a page is kept as it was, and the snapshot is served in a sandbox", async () => {
+    const user = await register("Snapshot Admin", `snapshot-${suffix}@example.com`);
+    const orgs = await call("/api/v1/organizations", { session: user });
+    const organizationId = String((orgs.payload.data as unknown as { id: string }[])[0]!.id);
+
+    const page = "<article><h1>A page that will change</h1><p>The words that were on it.</p></article>";
+    const created = await call("/api/v1/captures", {
+      method: "POST",
+      session: user,
+      organizationId,
+      idempotencyKey: `snapshot-${suffix}`,
+      body: {
+        selectedText: "The words that were on it.",
+        originalText: "The words that were on it.",
+        pageHtml: page,
+        source: { url: "https://example.com/changing", title: "A page that will change", domain: "example.com" },
+        recordType: "article",
+        confirmDuplicate: true,
+        captureKind: "page-text",
+      },
+    });
+    expect(created.response.status).toBe(201);
+    const recordId = String((created.payload.data.record as { id: string }).id);
+
+    /**
+     * The item itself does not carry the whole page, so the list stays
+     * quick.
+     */
+    const detail = await call(`/api/v1/saved-records/${recordId}`, { session: user, organizationId });
+    const evidence = detail.payload.data.evidence as { pageHtml?: string }[];
+    expect(evidence[0]?.pageHtml).toBeUndefined();
+
+    /**
+     * The snapshot is served on its own, in a sandbox, so that nothing in
+     * a page that was saved can run.
+     */
+    const snapshot = await app.handle(new Request(`http://localhost:3000/api/v1/saved-records/${recordId}/snapshot`, {
+      headers: { origin, cookie: user.cookie, "x-csrf-token": user.csrf, "x-organization-id": organizationId },
+    }));
+    expect(snapshot.status).toBe(200);
+    expect(snapshot.headers.get("content-security-policy")).toContain("sandbox");
+    const body = await snapshot.text();
+    expect(body).toContain("The words that were on it.");
+  }, 30_000);
+
   test("the sign-in methods endpoint reports the available methods and no Google", async () => {
     const methods = await call("/api/v1/auth/methods");
     expect(methods.response.status).toBe(200);

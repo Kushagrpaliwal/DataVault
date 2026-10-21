@@ -178,13 +178,13 @@ export function DocEditor({
       <div className="min-w-0 flex-1">
         <div className="sticky top-0 z-20">
           <DocToolbar editor={editor} />
-          <div className="flex items-center justify-between gap-3 border-b border-[#e5dfd1] bg-[#fffaf0]/95 px-3 py-2 text-xs text-[#6a6a6a] backdrop-blur">
+          <div className="flex items-center justify-between gap-3 border-b border-line bg-canvas/95 px-3 py-2 text-xs text-muted backdrop-blur">
             <SaveBadge status={autosave.status} error={autosave.error} />
             <div className="flex items-center gap-2">
               {isCurrent ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#dce9e5] px-2.5 py-1 font-medium text-[#1a3a3a]"><Star className="size-3" />Current doc for the extension</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#dce9e5] px-2.5 py-1 font-medium text-deep-text"><Star className="size-3" />Current doc for the extension</span>
               ) : onMakeCurrent ? (
-                <button onClick={onMakeCurrent} className="rounded-full border border-[#ded8ca] px-2.5 py-1 font-medium hover:bg-[#f5f0e0]">Use as the extension's doc</button>
+                <button onClick={onMakeCurrent} className="rounded-full border border-line px-2.5 py-1 font-medium hover:bg-soft">Use as the extension's doc</button>
               ) : null}
             </div>
           </div>
@@ -201,7 +201,7 @@ export function DocEditor({
         ) : null}
 
         <div className="mx-auto mt-6 max-w-[860px] px-4 pb-24">
-          <div className="rounded-2xl border border-[#e5dfd1] bg-white px-10 py-12 shadow-[0_1px_3px_rgba(0,0,0,.04)] md:px-16">
+          <div className="rounded-2xl border border-line bg-white px-10 py-12 shadow-[0_1px_3px_rgba(0,0,0,.04)] md:px-16">
             <div className="flex items-start gap-3">
               <button
                 title="Change the icon"
@@ -210,7 +210,7 @@ export function DocEditor({
                   const next = window.prompt("Pick an emoji for this doc", icon ?? "📄");
                   if (next !== null) onIconChange(next.trim() || null);
                 }}
-                className="mt-1 grid size-12 shrink-0 place-items-center rounded-xl bg-[#f5f0e0] text-2xl"
+                className="mt-1 grid size-12 shrink-0 place-items-center rounded-xl bg-soft text-2xl"
               >
                 {icon ?? "📄"}
               </button>
@@ -240,7 +240,7 @@ export function DocEditor({
             <SelectionMenu editor={editor} />
           </BubbleMenu>
           <DragHandle editor={editor}>
-            <span className="grid size-6 cursor-grab place-items-center rounded-md bg-[#f5f0e0] text-[#6a6a6a] shadow-sm">
+            <span className="grid size-6 cursor-grab place-items-center rounded-md bg-soft text-muted shadow-sm">
               <GripVertical className="size-3.5" />
             </span>
           </DragHandle>

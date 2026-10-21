@@ -103,3 +103,46 @@ export async function generateJson(env: ServerEnvironment, input: GeminiGenerate
 
   return { data, inputTokens, outputTokens, cacheKey: await cacheKeyFor(input, model) };
 }
+
+/**
+ * The model that turns text into a list of numbers.
+ *
+ * The numbers say what the text is about, and two texts that mean the same
+ * thing have numbers that are close together. It is a different model from
+ * the one that writes, because a model that writes is not asked to do this.
+ */
+export const EMBEDDING_MODEL = "text-embedding-004";
+
+/**
+ * Turn a text into a list of numbers.
+ *
+ * The list is what the search by meaning is made of: the numbers of a
+ * question and the numbers of an item are compared, and the ones that are
+ * close together are the ones that mean the same thing.
+ */
+export async function embedText(env: ServerEnvironment, text: string): Promise<number[]> {
+  if (!env.geminiApiKey) throw new AppError(503, "AI_NOT_AVAILABLE", "AI features are not switched on for this server yet.");
+  const contents = text.trim().slice(0, 8_000);
+  if (!contents) throw new AppError(400, "AI_EMPTY_INPUT", "There is nothing to work with yet.");
+
+  let response: Response;
+  try {
+    response = await fetch(`${GEMINI_ENDPOINT}/${encodeURIComponent(EMBEDDING_MODEL)}:embedContent`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": env.geminiApiKey },
+      body: JSON.stringify({ content: { parts: [{ text: contents }] } }),
+    });
+  } catch {
+    throw new AppError(502, "AI_UNREACHABLE", "The AI service could not be reached. Please try again.");
+  }
+  if (response.status === 429) {
+    throw new AppError(429, "AI_RATE_LIMITED", "The free AI allowance is busy right now. Please try again in a few minutes.");
+  }
+  if (!response.ok) {
+    throw new AppError(502, "AI_FAILED", "The AI service could not answer right now. Please try again.");
+  }
+  const payload = await response.json() as { embedding?: { values?: number[] } };
+  const values = payload.embedding?.values;
+  if (!values?.length) throw new AppError(502, "AI_EMPTY_RESPONSE", "The AI service did not return an answer. Please try again.");
+  return values;
+}

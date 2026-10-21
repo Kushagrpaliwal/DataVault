@@ -12,21 +12,21 @@ import { Modal } from "./feedback";
 export function ExtensionInstallModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
     <Modal open={open} onClose={onClose} title="Install the DataVault extension">
-      <ol className="space-y-3 text-sm leading-6 text-[#3a3a3a]">
+      <ol className="space-y-3 text-sm leading-6 text-strong">
         <li className="flex gap-3">
-          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#f5f0e0] text-xs font-semibold">1</span>
+          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-soft text-xs font-semibold">1</span>
           <span>Open your browser’s extension page: <strong>chrome://extensions</strong> in Chrome or Edge, <strong>about:addons</strong> in Firefox.</span>
         </li>
         <li className="flex gap-3">
-          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#f5f0e0] text-xs font-semibold">2</span>
+          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-soft text-xs font-semibold">2</span>
           <span>Turn on <strong>Developer mode</strong>.</span>
         </li>
         <li className="flex gap-3">
-          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#f5f0e0] text-xs font-semibold">3</span>
-          <span>Choose <strong>Load unpacked</strong> and pick the <code className="rounded bg-[#f5f0e0] px-1 py-0.5 text-xs">apps/extension/.output/chrome-mv3</code> folder. Build it first with <code className="rounded bg-[#f5f0e0] px-1 py-0.5 text-xs">bun run build:extension</code>.</span>
+          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-soft text-xs font-semibold">3</span>
+          <span>Choose <strong>Load unpacked</strong> and pick the <code className="rounded bg-soft px-1 py-0.5 text-xs">apps/extension/.output/chrome-mv3</code> folder. Build it first with <code className="rounded bg-soft px-1 py-0.5 text-xs">bun run build:extension</code>.</span>
         </li>
         <li className="flex gap-3">
-          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[#f5f0e0] text-xs font-semibold">4</span>
+          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-soft text-xs font-semibold">4</span>
           <span>Open DataVault and choose <strong>Sign in</strong>. Then select any text on a page, right-click it, and choose <strong>Save to DataVault</strong>.</span>
         </li>
       </ol>

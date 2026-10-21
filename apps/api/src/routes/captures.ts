@@ -14,7 +14,7 @@ export function createCaptureRoutes(auth: DataVaultAuth, env: ServerEnvironment)
       await requireCsrf(request, auth, env);
       const context = await getTenantContext(request, auth, env, "captures.create");
       const input = captureCreateSchema.parse(body);
-      const result = await runIdempotent(context, "capture.create", request.headers.get("idempotency-key"), input, () => createCapture(context, request, input));
+      const result = await runIdempotent(context, "capture.create", request.headers.get("idempotency-key"), input, () => createCapture(context, request, input, env));
       set.status = 201;
       return success(result);
     })

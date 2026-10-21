@@ -105,4 +105,15 @@ A request that has been made is not made again: send an `Idempotency-Key`, and a
 
 List/search routes use backend pagination (`page`, `limit`, maximum 100). Search covers the title, the description, the text that was captured, the website it came from and the title of the page. A `%` or an `_` in the search is looked for as text rather than as a wildcard. A month is a date filter only when the query is a month, or a month and a year, so a word that contains the name of a month is still just a word.
 
+`GET /search` is the ranked search. The words of a saved item are kept by the database itself, and the results come back in the order that answers the question best: a word in the title of an item counts for more than the same word in the text that was captured. Each result carries a `snippet`, which is the part of the item around the words that matched. A phrase in quotes is looked for as a phrase, and a word with a minus in front of it is left out.
+
+`GET /search/semantic` is a search by meaning. The words of the question are turned into numbers, and the items whose numbers are close to them are the ones that mean the same thing, so an item about the sea is found by a question that never says the word sea. `POST /search/semantic/reindex` makes the numbers of every item in the workspace again, which is what is needed after the model has changed or after material has been brought in from somewhere else.
+
+## Bringing material in, and taking it out
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `POST` | `/imports` | Bring material in. The body is `{ kind, content, name?, vaultId? }`. `kind` is `bookmarks` for the file every browser writes, or `urls` for a list of addresses. The links are saved in a folder of their own, and the folders they came from are kept as collections. |
+| `GET` | `/export` | Everything in the workspace, as one file: the items, the folders, the collections, the tags, the docs and the attachments. It is sent as a download. |
+
 A request body is at most eight megabytes. The length is taken from the `Content-Length` header, and a body that arrives in chunks is refused rather than taken on trust.

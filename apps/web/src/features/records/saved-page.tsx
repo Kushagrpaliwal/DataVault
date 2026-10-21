@@ -221,12 +221,12 @@ export function SavedPage() {
       </aside>
 
       <section className="panel overflow-hidden">
-        <div className="flex flex-col gap-3 border-b border-[#eee8da] p-4 lg:flex-row lg:items-center">
+        <div className="flex flex-col gap-3 border-b border-line p-4 lg:flex-row lg:items-center">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-3 size-4 text-[#6a6a6a]" />
+            <Search className="absolute left-3 top-3 size-4 text-muted" />
             <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search titles, saved text, or websites…" />
           </div>
-          <select aria-label="Type" value={recordType} onChange={(event) => updateFilter("type", event.target.value)} className="h-11 rounded-xl border border-[#ded8ca] bg-[#fffdf8] px-3 text-sm">
+          <select aria-label="Type" value={recordType} onChange={(event) => updateFilter("type", event.target.value)} className="h-11 rounded-xl border border-line bg-surface px-3 text-sm">
             <option value="">All types</option>
             {RECORD_TYPES.map((type) => <option key={type} value={type}>{recordTypeLabel(type)}</option>)}
           </select>
@@ -241,8 +241,8 @@ export function SavedPage() {
         </div>
 
         {activeFilterCount > 0 ? (
-          <div className="flex flex-wrap items-center gap-2 border-b border-[#eee8da] bg-[#faf5e8] px-4 py-3 text-sm">
-            <span className="text-[#6a6a6a]">{activeFilterCount} {activeFilterCount === 1 ? "filter" : "filters"} applied</span>
+          <div className="flex flex-wrap items-center gap-2 border-b border-line bg-hover px-4 py-3 text-sm">
+            <span className="text-muted">{activeFilterCount} {activeFilterCount === 1 ? "filter" : "filters"} applied</span>
             <button className="font-semibold underline" onClick={clearFilters}>Clear all</button>
           </div>
         ) : null}
@@ -268,7 +268,7 @@ export function SavedPage() {
         {hasItems ? <>
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[850px] text-left text-sm">
-              <thead className="border-b border-[#eee8da] bg-[#faf5e8] text-xs uppercase tracking-wide text-[#6a6a6a]">
+              <thead className="border-b border-line bg-hover text-xs uppercase tracking-wide text-muted">
                 <tr>
                   <Sortable label="Title" onClick={() => toggleSort("title")} />
                   <th className="px-4 py-3 font-semibold">Saved text</th>
@@ -278,14 +278,14 @@ export function SavedPage() {
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#eee8da]">
+              <tbody className="divide-y divide-line">
                 {query.data?.items.map((record) => (
-                  <tr key={record.id} className="hover:bg-[#fffcf5]">
+                  <tr key={record.id} className="hover:bg-surface">
                     <td className="max-w-52 px-4 py-3">
                       <Link to={`/saved/${record.id}`} className="font-semibold hover:underline">{record.title}</Link>
                     </td>
                     <td className="max-w-64 px-4 py-3">
-                      <span className="block truncate font-mono text-xs text-[#4a4a4a]">{record.originalText ?? "—"}</span>
+                      <span className="block truncate font-mono text-xs text-strong">{record.originalText ?? "—"}</span>
                     </td>
                     <td className="px-4 py-3">
                       {record.sourceUrl ? (
@@ -293,7 +293,7 @@ export function SavedPage() {
                           {record.sourceDomain ?? "Source"}<ExternalLink className="size-3 shrink-0" />
                         </a>
                       ) : (
-                        <span className="text-[#6a6a6a]">{record.sourceDomain ?? "—"}</span>
+                        <span className="text-muted">{record.sourceDomain ?? "—"}</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -325,18 +325,18 @@ export function SavedPage() {
             </table>
           </div>
 
-          <div className="divide-y divide-[#eee8da] md:hidden">
+          <div className="divide-y divide-line md:hidden">
             {query.data?.items.map((record) => (
               <Link to={`/saved/${record.id}`} key={record.id} className="block p-4">
                 <div className="flex gap-3">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#f5f0e0]"><RecordTypeIcon type={record.recordType} /></span>
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-soft"><RecordTypeIcon type={record.recordType} /></span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="truncate font-semibold">{record.title}</p>
                       <Badge tone="teal">{recordTypeLabel(record.recordType)}</Badge>
                     </div>
-                    <p className="mt-1 truncate font-mono text-xs text-[#6a6a6a]">{record.originalText ?? record.sourceDomain ?? "Saved item"}</p>
-                    <p className="mt-2 text-xs text-[#6a6a6a]">{record.sourceDomain ?? "No source"} · {format(new Date(record.capturedAt ?? record.createdAt), "dd MMM yyyy")}</p>
+                    <p className="mt-1 truncate font-mono text-xs text-muted">{record.originalText ?? record.sourceDomain ?? "Saved item"}</p>
+                    <p className="mt-2 text-xs text-muted">{record.sourceDomain ?? "No source"} · {format(new Date(record.capturedAt ?? record.createdAt), "dd MMM yyyy")}</p>
                   </div>
                 </div>
               </Link>
@@ -345,8 +345,8 @@ export function SavedPage() {
         </> : null}
 
         {query.data ? (
-          <div className="flex items-center justify-between border-t border-[#eee8da] p-4 text-sm">
-            <span className="text-[#6a6a6a]">{query.data.total.toLocaleString()} saved · Page {query.data.page} of {Math.max(1, query.data.totalPages)}</span>
+          <div className="flex items-center justify-between border-t border-line p-4 text-sm">
+            <span className="text-muted">{query.data.total.toLocaleString()} saved · Page {query.data.page} of {Math.max(1, query.data.totalPages)}</span>
             <div className="flex gap-2">
               <Button size="sm" variant="secondary" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}><ChevronLeft className="size-4" />Previous</Button>
               <Button size="sm" variant="secondary" disabled={page >= query.data.totalPages} onClick={() => setPage((value) => value + 1)}>Next<ChevronRight className="size-4" /></Button>
@@ -392,21 +392,21 @@ function FilterRail({
     <div className="space-y-4">
       <section className="panel p-3">
         <div className="flex items-center justify-between px-2 pb-2">
-          <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6a6a6a]">Views</p>
+          <p className="text-xs font-semibold uppercase tracking-[.14em] text-muted">Views</p>
           <button onClick={onSaveView} className="text-xs underline">Save this view</button>
         </div>
         {views.length ? (
           <div className="space-y-0.5">
             {views.map((view) => (
               <div key={String(view.id)} className="flex items-center gap-1">
-                <button onClick={() => onApplyView(view)} className="min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-left text-sm hover:bg-[#f5f0e0]">
+                <button onClick={() => onApplyView(view)} className="min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-left text-sm hover:bg-soft">
                   {String(view.name ?? "View")}
                 </button>
                 <button
                   onClick={() => onRemoveView(String(view.id))}
                   title="Remove this view"
                   aria-label={`Remove the view ${String(view.name ?? "")}`}
-                  className="grid size-7 shrink-0 place-items-center rounded-lg text-[#6a6a6a] hover:bg-[#f5f0e0] hover:text-red-700"
+                  className="grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-soft hover:text-red-700"
                 >
                   <X className="size-3.5" />
                 </button>
@@ -414,15 +414,15 @@ function FilterRail({
             ))}
           </div>
         ) : (
-          <p className="px-2 pb-1 text-xs leading-5 text-[#6a6a6a]">A view keeps the filters that are on the screen, so the same search is one click away.</p>
+          <p className="px-2 pb-1 text-xs leading-5 text-muted">A view keeps the filters that are on the screen, so the same search is one click away.</p>
         )}
       </section>
 
       <section className="panel p-3">
-        <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-[.14em] text-[#6a6a6a]">Folders</p>
+        <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-[.14em] text-muted">Folders</p>
         <button
           onClick={() => onVault("")}
-          className={`mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm ${activeVaultId === "" ? "bg-[#1a3a3a] text-white" : "hover:bg-[#f5f0e0]"}`}
+          className={`mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm ${activeVaultId === "" ? "bg-deep text-white" : "hover:bg-soft"}`}
         >
           <Library className="size-4" />
           <span className="truncate">All folders</span>
@@ -431,41 +431,41 @@ function FilterRail({
           <button
             key={vault.id}
             onClick={() => onVault(vault.id)}
-            className={`mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm ${activeVaultId === vault.id ? "bg-[#1a3a3a] text-white" : "hover:bg-[#f5f0e0]"}`}
+            className={`mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm ${activeVaultId === vault.id ? "bg-deep text-white" : "hover:bg-soft"}`}
           >
             <FolderOpen className="size-4" />
             <span className="truncate">{vault.name}</span>
             <span className="ml-auto text-xs opacity-70">{vault.itemCount ?? 0}</span>
           </button>
         ))}
-        {vaults.length === 0 ? <p className="px-3 py-2 text-sm text-[#6a6a6a]">No folders yet.</p> : null}
-        <p className="mt-2 border-t border-[#eee8da] px-2 pt-3 text-xs text-[#6a6a6a]">
+        {vaults.length === 0 ? <p className="px-3 py-2 text-sm text-muted">No folders yet.</p> : null}
+        <p className="mt-2 border-t border-line px-2 pt-3 text-xs text-muted">
           Manage folders, collections, and tags in <Link to="/organize" className="font-semibold text-black underline">Organize</Link>.
         </p>
       </section>
 
       <section className="panel p-3">
         <div className="flex items-center justify-between px-2 pb-2">
-          <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6a6a6a]">Collections</p>
+          <p className="text-xs font-semibold uppercase tracking-[.14em] text-muted">Collections</p>
           <button className="text-xs underline" onClick={() => onCollection("")}>All</button>
         </div>
         {collections.map((collection) => (
           <button
             key={collection.id}
             onClick={() => onCollection(collection.id)}
-            className={`mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm ${activeCollectionId === collection.id ? "bg-[#f5f0e0] font-semibold" : "hover:bg-[#f5f0e0]"}`}
+            className={`mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm ${activeCollectionId === collection.id ? "bg-soft font-semibold" : "hover:bg-soft"}`}
           >
             <span className="size-2 rounded-full" style={{ backgroundColor: collection.color }} />
             {collection.name}
-            <span className="ml-auto text-xs text-[#6a6a6a]">{collection.itemCount}</span>
+            <span className="ml-auto text-xs text-muted">{collection.itemCount}</span>
           </button>
         ))}
-        {collections.length === 0 ? <p className="px-3 py-2 text-sm text-[#6a6a6a]">No collections in this folder.</p> : null}
+        {collections.length === 0 ? <p className="px-3 py-2 text-sm text-muted">No collections in this folder.</p> : null}
       </section>
 
       <section className="panel p-3">
         <div className="flex items-center justify-between px-2 pb-2">
-          <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#6a6a6a]">Tags</p>
+          <p className="text-xs font-semibold uppercase tracking-[.14em] text-muted">Tags</p>
           <button className="text-xs underline" onClick={() => onTag("")}>All</button>
         </div>
         <div className="flex flex-wrap gap-1">
@@ -473,13 +473,13 @@ function FilterRail({
             <button
               key={tag.id}
               onClick={() => onTag(tag.name)}
-              className={`rounded-full px-2 py-1 text-xs ${activeTag === tag.name ? "bg-[#1a3a3a] text-white" : "bg-[#f5f0e0]"}`}
+              className={`rounded-full px-2 py-1 text-xs ${activeTag === tag.name ? "bg-deep text-white" : "bg-soft"}`}
             >
               #{tag.name}
             </button>
           ))}
         </div>
-        {tags.length === 0 ? <p className="px-3 py-2 text-sm text-[#6a6a6a]">No tags yet.</p> : null}
+        {tags.length === 0 ? <p className="px-3 py-2 text-sm text-muted">No tags yet.</p> : null}
       </section>
     </div>
   );
@@ -548,30 +548,30 @@ function ManualSaveModal({
           <Input id="manual-title" autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="What is this?" />
         </div>
         <div>
-          <Label htmlFor="manual-url">Link <span className="font-normal text-[#6a6a6a]">(optional)</span></Label>
+          <Label htmlFor="manual-url">Link <span className="font-normal text-muted">(optional)</span></Label>
           <Input id="manual-url" type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/page" />
         </div>
         <div>
-          <Label htmlFor="manual-text">Text <span className="font-normal text-[#6a6a6a]">(optional)</span></Label>
-          <textarea id="manual-text" className="min-h-24 w-full rounded-xl border border-[#ded8ca] bg-[#fffdf8] p-3 text-sm" value={text} onChange={(event) => setText(event.target.value)} placeholder="Paste the text you want to keep…" />
+          <Label htmlFor="manual-text">Text <span className="font-normal text-muted">(optional)</span></Label>
+          <textarea id="manual-text" className="min-h-24 w-full rounded-xl border border-line bg-surface p-3 text-sm" value={text} onChange={(event) => setText(event.target.value)} placeholder="Paste the text you want to keep…" />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <Label htmlFor="manual-type">Type</Label>
-            <select id="manual-type" className="h-11 w-full rounded-xl border border-[#ded8ca] bg-[#fffdf8] px-3 text-sm" value={recordType} onChange={(event) => setRecordType(event.target.value)}>
+            <select id="manual-type" className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm" value={recordType} onChange={(event) => setRecordType(event.target.value)}>
               {PRIMARY_RECORD_TYPES.map((type) => <option key={type} value={type}>{recordTypeLabel(type)}</option>)}
             </select>
           </div>
           <div>
             <Label htmlFor="manual-collection">Collection</Label>
-            <select id="manual-collection" className="h-11 w-full rounded-xl border border-[#ded8ca] bg-[#fffdf8] px-3 text-sm" value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
+            <select id="manual-collection" className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm" value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
               <option value="">None</option>
               {collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
             </select>
           </div>
         </div>
         <div>
-          <Label htmlFor="manual-tags">Tags <span className="font-normal text-[#6a6a6a]">(separate with commas)</span></Label>
+          <Label htmlFor="manual-tags">Tags <span className="font-normal text-muted">(separate with commas)</span></Label>
           <Input id="manual-tags" value={tags} onChange={(event) => setTags(event.target.value)} placeholder="research, urgent" />
         </div>
         {save.error ? <p className="text-sm text-red-700">{save.error.message}</p> : null}

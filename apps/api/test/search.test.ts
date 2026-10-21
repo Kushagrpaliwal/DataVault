@@ -80,4 +80,64 @@ describe("a month in a search", () => {
     expect(results.total).toBe(1);
     expect(results.items[0]?.title).toBe("Maybe worth reading");
   });
+
+  test("finds the words of an item, and shows why it came back", async () => {
+    const userId = await makeUser();
+    const { organizationId, vaultId } = await makeWorkspace(userId);
+    const context = { userId, organizationId, permissions: new Set<string>() } as TenantContext;
+
+    await withTenant(organizationId, (tx) => tx.insert(savedRecords).values([
+      {
+        organizationId,
+        vaultId,
+        recordType: "article",
+        title: "The quiet craft of reading",
+        originalText: "A long piece about how people read, and what they remember afterwards.",
+        createdBy: userId,
+      },
+      {
+        organizationId,
+        vaultId,
+        recordType: "article",
+        title: "Cooking in a hurry",
+        originalText: "Something entirely different, about a pot of water and a knife.",
+        createdBy: userId,
+      },
+    ]));
+
+    const results = await globalSearch(context, { q: "reading", page: 1, limit: 20 });
+    expect(results.total).toBe(1);
+    expect(results.items[0]?.title).toBe("The quiet craft of reading");
+    /**
+     * The snippet holds the words that matched, so the reader can see why
+     * the item came back.
+     */
+    expect(results.items[0]?.snippet).toContain("read");
+
+    /**
+     * A word that is only half remembered is still found, because the text
+     * is looked for as it was written as well.
+     */
+    const partial = await globalSearch(context, { q: "readin", page: 1, limit: 20 });
+    expect(partial.total).toBe(1);
+  });
+
+  test("the best answer comes first", async () => {
+    const userId = await makeUser();
+    const { organizationId, vaultId } = await makeWorkspace(userId);
+    const context = { userId, organizationId, permissions: new Set<string>() } as TenantContext;
+
+    await withTenant(organizationId, (tx) => tx.insert(savedRecords).values([
+      { organizationId, vaultId, recordType: "article", title: "Reading the sea", originalText: "A long piece about tides and the boats that go out with them.", createdBy: userId },
+      { organizationId, vaultId, recordType: "article", title: "A mention of a tide", originalText: "A long piece about tides and the boats that go out with them.", createdBy: userId },
+    ]));
+
+    /**
+     * The title of an item says more about it than the text that was
+     * captured, so the item whose title carries the word comes first.
+     */
+    const results = await globalSearch(context, { q: "reading", page: 1, limit: 20 });
+    expect(results.total).toBe(1);
+    expect(results.items[0]?.title).toBe("Reading the sea");
+  });
 });

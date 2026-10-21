@@ -2,6 +2,22 @@
 
 The WXT extension targets Chrome, Edge, and Chromium Manifest V3. Its generated Chrome directory is `apps/extension/.output/chrome-mv3`.
 
+## Firefox
+
+The extension also builds for Firefox, as Manifest V3. Its generated Firefox directory is `apps/extension/.output/firefox-mv3`.
+
+```bash
+bun run build:extension:firefox
+bun run --filter @data-vault/extension zip:firefox
+```
+
+Three things are different in Firefox, and the build takes care of them.
+
+- **The panel.** Chrome has a side panel and Firefox has a sidebar. Both are the same page, and the build puts the right key in each manifest. The extension asks the browser for its own panel, and when the browser will not open it, the page is put in a small window instead, which is what Chrome falls back to as well.
+- **The address of the server.** Firefox keeps the address of the server behind a question, so the extension asks for it when the person signs in, and says so plainly when the question is refused.
+- **The address of the extension.** Firefox gives an extension an address of its own, and the sign-in flow needs that address to stay the same, so it is set in the manifest. The extension also says that it collects no data, because the text that is captured goes to the reader's own server and nowhere else.
+
+
 ## Entrypoints
 
 - `background.ts`: service worker, context menu registration, active-tab metadata/selection, optional screenshot, side-panel opening, the keyboard shortcuts, and the retry queue

@@ -19,6 +19,13 @@ export default defineConfig({
   modulesDir: resolve(extensionRoot, "modules"),
   outDir: resolve(extensionRoot, ".output"),
   modules: [reactModule],
+  /**
+   * The third version of the manifest, in every browser.
+   *
+   * Firefox reads it as well, and the extension asks for the address of the
+   * server when it needs it.
+   */
+  manifestVersion: 3,
   dev: {
     server: {
       host: "127.0.0.1",
@@ -36,14 +43,29 @@ export default defineConfig({
       },
     },
   }),
-  manifest: {
+  /**
+   * The manifest is a little different in each browser.
+   *
+   * Chrome has a side panel and Firefox has a sidebar. The page is the same
+   * one, and the build tool puts the right key in each manifest, so the
+   * panel is not declared here.
+   *
+   * Firefox asks for the address of the server to be allowed before the
+   * extension may reach it, and it only asks when the extension says what
+   * it needs. The address of the server is in the host permissions, and
+   * the extension asks for it when the person signs in.
+   *
+   * Firefox also gives an extension an address of its own, and the sign-in
+   * flow needs that address to stay the same, so it is set here.
+   */
+  manifest: ({ browser }) => ({
     name: "DataVault",
     description: "Capture and save web text, snippets, and data directly to your DataVault.",
     version: "0.1.0",
-    permissions: ["contextMenus", "storage", "identity", "sidePanel", "activeTab", "scripting", "alarms"],
+    permissions: browser === "firefox" ? ["contextMenus", "storage", "identity", "activeTab", "scripting", "alarms"] : ["contextMenus", "storage", "identity", "sidePanel", "activeTab", "scripting", "alarms"],
     host_permissions: [`${apiOrigin}/*`],
+    ...(browser === "firefox" ? { browser_specific_settings: { gecko: { id: "datavault@data-vault.app", data_collection_permissions: { required: ["none"] } } } } : {}),
     action: { default_title: "DataVault" },
-    side_panel: { default_path: "sidepanel.html" },
     /**
      * The keyboard shortcuts.
      *
@@ -60,7 +82,7 @@ export default defineConfig({
      * can be filled in.
      *
      * Chrome only fills them in the first time the extension is installed,
-     * so a key that is cleared by hand stays cleared until it is chosen
+     * so a shortcut that is cleared by hand stays cleared until it is chosen
      * again on the shortcuts page. The panel in the extension says which key
      * each command has, and offers a free one when it has none.
      */
@@ -81,5 +103,5 @@ export default defineConfig({
         description: "Save the selected text as a separate saved item.",
       },
     },
-  },
+  }),
 });

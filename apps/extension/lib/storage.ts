@@ -41,6 +41,13 @@ export interface PendingCapture {
   screenshotDataUrl?: string | undefined;
   attachScreenshot?: boolean | undefined;
   contentKind?: "selection" | "page-info" | "page-text" | undefined;
+  /**
+   * The page as it was, as the markup of the parts that were kept.
+   *
+   * It is sent along so that the item can be traced back to the page, even
+   * after the page itself has changed.
+   */
+  pageHtml?: string | undefined;
   captureQuality?: CaptureQuality | undefined;
   queueState?: "review" | "retry" | undefined;
   attempts?: number | undefined;

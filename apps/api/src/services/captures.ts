@@ -2,17 +2,19 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { defaultCaptureExtractor } from "@data-vault/capture-parser";
 import { captureSources, evidenceSnapshots, processingJobs, savedRecords, savedRecordTags, tags, vaults, withTenant } from "@data-vault/database";
 import type { z } from "zod";
+import type { ServerEnvironment } from "@data-vault/config";
 import type { captureCreateSchema } from "@data-vault/schemas";
 import type { TenantContext } from "../auth/context";
 import { AppError } from "../lib/errors";
 import { sha256 } from "../lib/crypto";
 import { writeAudit } from "./audit";
 import { mapSavedRecord } from "./records";
+import { indexRecord } from "./semantic";
 import { defaultVaultId } from "./vaults";
 
 type CaptureInput = z.infer<typeof captureCreateSchema>;
 
-export async function createCapture(context: TenantContext, request: Request, input: CaptureInput) {
+export async function createCapture(context: TenantContext, request: Request, input: CaptureInput, env?: ServerEnvironment) {
   const extracted = await defaultCaptureExtractor.extract({ text: input.selectedText, pageTitle: input.source.title, pageUrl: input.source.url, capturedAt: input.capturedAt ? new Date(input.capturedAt) : new Date() });
   const parsed = { ...extracted, ...input.parsedData, confidence: { ...extracted.confidence, ...input.parsedData?.confidence } };
   const recordType = input.recordType === "other" ? parsed.recordType ?? "other" : input.recordType;
@@ -40,7 +42,7 @@ export async function createCapture(context: TenantContext, request: Request, in
     }).returning();
     if (!record) throw new Error("Capture record insert failed");
     await tx.insert(captureSources).values({ organizationId: context.organizationId, savedRecordId: record.id, selectedText: input.selectedText, captureHash, extractorId: defaultCaptureExtractor.id, extractorVersion: defaultCaptureExtractor.version, parsedData: parsed, confidence: parsed.confidence });
-    await tx.insert(evidenceSnapshots).values({ organizationId: context.organizationId, savedRecordId: record.id, sourceUrl: input.source.url, sourceTitle: input.source.title, sourceDomain: input.source.domain, capturedText: input.originalText ?? input.selectedText, contentHash: captureHash, extractorId: defaultCaptureExtractor.id, extractorVersion: defaultCaptureExtractor.version, capturedAt: input.capturedAt ? new Date(input.capturedAt) : new Date() });
+    await tx.insert(evidenceSnapshots).values({ organizationId: context.organizationId, savedRecordId: record.id, sourceUrl: input.source.url, sourceTitle: input.source.title, sourceDomain: input.source.domain, capturedText: input.originalText ?? input.selectedText, ...(input.pageHtml ? { pageHtml: input.pageHtml } : {}), contentHash: captureHash, extractorId: defaultCaptureExtractor.id, extractorVersion: defaultCaptureExtractor.version, capturedAt: input.capturedAt ? new Date(input.capturedAt) : new Date() });
     const tagNames = [...new Set(input.tagNames.map((tag) => tag.trim()).filter(Boolean))];
     for (const name of tagNames) await tx.insert(tags).values({ organizationId: context.organizationId, name, color: "#b8a4ed", createdBy: context.userId }).onConflictDoNothing({ target: [tags.organizationId, tags.name] });
     if (tagNames.length) {
@@ -50,7 +52,17 @@ export async function createCapture(context: TenantContext, request: Request, in
     await tx.insert(processingJobs).values({ organizationId: context.organizationId, savedRecordId: record.id, kind: "capture-index", status: "completed", payload: { captureKind: input.captureKind, sourceDomain: input.source.domain, captureQuality: input.captureQuality ?? null }, completedAt: new Date() });
 
     await writeAudit(tx, context, request, { action: "captured", resourceType: "saved_record", resourceId: record.id, newValues: { recordType, captureKind: input.captureKind, vaultId, sourceDomain: input.source.domain } });
-    return { record: mapSavedRecord(record), parser: { id: defaultCaptureExtractor.id, version: defaultCaptureExtractor.version, result: parsed } };
+    const saved = { record: mapSavedRecord(record), parser: { id: defaultCaptureExtractor.id, version: defaultCaptureExtractor.version, result: parsed } };
+    /**
+     * The numbers that say what the item is about are made afterwards, so
+     * that the capture is not held up while the model is asked. An item that
+     * cannot be given numbers is still saved, and simply does not turn up
+     * in a search by meaning.
+     */
+    if (env) {
+      void indexRecord(env, context, record.id, record.title, record.originalText).catch(() => undefined);
+    }
+    return saved;
   });
 }
 

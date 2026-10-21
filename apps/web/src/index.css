@@ -2,13 +2,66 @@
 @source "../../../packages/ui/src";
 
 /**
+ * The colours of the interface.
+ *
+ * They are named rather than written out in every class, so that the whole
+ * interface can be turned over at once when the dark theme is chosen.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --canvas: #fffaf0;
+  --surface: #fffdf8;
+  --soft: #f5f0e0;
+  --hover: #faf5e8;
+  --ink: #0a0a0a;
+  --ink-hover: #1f1f1f;
+  --strong: #3a3a3a;
+  --muted: #6a6a6a;
+  --line: #e5dfd1;
+  --deep: #1a3a3a;
+  --deep-text: #1a3a3a;
+  --focus: #1a3a3a;
+}
+
+.dark {
+  --canvas: #121110;
+  --surface: #1b1a18;
+  --soft: #242220;
+  --hover: #2c2926;
+  --ink: #f3efe7;
+  --ink-hover: #ffffff;
+  --strong: #e6e1d8;
+  --muted: #a49e95;
+  --line: #35322c;
+  --deep: #1c3d39;
+  --deep-text: #8fd8c9;
+  --focus: #7fd4c4;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-soft: var(--soft);
+  --color-hover: var(--hover);
+  --color-ink: var(--ink);
+  --color-ink-hover: var(--ink-hover);
+  --color-strong: var(--strong);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-deep: var(--deep);
+  --color-deep-text: var(--deep-text);
+  --color-focus: var(--focus);
+}
+
+/**
  * The doc editor.
  *
  * The page is styled here rather than with a class on every element, so the
  * doc reads like a page of a word processor.
  */
 @layer components {
-  .datavault-prose { font-size: 16px; line-height: 1.7; color: #1a1a1a; }
+  .datavault-prose { font-size: 16px; line-height: 1.7; color: var(--ink); }
   .datavault-prose > * + * { margin-top: .75em; }
   .datavault-prose h1 { font-size: 2rem; font-weight: 600; line-height: 1.2; letter-spacing: -.03em; margin-top: 1.4em; }
   .datavault-prose h2 { font-size: 1.5rem; font-weight: 600; line-height: 1.25; letter-spacing: -.02em; margin-top: 1.3em; }
@@ -21,15 +74,15 @@
   .datavault-prose ul[data-type="taskList"] li { display: flex; gap: .5em; align-items: flex-start; }
   .datavault-prose ul[data-type="taskList"] li > label { margin-top: .35em; }
   .datavault-prose ul[data-type="taskList"] li > div { flex: 1; }
-  .datavault-prose blockquote { border-left: 3px solid #ded8ca; padding-left: 1em; color: #4a4a4a; }
-  .datavault-prose pre { background: #f5f0e0; border-radius: 12px; padding: 1em; overflow-x: auto; font-size: .85rem; }
-  .datavault-prose code { background: #f5f0e0; border-radius: 5px; padding: .1em .35em; font-size: .9em; }
+  .datavault-prose blockquote { border-left: 3px solid var(--line); padding-left: 1em; color: var(--strong); }
+  .datavault-prose pre { background: var(--soft); border-radius: 12px; padding: 1em; overflow-x: auto; font-size: .85rem; }
+  .datavault-prose code { background: var(--soft); border-radius: 5px; padding: .1em .35em; font-size: .9em; }
   .datavault-prose pre code { background: none; padding: 0; }
   .datavault-prose a { color: #1a5fb4; text-decoration: underline; }
-  .datavault-prose hr { border: none; border-top: 1px solid #e5dfd1; margin: 1.5em 0; }
+  .datavault-prose hr { border: none; border-top: 1px solid var(--line); margin: 1.5em 0; }
   .datavault-prose table { border-collapse: collapse; width: 100%; font-size: .95em; }
-  .datavault-prose th, .datavault-prose td { border: 1px solid #e5dfd1; padding: .45em .7em; text-align: left; vertical-align: top; }
-  .datavault-prose th { background: #f5f0e0; font-weight: 600; }
+  .datavault-prose th, .datavault-prose td { border: 1px solid var(--line); padding: .45em .7em; text-align: left; vertical-align: top; }
+  .datavault-prose th { background: var(--soft); font-weight: 600; }
   .datavault-prose img { max-width: 100%; border-radius: 12px; }
   .datavault-prose p.is-editor-empty:first-child::before {
     content: attr(data-placeholder);
@@ -39,10 +92,10 @@
     color: #b5b5b5;
   }
   .datavault-prose .datavault-clip {
-    border: 1px solid #e5dfd1;
+    border: 1px solid var(--line);
     border-left: 3px solid #b8a4ed;
     border-radius: 12px;
-    background: #fffdf8;
+    background: var(--surface);
     padding: .9em 1.1em;
     margin: 1em 0;
   }
@@ -52,7 +105,7 @@
     display: block;
     margin-top: .7em;
     font-size: .72rem;
-    color: #6a6a6a;
+    color: var(--muted);
   }
   .datavault-prose .datavault-clip[data-has-footer]::after { content: none; }
   .datavault-prose .datavault-clip-bar {
@@ -61,11 +114,11 @@
     gap: .6em;
     margin-bottom: .55em;
     font-size: .72rem;
-    color: #6a6a6a;
+    color: var(--muted);
   }
   .datavault-prose .datavault-clip-source { display: inline-flex; align-items: center; gap: .35em; min-width: 0; }
   .datavault-prose .datavault-clip-source a { display: inline-flex; align-items: center; gap: .3em; color: #1a5fb4; text-decoration: underline; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .datavault-prose .datavault-clip-domain { color: #8a8a8a; }
+  .datavault-prose .datavault-clip-domain { color: var(--muted); }
   .datavault-prose .datavault-clip-remove {
     margin-left: auto;
     display: grid;
@@ -73,9 +126,9 @@
     width: 1.6em;
     height: 1.6em;
     border-radius: .4em;
-    color: #6a6a6a;
+    color: var(--muted);
   }
-  .datavault-prose .datavault-clip-remove:hover { background: #f5f0e0; color: #b3261e; }
+  .datavault-prose .datavault-clip-remove:hover { background: var(--soft); color: #b3261e; }
   /**
    * A piece whose source is already named by the heading above it.
    *
@@ -109,8 +162,8 @@
    * The heading that names the source of the pieces under it.
    */
   .datavault-prose .datavault-section-heading { display: flex; align-items: baseline; gap: .35em; }
-  .datavault-prose .datavault-section-link { color: #8a8a8a; text-decoration: none; }
-  .datavault-prose .datavault-section-link:hover { color: #1a3a3a; }
+  .datavault-prose .datavault-section-link { color: var(--muted); text-decoration: none; }
+  .datavault-prose .datavault-section-link:hover { color: var(--deep-text); }
   .datavault-prose .selectedCell::after { content: ""; position: absolute; inset: 0; background: rgba(184, 164, 237, .18); pointer-events: none; }
   .datavault-prose .tableWrapper { overflow-x: auto; }
   /**
@@ -125,14 +178,14 @@
 
 :root {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #0a0a0a;
-  background: #fffaf0;
+  color: var(--ink);
+  background: var(--canvas);
   font-synthesis: none;
 }
 
 * { box-sizing: border-box; }
-html { background: #fffaf0; }
-body { margin: 0; min-width: 320px; min-height: 100vh; background: #fffaf0; }
+html { background: var(--canvas); }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--canvas); color: var(--ink); }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 ::selection { background: #b8a4ed; color: #0a0a0a; }
@@ -145,13 +198,13 @@ button { cursor: pointer; }
  * with a ring around the whole page.
  */
 @layer base {
-  :focus-visible { outline: 2px solid #1a3a3a; outline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 }
 
 .display { font-weight: 500; letter-spacing: -0.045em; line-height: 1.02; }
-.panel { border: 1px solid #e5dfd1; background: #fffdf8; border-radius: 16px; }
-.table-scroll { scrollbar-width: thin; scrollbar-color: #d7d0c0 transparent; }
-.skeleton { animation: pulse 1.5s ease-in-out infinite; background: #ebe6d6; border-radius: 8px; }
+.panel { border: 1px solid var(--line); background: var(--surface); border-radius: 16px; }
+.table-scroll { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.skeleton { animation: pulse 1.5s ease-in-out infinite; background: var(--soft); border-radius: 8px; }
 @keyframes pulse { 50% { opacity: .55; } }
 
 @media (prefers-reduced-motion: reduce) {

@@ -10,7 +10,7 @@ import { adminUrl } from "./connection";
  */
 const tenantTables = [
   "attachments", "audit_logs", "capture_sources", "evidence_snapshots", "idempotency_keys",
-  "note_revisions", "notes", "processing_jobs", "saved_record_collections", "saved_record_tags",
+  "note_revisions", "notes", "processing_jobs", "record_embeddings", "saved_record_collections", "saved_record_tags",
   "saved_records", "saved_views", "tags", "user_note_prefs", "vault_collections", "vaults",
 ];
 

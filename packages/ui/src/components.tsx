@@ -7,12 +7,12 @@ import {
 } from "lucide-react";
 import { cn } from "./utils";
 
-const buttonVariants = cva("inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#1a3a3a] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50", {
+const buttonVariants = cva("inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50", {
   variants: {
     variant: {
-      primary: "bg-[#0a0a0a] text-white hover:bg-[#1f1f1f]",
-      secondary: "border border-[#ded8ca] bg-[#fffaf0] text-[#0a0a0a] hover:bg-[#f5f0e0]",
-      ghost: "text-[#3a3a3a] hover:bg-[#f5f0e0]",
+      primary: "bg-ink text-canvas hover:bg-ink-hover",
+      secondary: "border border-line bg-canvas text-ink hover:bg-soft",
+      ghost: "text-strong hover:bg-soft",
       danger: "bg-red-600 text-white hover:bg-red-700",
     },
     size: { sm: "min-h-8 rounded-lg px-3 text-xs", md: "min-h-10", lg: "min-h-11 px-5" },
@@ -27,24 +27,24 @@ export function Button({ asChild, className, variant, size, ...props }: ButtonPr
 }
 
 export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cn("h-11 w-full rounded-xl border border-[#ded8ca] bg-[#fffdf8] px-3 text-sm text-[#0a0a0a] outline-none placeholder:text-[#6a6a6a] focus:border-[#1a3a3a] focus:ring-1 focus:ring-[#1a3a3a]", className)} {...props} />;
+  return <input className={cn("h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink outline-none placeholder:text-muted focus:border-deep focus:ring-1 focus:ring-focus", className)} {...props} />;
 }
 
 export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
-  return <label className={cn("mb-1.5 block text-sm font-medium text-[#3a3a3a]", className)} {...props} />;
+  return <label className={cn("mb-1.5 block text-sm font-medium text-strong", className)} {...props} />;
 }
 
 export function Badge({ className, tone = "neutral", ...props }: React.HTMLAttributes<HTMLSpanElement> & { tone?: "neutral" | "success" | "warning" | "danger" | "teal" }) {
-  const tones = { neutral: "bg-[#f5f0e0] text-[#3a3a3a]", success: "bg-green-100 text-green-800", warning: "bg-amber-100 text-amber-800", danger: "bg-red-100 text-red-800", teal: "bg-[#dce9e5] text-[#1a3a3a]" };
+  const tones = { neutral: "bg-soft text-strong", success: "bg-green-100 text-green-800", warning: "bg-amber-100 text-amber-800", danger: "bg-red-100 text-red-800", teal: "bg-[#dce9e5] text-deep-text" };
   return <span className={cn("inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium", tones[tone], className)} {...props} />;
 }
 
 export function LoadingState({ label = "Loading" }: { label?: string }) {
-  return <div className="flex items-center justify-center gap-2 p-8 text-sm text-[#6a6a6a]"><LoaderCircle aria-hidden className="size-4 animate-spin" />{label}</div>;
+  return <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted"><LoaderCircle aria-hidden className="size-4 animate-spin" />{label}</div>;
 }
 
 export function EmptyState({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
-  return <div className="flex min-h-52 flex-col items-center justify-center px-6 text-center"><Inbox aria-hidden className="mb-4 size-9 text-[#9a9a9a]" /><h3 className="font-semibold">{title}</h3><p className="mt-1 max-w-sm text-sm text-[#6a6a6a]">{description}</p>{action ? <div className="mt-4">{action}</div> : null}</div>;
+  return <div className="flex min-h-52 flex-col items-center justify-center px-6 text-center"><Inbox aria-hidden className="mb-4 size-9 text-muted" /><h3 className="font-semibold">{title}</h3><p className="mt-1 max-w-sm text-sm text-muted">{description}</p>{action ? <div className="mt-4">{action}</div> : null}</div>;
 }
 
 /**

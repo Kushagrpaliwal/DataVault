@@ -2,6 +2,7 @@ import { KeyRound, ScanText } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@data-vault/ui";
 import { browser } from "wxt/browser";
+import { ensureServerAccess } from "../lib/permissions";
 
 export function LoggedOut({ onSignedIn, capturePending = false }: { onSignedIn: () => void; capturePending?: boolean }) {
   const [signingIn, setSigningIn] = useState(false);
@@ -11,6 +12,14 @@ export function LoggedOut({ onSignedIn, capturePending = false }: { onSignedIn: 
     setSigningIn(true);
     setError("");
     try {
+      /**
+       * Firefox asks for the address of the server before the extension may
+       * reach it. The question has to be asked while the click is still
+       * being handled, so it is asked here.
+       */
+      if (!await ensureServerAccess()) {
+        throw new Error("DataVault needs permission to reach the server. Allow it for this site, then try again.");
+      }
       const result = await browser.runtime.sendMessage({ action: "start-extension-auth" }) as { ok?: boolean; error?: string } | undefined;
       if (!result?.ok) throw new Error(result?.error ?? "Sign-in could not be completed. Please try again.");
       onSignedIn();

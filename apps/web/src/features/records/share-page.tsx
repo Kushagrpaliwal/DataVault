@@ -65,7 +65,7 @@ export function SharePage() {
       {error ? <div className="mb-4"><ErrorMessage message={error} /></div> : null}
       {nothing ? (
         <div className="panel p-6">
-          <p className="text-sm leading-6 text-[#6a6a6a]">Share a page from your phone's share menu and it will appear here, ready to save.</p>
+          <p className="text-sm leading-6 text-muted">Share a page from your phone's share menu and it will appear here, ready to save.</p>
           <Button className="mt-4" onClick={() => navigate("/saved")}>Go to Saved</Button>
         </div>
       ) : (
@@ -75,16 +75,16 @@ export function SharePage() {
             <Input id="share-title" autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="What is this?" />
           </div>
           <div>
-            <Label htmlFor="share-url">Link <span className="font-normal text-[#6a6a6a]">(optional)</span></Label>
+            <Label htmlFor="share-url">Link <span className="font-normal text-muted">(optional)</span></Label>
             <Input id="share-url" type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/page" />
           </div>
           <div>
-            <Label htmlFor="share-text">Text <span className="font-normal text-[#6a6a6a]">(optional)</span></Label>
-            <textarea id="share-text" className="min-h-32 w-full rounded-xl border border-[#ded8ca] bg-[#fffdf8] p-3 text-sm" value={text} onChange={(event) => setText(event.target.value)} />
+            <Label htmlFor="share-text">Text <span className="font-normal text-muted">(optional)</span></Label>
+            <textarea id="share-text" className="min-h-32 w-full rounded-xl border border-line bg-surface p-3 text-sm" value={text} onChange={(event) => setText(event.target.value)} />
           </div>
           <div>
             <Label htmlFor="share-type">Type</Label>
-            <select id="share-type" className="h-11 w-full rounded-xl border border-[#ded8ca] bg-[#fffdf8] px-3 text-sm" value={recordType} onChange={(event) => setRecordType(event.target.value)}>
+            <select id="share-type" className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm" value={recordType} onChange={(event) => setRecordType(event.target.value)}>
               {PRIMARY_RECORD_TYPES.map((type) => <option key={type} value={type}>{recordTypeLabel(type)}</option>)}
             </select>
           </div>

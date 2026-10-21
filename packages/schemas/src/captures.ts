@@ -39,6 +39,13 @@ export const parsedCaptureSchema = z.object({
 export const captureCreateSchema = z.object({
   selectedText: z.string().trim().min(1).max(100_000),
   originalText: z.string().max(100_000).optional(),
+  /**
+   * The page as it was, as the markup of the parts that were kept.
+   *
+   * It is kept so that the item can be traced back to the page, even after
+   * the page itself has changed.
+   */
+  pageHtml: z.string().max(500_000).optional(),
   source: sourceSchema,
   capturedAt: dateTimeSchema.optional(),
   captureQuality: captureQualitySchema.optional(),
