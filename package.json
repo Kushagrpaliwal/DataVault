@@ -19,6 +19,7 @@
     "test": "bun test apps packages",
     "test:e2e": "bun run scripts/smoke-web.ts",
     "smoke:web": "bun run scripts/smoke-web.ts",
+    "make-smoke-account": "bun --env-file=.env scripts/make-smoke-account.ts",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc -p tsconfig.json --noEmit && bun --env-file=.env run --filter '*' --parallel typecheck",
     "db:generate": "bun --env-file=.env run --filter @data-vault/database db:generate",

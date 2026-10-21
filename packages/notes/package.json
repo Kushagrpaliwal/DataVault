@@ -8,7 +8,8 @@
     "./extensions": "./src/extensions.ts",
     "./arrange": "./src/arrange.ts",
     "./text": "./src/text.ts",
-    "./html": "./src/html.ts"
+    "./html": "./src/html.ts",
+    "./html-server": "./src/html-server.ts"
   },
   "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
   "dependencies": {

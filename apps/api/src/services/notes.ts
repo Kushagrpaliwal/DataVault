@@ -1,7 +1,8 @@
 import { and, asc, desc, eq, ilike, isNotNull, isNull, or } from "drizzle-orm";
 import { noteRevisions, notes, userNotePrefs, vaults, withTenant } from "@data-vault/database";
 import { appendClip, docExcerpt, docToPlainText, findClipByHash, removeClip, type ClipContent } from "@data-vault/notes";
-import { htmlToClipContent, validateDoc } from "@data-vault/notes/html";
+import { htmlToClipContent } from "@data-vault/notes/html-server";
+import { validateDoc } from "@data-vault/notes/html";
 import type { JSONContent } from "@tiptap/core";
 import type { z } from "zod";
 import type { noteClipSchema, noteCreateSchema, noteListQuerySchema, notePatchSchema } from "@data-vault/schemas";

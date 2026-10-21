@@ -45,12 +45,49 @@ try {
   await page.goto(`${baseUrl}/saved-data`, { waitUntil: "networkidle" });
   await page.waitForURL(`${baseUrl}/saved`, { timeout: 10_000 });
 
+  /**
+   * A page shared from a phone lands in the save form, with what was shared
+   * already in it. The share target used to post to a page that redirected,
+   * which threw the shared material away.
+   */
+  const sharedTitle = `Shared from a phone ${Date.now()}`;
+  await page.goto(`${baseUrl}/share?title=${encodeURIComponent(sharedTitle)}&text=${encodeURIComponent("A passage worth keeping.")}&url=${encodeURIComponent("https://example.com/shared")}`, { waitUntil: "networkidle" });
+  await page.getByLabel("Title", { exact: true }).waitFor({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Save it", exact: true }).click();
+  await page.waitForURL(/\/saved\//, { timeout: 15_000 });
+  await page.getByText(sharedTitle, { exact: true }).first().waitFor({ timeout: 15_000 });
+
+  /**
+   * Every folder is shown until one is chosen, so nothing is hidden without
+   * saying so.
+   */
+  await page.goto(`${baseUrl}/saved`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "All folders", exact: true }).waitFor({ timeout: 15_000 });
+  await page.getByText(sharedTitle, { exact: true }).first().waitFor({ timeout: 15_000 });
+
+  /**
+   * A doc can be copied, and the copy is a new doc.
+   */
+  await page.goto(`${baseUrl}/docs`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "New doc", exact: true }).first().click();
+  await page.waitForURL(/\/docs\//, { timeout: 15_000 });
+  const docUrl = page.url();
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Duplicate", exact: true }).click();
+  await page.waitForURL((url) => url.toString() !== docUrl && /\/docs\//.test(url.toString()), { timeout: 15_000 });
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Export as HTML", exact: true }).click();
+  await page.screenshot({ path: "test-results/data-vault-docs.png", fullPage: true });
+
   console.log(JSON.stringify({
     dashboard: "loaded",
     saved: "opened",
     organize: "opened",
     settings: "opened",
     legacyRedirects: "ok",
+    share: "saved",
+    allFolders: "shown",
+    duplicate: "made",
     finalUrl: page.url(),
   }));
 } catch (error) {

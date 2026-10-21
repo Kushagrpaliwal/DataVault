@@ -142,8 +142,10 @@ bun run test
 bun run build
 ```
 
-The integration suite covers auth, organization isolation, RBAC, captures, extension authorization and revocation, sign-in renewal races, docs, idempotency, validation, tenant-scoped search, the credit allowance, and the checks that keep one workspace from reaching into another.
+The same four run on every push, in `.github/workflows/ci.yml`, against a Postgres service.
 
-With the API and web development servers running, set `SMOKE_EMAIL` and `SMOKE_PASSWORD` to a real account, then run `bun run smoke:web` to verify login and the saved-captures library.
+The integration suite covers auth, organization isolation, RBAC, captures, extension authorization and revocation, sign-in renewal races, docs, idempotency, validation, tenant-scoped search, the credit allowance, and the checks that keep one workspace from reaching into another. It runs against its own database, taken from `TEST_DATABASE_URL`, so it never touches the data a person is working in.
+
+With the API and web development servers running, set `SMOKE_EMAIL` and `SMOKE_PASSWORD` to a real account, then run `bun run smoke:web`. It signs in, opens every page, shares a page into the app, checks that every folder is shown, and copies a doc. `bun run make-smoke-account` makes an account to use.
 
 More detail: [architecture](docs/architecture.md), [database](docs/database.md), [authentication](docs/auth.md), [AI credits](docs/ai.md), [API](docs/api.md), [extension](docs/extension.md), and [development](docs/development.md).
