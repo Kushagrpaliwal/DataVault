@@ -149,6 +149,7 @@
       "name": "@data-vault/notes",
       "version": "0.1.0",
       "dependencies": {
+        "@data-vault/schemas": "workspace:*",
         "@tiptap/core": "3.32.0",
         "@tiptap/extension-highlight": "3.32.0",
         "@tiptap/extension-image": "3.32.0",

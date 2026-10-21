@@ -1,16 +1,17 @@
 import { Elysia } from "elysia";
-import { noteAiRequestSchema, noteClipSchema, noteCreateSchema, noteCurrentSchema, noteListQuerySchema, notePatchSchema, uuidSchema } from "@data-vault/schemas";
+import { noteAiRequestSchema, noteAiSelectionSchema, noteClipSchema, noteCreateSchema, noteCurrentSchema, noteListQuerySchema, notePatchSchema, uuidSchema } from "@data-vault/schemas";
 import type { ServerEnvironment } from "@data-vault/config";
 import type { DataVaultAuth } from "../auth/better-auth";
 import { getTenantContext } from "../auth/context";
 import { requireCsrf } from "../auth/csrf";
 import { success } from "../lib/http";
+import { enforceRateLimit, RATE_LIMITS } from "../lib/rate-limit-policies";
 import {
   addClip, addCurrentClip, createNote, duplicateNote, getCurrentNote, getNote, listNotes, listRevisions,
   rearrangeNote, removeClipById, restoreNote, restoreRevision, setCurrentNote, trashNote, updateNote,
 } from "../services/notes";
 import { runIdempotent } from "../services/idempotency";
-import { organizeNote, writeUpNote } from "../services/notes-ai";
+import { organizeNote, selectionAssist, writeUpNote } from "../services/notes-ai";
 
 export function createNoteRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
   return new Elysia({ name: "note-routes" })
@@ -100,6 +101,20 @@ export function createNoteRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
       await requireCsrf(request, auth, env);
       const context = await getTenantContext(request, auth, env, "captures.update");
       return success(await organizeNote(env, context, request, uuidSchema.parse(params.id), noteAiRequestSchema.parse(body ?? {})));
+    })
+
+    /**
+     * Do something with a selection of the doc.
+     *
+     * The answer is a list of blocks, and it is not written into the doc
+     * here: the person sees it first and accepts it, so a change is never
+     * made behind their back.
+     */
+    .post("/api/v1/notes/:id/ai/selection", async ({ body, params, request }) => {
+      await requireCsrf(request, auth, env);
+      await enforceRateLimit(request, env, RATE_LIMITS.aiSelection);
+      const context = await getTenantContext(request, auth, env, "captures.update");
+      return success(await selectionAssist(env, context, request, uuidSchema.parse(params.id), noteAiSelectionSchema.parse(body)));
     })
 
     /**

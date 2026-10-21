@@ -1,9 +1,10 @@
 import type {
-  AiActivityEntry, AiClassificationResult, AiCreditStatus, AiExtractionResult, AiRunResult, AiSummaryResult,
+  AiActivityEntry, AiClassificationResult, AiConnection, AiCreditStatus, AiExtractionResult, AiRunResult, AiSummaryResult,
   ApiResponse, AuthMethods, AuthSession, CaptureCreateInput, ExtensionSession, ExtensionTokenSet, Note, NoteClipResult,
   NoteRevision, NoteSummary, NoteWriteUpSection, Organization, PaginationResult, SavedRecord, SearchResult, SemanticResult, Vault,
   VaultCollection, VaultCreateInput, VaultTag,
 } from "@data-vault/types";
+import type { AiBlock, NoteAiAction, NoteAiContextMode } from "@data-vault/types";
 
 export class DataVaultApiError extends Error {
   constructor(public readonly code: string, message: string, public readonly status: number, public readonly details?: unknown) {
@@ -127,6 +128,13 @@ export class DataVaultApiClient {
   aiCredits = () => this.request<AiCreditStatus>("/api/v1/ai/credits");
   aiActivity = () => this.request<AiActivityEntry[]>("/api/v1/ai/activity");
   aiConsent = () => this.request<{ consented: boolean }>("/api/v1/ai/consent", { method: "POST", body: JSON.stringify({ accepted: true }) });
+  /** The model providers the user has connected. The key is never in it. */
+  listAiConnections = () => this.request<AiConnection[]>("/api/v1/ai/connections");
+  createAiConnection = (body: { label: string; kind: "openai-compatible" | "anthropic" | "gemini"; preset: string; baseUrl: string; model: string; apiKey?: string; isDefault?: boolean }) => this.request<AiConnection>("/api/v1/ai/connections", { method: "POST", body: JSON.stringify(body) });
+  patchAiConnection = (id: string, body: { label?: string; model?: string; baseUrl?: string; isDefault?: boolean; apiKey?: string }) => this.request<AiConnection>(`/api/v1/ai/connections/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+  deleteAiConnection = (id: string) => this.request<{ id: string }>(`/api/v1/ai/connections/${id}`, { method: "DELETE", body: "{}" });
+  /** Try a provider and ask it which models it has. */
+  testAiConnection = (body: { id?: string; kind?: "openai-compatible" | "anthropic" | "gemini"; preset?: string; baseUrl?: string; model?: string; apiKey?: string }) => this.request<{ models: string[]; model: string | null }>("/api/v1/ai/connections/test", { method: "POST", body: JSON.stringify(body) });
   aiSummarize = (body: { recordId?: string; text?: string }, idempotencyKey: string = crypto.randomUUID()) => this.request<AiRunResult<AiSummaryResult>>("/api/v1/ai/summarize", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
   aiClassify = (body: { recordId?: string; text?: string }, idempotencyKey: string = crypto.randomUUID()) => this.request<AiRunResult<AiClassificationResult>>("/api/v1/ai/classify", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
   aiExtract = (body: { recordId?: string; text?: string }, idempotencyKey: string = crypto.randomUUID()) => this.request<AiRunResult<AiExtractionResult>>("/api/v1/ai/extract", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
@@ -205,6 +213,13 @@ export class DataVaultApiClient {
   restoreNoteRevision = (id: string, revisionId: string) => this.request<Note>(`/api/v1/notes/${id}/revisions/${revisionId}/restore`, { method: "POST", body: "{}" });
   /** Let the AI sort the doc into topics. */
   organizeNote = (id: string, body: { apply?: boolean; previewId?: string } = {}) => this.request<{ preview: boolean; previewId?: string; sections: Array<{ title: string; clipIds: string[] }>; remaining: number }>(`/api/v1/notes/${id}/organize`, { method: "POST", body: JSON.stringify(body) });
+  /**
+   * Do something with a selection of the doc.
+   *
+   * The answer is a list of blocks, and it is not written into the doc: the
+   * person sees it first and accepts it.
+   */
+  noteAiSelection = (id: string, body: { action: NoteAiAction; instruction?: string; selection: { markdown: string; clips: { clipId: string; text: string }[] }; context: { mode: NoteAiContextMode; recordIds?: string[] } }) => this.request<{ blocks: AiBlock[]; action: NoteAiAction; context: NoteAiContextMode; source: "own" | "free"; remaining: number; title: string }>(`/api/v1/notes/${id}/ai/selection`, { method: "POST", body: JSON.stringify(body) });
   /** Turn the pieces into writing, with sentences that follow each other. */
   writeUpNote = (id: string, body: { apply?: boolean; previewId?: string } = {}) => this.request<{ preview: boolean; previewId?: string; title?: string; sections: NoteWriteUpSection[]; remaining: number }>(`/api/v1/notes/${id}/write-up`, { method: "POST", body: JSON.stringify(body) });
   /** Sort the pieces of a doc again, using the mode the doc is set to. */

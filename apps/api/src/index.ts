@@ -9,6 +9,7 @@ import { success } from "./lib/http";
 import { enforceRateLimit, RATE_LIMITS } from "./lib/rate-limit-policies";
 import { createAuthRoutes } from "./routes/auth";
 import { createAiRoutes } from "./routes/ai";
+import { createAiConnectionRoutes } from "./routes/ai-connections";
 import { createCaptureRoutes } from "./routes/captures";
 import { createExtensionAuthRoutes } from "./routes/extension-auth";
 import { createImportRoutes } from "./routes/imports";
@@ -133,6 +134,7 @@ export function createApp(environment?: ServerEnvironment) {
     .all("/api/v1/internal-auth/*", ({ request }) => auth.handler(request))
     .use(createAuthRoutes(auth, env))
     .use(createAiRoutes(auth, env))
+    .use(createAiConnectionRoutes(auth, env))
     .use(createOrganizationRoutes(auth, env))
     .use(createRecordRoutes(auth, env))
     .use(createVaultRoutes(auth, env))

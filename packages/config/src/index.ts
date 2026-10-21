@@ -91,6 +91,32 @@ const serverEnvironmentSchema = z.object({
   AI_USER_MINUTE_REQUESTS: z.coerce.number().int().min(0).default(5),
   AI_MAX_INPUT_TOKENS: z.coerce.number().int().min(256).default(4_000),
   AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(64).default(400),
+  /**
+   * The key that encrypts the keys people bring themselves.
+   *
+   * It is thirty-two bytes, written as base64. The keys of the users are
+   * encrypted with it and are never held in plain text. Without it nobody
+   * can bring a key of their own, and the free credits are the only way to
+   * use the AI.
+   */
+  AI_KEY_ENCRYPTION_KEY: z.string().optional(),
+  /**
+   * Whether the server may call a model on the local network.
+   *
+   * People who run a model on their own machine need this, because Ollama
+   * and LM Studio are usually on the same network as the browser. It is
+   * off by default, because an address on the local network can reach
+   * things that are not meant to be reached.
+   */
+  AI_ALLOW_PRIVATE_ENDPOINTS: z.enum(["true", "false"]).default("false"),
+  /**
+   * The caps for a request that is paid for by the person.
+   *
+   * Their own key has no free tier to run out of, so the caps are larger
+   * than the ones the shared key has.
+   */
+  AI_BYO_MAX_INPUT_TOKENS: z.coerce.number().int().min(256).default(32_000),
+  AI_BYO_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(64).default(4_000),
   /** Free-tier Gemini may use submitted content to improve Google's products. */
   AI_FREE_TIER_CONTENT_NOTICE: z.enum(["true", "false"]).default("true"),
 });
@@ -103,7 +129,26 @@ export type ServerEnvironment = z.infer<typeof serverEnvironmentSchema> & {
   turnstileSiteKey?: string | undefined;
   geminiApiKey?: string | undefined;
   aiFreeTierContentNotice: boolean;
+  /** The key the connections of the users are encrypted with. */
+  aiKeyEncryptionKey?: Uint8Array | undefined;
+  /** True when the server may call a model on the local network. */
+  aiAllowPrivateEndpoints: boolean;
 };
+
+/**
+ * The key that encrypts the keys of the users.
+ *
+ * It is thirty-two bytes, written as base64. Anything else is refused,
+ * because a key of the wrong length cannot be used and a key that is
+ * shortened is not a key any more.
+ */
+function parseEncryptionKey(value: string | undefined): Uint8Array | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const bytes = new Uint8Array(Buffer.from(trimmed, "base64"));
+  if (bytes.length !== 32) throw new Error("AI_KEY_ENCRYPTION_KEY must be 32 bytes, written as base64.");
+  return bytes;
+}
 
 export function getServerEnvironment(source: Record<string, string | undefined> = process.env): ServerEnvironment {
   const parsed = serverEnvironmentSchema.parse(source);
@@ -122,6 +167,8 @@ export function getServerEnvironment(source: Record<string, string | undefined> 
     turnstileSiteKey,
     geminiApiKey: trim(parsed.GEMINI_API_KEY),
     aiFreeTierContentNotice: parsed.AI_FREE_TIER_CONTENT_NOTICE === "true",
+    aiKeyEncryptionKey: parseEncryptionKey(parsed.AI_KEY_ENCRYPTION_KEY),
+    aiAllowPrivateEndpoints: parsed.AI_ALLOW_PRIVATE_ENDPOINTS === "true",
   };
 }
 

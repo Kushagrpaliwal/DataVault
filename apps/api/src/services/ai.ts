@@ -1,10 +1,11 @@
 import { and, eq } from "drizzle-orm";
-import { aiResponseCache, getDatabase, savedRecords, withTenant } from "@data-vault/database";
+import { aiResponseCache, aiUsageEvents, getDatabase, savedRecords, withUser, withTenant } from "@data-vault/database";
 import type { ServerEnvironment } from "@data-vault/config";
 import { AppError } from "../lib/errors";
-import { cacheKeyFor, generateJson, type GeminiGenerateResult } from "./gemini";
+import { cacheKeyFor, generateJson } from "./gemini";
 import { readCreditStatus, recordConsent, recordUsage, refundCredit, reserveCredit } from "./ai-credits";
-
+import { defaultConnection, targetFor } from "./ai-connections";
+import { generateStructured, type AiTarget } from "./ai-provider";
 export type AiFeature = "summarize" | "classify" | "extract";
 
 export interface AiCreditContext {
@@ -20,6 +21,133 @@ export interface AiRunResult {
   remaining: number;
   inputTokens: number;
   outputTokens: number;
+  /** Which provider answered. */
+  source: "own" | "free";
+}
+
+/**
+ * Where a request is answered.
+ *
+ * A person may have connected a provider of their own, and then that is
+ * what answers, because they are paying for it. Otherwise the shared free
+ * key answers, and a credit is spent.
+ */
+export interface ResolvedAi {
+  source: "own" | "free";
+  /** The provider of the person, when they have one. */
+  target?: AiTarget;
+  /** What the provider is called, for the interface. */
+  label?: string;
+  preset?: string;
+  model?: string;
+}
+
+/**
+ * Find the provider that answers for this person.
+ *
+ * A connection that has been removed on the website is not used, and a
+ * server that cannot hold the keys of the users falls back to the free
+ * one rather than failing.
+ */
+export async function resolveAi(env: ServerEnvironment, context: AiCreditContext): Promise<ResolvedAi> {
+  try {
+    const connection = await defaultConnection(context.userId);
+    if (!connection) return { source: "free" };
+    const target = await targetFor(env, context.userId, connection);
+    return { source: "own", target, label: connection.label, preset: connection.preset, model: connection.model };
+  } catch {
+    return { source: "free" };
+  }
+}
+
+/**
+ * The provider of the person, for the interface.
+ *
+ * The key is not read, because the interface only needs to say which
+ * provider is in use.
+ */
+export { ownConnectionSummary } from "./ai-connections";
+/**
+ * What a model is asked for.
+ */
+export interface ModelRequest {
+  system: string;
+  contents: string;
+  schema: Record<string, unknown>;
+  maxOutputTokens?: number | undefined;
+  temperature?: number | undefined;
+}
+
+/**
+ * Ask a model, and pay for it in the way the person has chosen.
+ *
+ * A provider of their own spends no credit and no part of the shared
+ * budget, and it is given much larger limits, because it is paid for
+ * already. The free path is the one that spends a credit, and it is
+ * unchanged.
+ */
+export async function runModel(
+  env: ServerEnvironment,
+  context: AiCreditContext,
+  requestId: string,
+  options: { idempotencyKey?: string | undefined },
+  feature: string,
+  input: ModelRequest,
+): Promise<{ data: unknown; inputTokens: number; outputTokens: number; source: "own" | "free"; remaining: number }> {
+  const resolved = await resolveAi(env, context);
+  if (resolved.source === "own" && resolved.target) {
+    const maxOutputTokens = Math.min(input.maxOutputTokens ?? env.AI_BYO_MAX_OUTPUT_TOKENS, env.AI_BYO_MAX_OUTPUT_TOKENS);
+    const result = await generateStructured(env, resolved.target, {
+      system: input.system,
+      contents: input.contents,
+      schema: input.schema,
+      maxOutputTokens,
+    });
+    /**
+     * The tokens are recorded, so that a person can see what their own key
+     * was used for. No credit is spent, because they are paying for it.
+     */
+    await withUser(context.userId, context.organizationId, (tx) => tx.insert(aiUsageEvents).values({
+      organizationId: context.organizationId,
+      userId: context.userId,
+      feature,
+      model: resolved.model ?? result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      cached: 0,
+      requestId,
+    }));
+    return { data: result.data, inputTokens: result.inputTokens, outputTokens: result.outputTokens, source: "own", remaining: 0 };
+  }
+
+  const reservation = await reserveCredit(env, context, feature, env.GEMINI_MODEL, requestId, options);
+  if (reservation.replay) throw new AppError(409, "AI_REQUEST_ALREADY_MADE", "This request has already been made. Please try again in a moment.");
+  try {
+    const result = await generateJson(env, {
+      system: input.system,
+      contents: input.contents,
+      responseSchema: input.schema,
+      ...(input.maxOutputTokens ? { maxOutputTokens: input.maxOutputTokens } : {}),
+      ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
+    });
+    await recordUsage(reservation, { inputTokens: result.inputTokens, outputTokens: result.outputTokens });
+    const status = await readCreditStatus(env, context);
+    return { data: result.data, inputTokens: result.inputTokens, outputTokens: result.outputTokens, source: "free", remaining: status.remaining };
+  } catch (error) {
+    await refundCredit(reservation, error instanceof Error ? error.message : "The request failed.");
+    throw error;
+  }
+}
+
+/**
+ * A request identifier that belongs to the account.
+ *
+ * The key the client sent is scoped to the person who sent it, so one
+ * person cannot spend another person's request by guessing their key.
+ */
+export function scopedRequestId(request: Request, userId: string): string {
+  const key = request.headers.get("idempotency-key");
+  return key ? `${userId}:${key}` : crypto.randomUUID();
 }
 
 const SUMMARY_SCHEMA = {
@@ -103,7 +231,13 @@ function clamp(text: string, maxTokens: number): string {
   return text.length <= limit ? text : `${text.slice(0, limit)}\n[content truncated]`;
 }
 
-/** Run one AI feature, charging a credit and metering the tokens used. */
+/**
+ * Run one AI feature.
+ *
+ * A provider that the person connected answers, and nothing is spent from
+ * the shared allowance. Otherwise a credit is spent and the answer is
+ * remembered, so that asking the same thing twice costs one credit.
+ */
 export async function runAiFeature(
   env: ServerEnvironment,
   context: AiCreditContext,
@@ -118,39 +252,30 @@ export async function runAiFeature(
   const system = SYSTEM_PROMPTS[feature];
   const contents = clamp(trimmed, env.AI_MAX_INPUT_TOKENS);
   const schema = SCHEMAS[feature];
-  const model = env.GEMINI_MODEL;
+  /**
+   * The model that answers is the one the person connected, or the shared
+   * one. The answer is remembered against it, so that an answer from one
+   * model is never served for another.
+   */
+  const resolved = await resolveAi(env, context);
+  const model = resolved.model ?? env.GEMINI_MODEL;
 
   // A repeat of the same request is served from cache and costs nothing.
   const cached = await readCached(contents, feature, model);
   if (cached) {
     const status = await readCreditStatus(env, context);
-    return { data: cached, cached: true, remaining: status.remaining, inputTokens: 0, outputTokens: 0 };
+    return { data: cached, cached: true, remaining: status.remaining, inputTokens: 0, outputTokens: 0, source: resolved.source };
   }
 
-  const reservation = await reserveCredit(env, context, feature, model, requestId, options);
   /**
-   * The request was charged before. Asking the model again would spend the
-   * shared quota a second time without spending a credit, so the answer has
-   * to come from the cache. If it is not there yet, the first attempt is
-   * still running and the caller is told to try again shortly.
+   * The request is made through the one path that knows whether a key of
+   * the person is used, so that the credits are only spent when they are.
    */
-  if (reservation.replay) {
-    throw new AppError(409, "AI_REQUEST_ALREADY_MADE", "This request has already been made. Please try again in a moment.");
-  }
-
-  let result: GeminiGenerateResult;
-  try {
-    result = await generateJson(env, { system, contents, responseSchema: schema });
-  } catch (error) {
-    await refundCredit(reservation, error instanceof Error ? error.message : "The request failed.");
-    throw error;
-  }
-
-  await writeCached(result.cacheKey, feature, model, result.data);
-  await recordUsage(reservation, { inputTokens: result.inputTokens, outputTokens: result.outputTokens });
+  const result = await runModel(env, context, requestId, options, feature, { system, contents, schema });
+  await writeCached(await cacheKeyFor({ system, contents, responseSchema: schema }, model), feature, model, result.data);
 
   const status = await readCreditStatus(env, context);
-  return { data: result.data, cached: false, remaining: status.remaining, inputTokens: result.inputTokens, outputTokens: result.outputTokens };
+  return { data: result.data, cached: false, remaining: result.remaining || status.remaining, inputTokens: result.inputTokens, outputTokens: result.outputTokens, source: result.source };
 }
 
 async function readCached(contents: string, feature: AiFeature, model: string): Promise<unknown> {

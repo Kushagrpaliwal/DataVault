@@ -1,4 +1,4 @@
-import { index, integer, jsonb, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";import { organizations } from "./tenancy";
+import { boolean, index, integer, jsonb, pgTable, primaryKey, real, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";import { organizations } from "./tenancy";
 import { users } from "./auth";
 import { notes } from "./notes";
 import { savedRecords } from "./records";
@@ -148,6 +148,40 @@ export const recordEmbeddings = pgTable("record_embeddings", {
   index("record_embeddings_record_idx").on(table.organizationId, table.savedRecordId),
   index("record_embeddings_model_idx").on(table.model),
 ]);
+/**
+ * A model provider that a person connects themselves.
+ *
+ * The key is held encrypted, and it is never sent back to the browser. The
+ * row follows the person rather than the workspace, because a key belongs to
+ * a person and not to a place they work in.
+ */
+export const aiConnections = pgTable("ai_connections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** What the person calls this connection. */
+  label: text("label").notNull(),
+  /** How the provider is talked to. */
+  kind: text("kind").notNull().$type<"openai-compatible" | "anthropic" | "gemini">(),
+  /** The provider it was set up from, such as `openai` or `ollama`. */
+  preset: text("preset").notNull().default("custom"),
+  /** Where the provider is. It is written by the person, so it is checked. */
+  baseUrl: text("base_url").notNull(),
+  /** The model that is asked. */
+  model: text("model").notNull(),
+  /** The key, encrypted. It is never held in plain text and never sent back. */
+  encryptedKey: text("encrypted_key"),
+  /** The last four of the key, so that a person can tell two keys apart. */
+  keyHint: text("key_hint"),
+  /** True for the connection that is used when nothing else is named. */
+  isDefault: boolean("is_default").notNull().default(false),
+  /** When the connection was last found to work. */
+  lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("ai_connections_user_idx").on(table.userId),
+]);
+
 export const noteAiPreviews = pgTable("note_ai_previews", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),

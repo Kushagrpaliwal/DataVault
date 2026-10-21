@@ -15,7 +15,7 @@ const tenantTables = [
 ];
 
 /** The tables that follow the person rather than the workspace. */
-const userTables = ["ai_credit_periods", "ai_credit_ledger", "ai_usage_events", "ai_consents", "note_ai_previews"];
+const userTables = ["ai_credit_periods", "ai_credit_ledger", "ai_usage_events", "ai_consents", "ai_connections", "note_ai_previews"];
 
 const sql = postgres(adminUrl(), { max: 1 });
 const rows = await sql`

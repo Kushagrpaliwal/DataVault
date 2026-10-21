@@ -22,7 +22,41 @@ export interface GeminiGenerateResult {
   cacheKey: string;
 }
 
-const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
+const GEMINI_ROOT = "https://generativelanguage.googleapis.com";
+
+/**
+ * The Google model a request is made to.
+ *
+ * The key and the model are given, so that the server's own key and the
+ * key of a person are asked in exactly the same way.
+ */
+export interface GeminiTarget {
+  apiKey: string;
+  model: string;
+  /** Where Google is. It is here so that a person may point it elsewhere. */
+  baseUrl?: URL;
+}
+
+/**
+ * Where the models are.
+ *
+ * Google keeps them under a version and a path, and the path is added
+ * here so that the address of a provider is only ever the root of it.
+ */
+function modelsEndpoint(base: URL): string {
+  return `${base.pathname.replace(/\/+$/, "")}/v1beta/models`;
+}
+
+/**
+ * The models Google offers.
+ */
+export async function listGeminiModels(baseUrl: URL, apiKey: string): Promise<string[]> {
+  const endpoint = new URL(`${modelsEndpoint(baseUrl)}`, baseUrl.origin);
+  const response = await fetch(endpoint, { headers: { "x-goog-api-key": apiKey, accept: "application/json" } });
+  if (!response.ok) throw new AppError(502, "AI_PROVIDER_FAILED", "Google did not answer with its list of models.");
+  const payload = await response.json() as { models?: { name?: string }[] };
+  return (payload.models ?? []).map((entry) => entry.name ?? "").filter(Boolean);
+}
 
 /**
  * A stable key for a request.
@@ -43,9 +77,21 @@ export async function cacheKeyFor(input: GeminiGenerateInput, model: string): Pr
  */
 export async function generateJson(env: ServerEnvironment, input: GeminiGenerateInput): Promise<GeminiGenerateResult> {
   if (!env.geminiApiKey) throw new AppError(503, "AI_NOT_AVAILABLE", "AI features are not switched on for this server yet.");
+  return generateJsonFor({ apiKey: env.geminiApiKey, model: env.GEMINI_MODEL }, {
+    ...input,
+    maxOutputTokens: Math.min(input.maxOutputTokens ?? env.AI_MAX_OUTPUT_TOKENS, env.AI_MAX_OUTPUT_TOKENS),
+  });
+}
 
-  const model = env.GEMINI_MODEL;
-  const maxOutputTokens = Math.min(input.maxOutputTokens ?? env.AI_MAX_OUTPUT_TOKENS, env.AI_MAX_OUTPUT_TOKENS);
+/**
+ * Ask a Google model for an answer.
+ *
+ * This is the same code the server's own key uses, with the key and the
+ * model of whoever is asking.
+ */
+export async function generateJsonFor(target: GeminiTarget, input: GeminiGenerateInput): Promise<GeminiGenerateResult> {
+  const model = target.model;
+  const maxOutputTokens = Math.min(input.maxOutputTokens ?? 400, 8_192);
   const body: Record<string, unknown> = {
     systemInstruction: { parts: [{ text: input.system }] },
     contents: [{ role: "user", parts: [{ text: input.contents }] }],
@@ -55,13 +101,20 @@ export async function generateJson(env: ServerEnvironment, input: GeminiGenerate
       ...(input.responseSchema ? { responseMimeType: "application/json", responseSchema: input.responseSchema } : {}),
     },
   };
+  const base = target.baseUrl ?? new URL(GEMINI_ROOT);
+  const endpoint = new URL(`${modelsEndpoint(base)}/${encodeURIComponent(model)}:generateContent`, base.origin);
 
   let response: Response;
   try {
-    response = await fetch(`${GEMINI_ENDPOINT}/${encodeURIComponent(model)}:generateContent`, {
+    response = await fetch(endpoint, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": env.geminiApiKey },
+      headers: { "content-type": "application/json", "x-goog-api-key": target.apiKey },
       body: JSON.stringify(body),
+      /**
+       * The call is given a time to live, so that a model that does not
+       * answer does not hold the server for ever.
+       */
+      signal: AbortSignal.timeout(120_000),
     });
   } catch {
     throw new AppError(502, "AI_UNREACHABLE", "The AI service could not be reached. Please try again.");
@@ -148,7 +201,8 @@ export async function embedText(env: ServerEnvironment, text: string, purpose: E
 
   let response: Response;
   try {
-    response = await fetch(`${GEMINI_ENDPOINT}/${encodeURIComponent(model)}:embedContent`, {
+    const endpoint = new URL(`${modelsEndpoint(new URL(GEMINI_ROOT))}/${encodeURIComponent(model)}:embedContent`, GEMINI_ROOT);
+    response = await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": env.geminiApiKey },
       body: JSON.stringify({

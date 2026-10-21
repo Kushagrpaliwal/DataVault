@@ -48,6 +48,14 @@ export const RATE_LIMITS = {
   /** AI calls, per user. */
   ai: { name: "ai", max: 5, windowSeconds: 60 },
   /**
+   * The AI on a selection.
+   *
+   * A person may try the same selection a few times, so it is a little
+   * larger than the budget for writing, and it is a budget of its own so
+   * that trying does not use up the writing allowance.
+   */
+  aiSelection: { name: "ai-selection", max: 10, windowSeconds: 60 },
+  /**
    * A search by meaning.
    *
    * Every one of these asks the model for the numbers of the question, so

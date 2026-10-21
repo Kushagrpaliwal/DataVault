@@ -3,6 +3,9 @@ import type {
   captureCreateSchema, loginSchema, noteSchema, noteSummarySchema, organizationCreateSchema, parsedCaptureSchema,
   registerSchema, savedRecordCreateSchema, savedRecordSchema, vaultCreateSchema,
 } from "@data-vault/schemas";
+import type { AiBlock, NoteAiAction, NoteAiContextMode } from "@data-vault/schemas";
+
+export type { AiBlock, NoteAiAction, NoteAiContextMode };
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -230,6 +233,32 @@ export interface AiCreditStatus {
   available: boolean;
   /** Why the AI features are unavailable, when they are. */
   reason: string | null;
+  /**
+   * The provider of the user, when they have connected one.
+   *
+   * Their own key is used instead of the shared one, so the words about
+   * credits and about Google do not apply to them.
+   */
+  ownConnection: { label: string; preset: string; model: string } | null;
+}
+
+/**
+ * A model provider that the user connects themselves.
+ *
+ * The key is write-only: it goes in and it is never sent back.
+ */
+export interface AiConnection {
+  id: string;
+  label: string;
+  kind: "openai-compatible" | "anthropic" | "gemini";
+  preset: string;
+  baseUrl: string;
+  model: string;
+  /** The last four of the key, such as `…4f2a`. */
+  keyHint: string | null;
+  isDefault: boolean;
+  lastVerifiedAt: string | null;
+  createdAt: string;
 }
 
 export interface AiActivityEntry {

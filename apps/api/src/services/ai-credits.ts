@@ -6,6 +6,7 @@ import {
 import type { ServerEnvironment } from "@data-vault/config";
 import { AppError } from "../lib/errors";
 import { pacificDayEnd, pacificDayStart } from "../lib/pacific";
+import { ownConnectionSummary } from "./ai-connections";
 
 export interface CreditContext {
   userId: string;
@@ -32,6 +33,13 @@ export interface CreditStatus {
   available: boolean;
   /** Why the AI features are unavailable, when they are. */
   reason: string | null;
+  /**
+   * The provider of the user, when they have connected one.
+   *
+   * Their own key is used instead of the shared one, so the words about
+   * credits and about Google do not apply to them.
+   */
+  ownConnection: { label: string; preset: string; model: string } | null;
 }
 
 /**
@@ -182,6 +190,7 @@ export async function readCreditStatus(env: ServerEnvironment, context: CreditCo
     consented: Boolean(consent),
     available,
     reason,
+    ownConnection: await ownConnectionSummary(context.userId).catch(() => null),
   };
 }
 

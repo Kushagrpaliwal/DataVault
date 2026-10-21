@@ -74,6 +74,86 @@ export const noteRevisionRestoreSchema = z.object({
   noteId: uuidSchema,
 });
 
+/**
+ * What the AI is asked to do with a selection.
+ *
+ * The actions are the ones people ask for most: put the rough notes into
+ * sections, make a table out of them, make a list, make a checklist,
+ * summarise, finish what was started, tidy the writing, translate it, or
+ * do what the instruction says.
+ */
+export const noteAiActionSchema = z.enum([
+  "arrange", "table", "list", "checklist", "summarize", "complete", "clean-up", "translate", "custom",
+]);
+
+/**
+ * How much the AI is allowed to use.
+ *
+ * The person chooses this each time, and the choice is shown before
+ * anything is sent.
+ */
+export const noteAiContextModeSchema = z.enum(["selection", "knowledge", "sources"]);
+
+export const noteAiSelectionSchema = z.object({
+  action: noteAiActionSchema,
+  /**
+   * What the person asked for, in their own words.
+   *
+   * It is needed for a custom instruction and for a translation, because
+   * there is no other way to say what they want.
+   */
+  instruction: z.string().trim().max(500).optional(),
+  selection: z.object({
+    /** The selection, as Markdown. */
+    markdown: z.string().max(60_000),
+    /** The pieces of web pages that are in the selection. */
+    clips: z.array(z.object({
+      clipId: z.string().max(120),
+      text: z.string().max(20_000),
+    })).max(200).default([]),
+  }),
+  context: z.object({
+    mode: noteAiContextModeSchema.default("selection"),
+    /**
+     * The saved items the person chose.
+     *
+     * They are read on the server, in the workspace of the person, so that
+     * an item of another workspace can never be sent.
+     */
+    recordIds: z.array(uuidSchema).max(10).default([]),
+  }).default({ mode: "selection", recordIds: [] }),
+}).refine(
+  (value) => value.action !== "custom" && value.action !== "translate" ? true : Boolean(value.instruction),
+  { message: "Say what you want in the instruction box.", path: ["instruction"] },
+);
+
+export type NoteAiAction = z.infer<typeof noteAiActionSchema>;
+export type NoteAiContextMode = z.infer<typeof noteAiContextModeSchema>;
+export type NoteAiSelectionInput = z.infer<typeof noteAiSelectionSchema>;
+
+/**
+ * The blocks an answer is made of.
+ *
+ * The answer is never markup and never a link, because a model can write a
+ * link that goes somewhere it should not. It is a list of blocks, and the
+ * browser turns them into the editor's own shape.
+ */
+export const aiBlockSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("heading"), level: z.number().int().min(1).max(4).default(2), text: z.string().max(300), added: z.boolean().optional() }),
+  z.object({ type: z.literal("paragraph"), text: z.string().max(20_000), added: z.boolean().optional() }),
+  z.object({ type: z.literal("bullets"), items: z.array(z.string().max(2_000)).max(200), added: z.boolean().optional() }),
+  z.object({ type: z.literal("numbered"), items: z.array(z.string().max(2_000)).max(200), added: z.boolean().optional() }),
+  z.object({ type: z.literal("checklist"), items: z.array(z.object({ text: z.string().max(2_000), done: z.boolean().default(false) })).max(200), added: z.boolean().optional() }),
+  z.object({ type: z.literal("table"), header: z.array(z.string().max(200)).max(30), rows: z.array(z.array(z.string().max(2_000)).max(30)).max(200), added: z.boolean().optional() }),
+  z.object({ type: z.literal("quote"), text: z.string().max(20_000), added: z.boolean().optional() }),
+  z.object({ type: z.literal("clip"), clipId: z.string().max(120), added: z.boolean().optional() }),
+]);
+
+export const aiBlocksSchema = z.object({ blocks: z.array(aiBlockSchema).max(500) });
+
+export type AiBlock = z.infer<typeof aiBlockSchema>;
+export type AiBlocks = z.infer<typeof aiBlocksSchema>;
+
 export const noteSchema = z.object({
   id: uuidSchema,
   organizationId: uuidSchema,

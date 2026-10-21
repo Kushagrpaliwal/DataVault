@@ -1,3 +1,4 @@
+export * from "./ai-connections";
 export * from "./auth";
 export * from "./captures";
 export * from "./common";
