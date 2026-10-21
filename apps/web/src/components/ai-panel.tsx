@@ -23,6 +23,21 @@ export function useAiCredits() {
 export function AiCreditBadge() {
   const credits = useAiCredits();
   if (!credits.data?.available) return null;
+  /**
+   * A provider of their own answers instead of the shared one, so the
+   * words about credits do not apply to them.
+   */
+  if (credits.data.ownConnection) {
+    return (
+      <span
+        title={`Using your own key · ${credits.data.ownConnection.model}`}
+        className="flex items-center gap-1.5 rounded-full bg-soft px-2.5 py-1 text-xs font-medium text-strong"
+      >
+        <Sparkles className="size-3.5" />
+        Your AI
+      </span>
+    );
+  }
   const locked = !credits.data.emailVerified || !credits.data.consented;
   if (locked) {
     return (
@@ -162,7 +177,12 @@ export function AiPanel({ content, recordId, onApply }: AiPanelProps) {
   const locked = status?.available === false;
   const reason = status?.reason;
   const remaining = status?.remaining ?? 0;
-  const needsConsent = status?.available === true && !status.consented && !declined;
+  /**
+   * A provider of their own answers, so the agreement to send content to
+   * Google does not apply to them.
+   */
+  const own = status?.ownConnection;
+  const needsConsent = status?.available === true && !own && !status.consented && !declined;
 
   if (needsConsent) {
     return (
@@ -195,20 +215,22 @@ export function AiPanel({ content, recordId, onApply }: AiPanelProps) {
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-semibold">AI help</h2>
           <p className="mt-1 text-sm leading-6 text-muted">
-            {locked
-              ? reason
-              : remaining > 0
-                ? `Summarise this, suggest a type and tags, or pull out the details. ${remaining} free ${remaining === 1 ? "credit" : "credits"} left today.`
-                : "You have used all of today's free AI credits. They come back when the day rolls over."}
+            {own
+              ? `Summarise this, suggest a type and tags, or pull out the details. Your own key is used, so no credit is spent.`
+              : locked
+                ? reason
+                : remaining > 0
+                  ? `Summarise this, suggest a type and tags, or pull out the details. ${remaining} free ${remaining === 1 ? "credit" : "credits"} left today.`
+                  : "You have used all of today's free AI credits. They come back when the day rolls over."}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button size="sm" disabled={locked || remaining <= 0 || run.isPending} onClick={() => run.mutate("summarize")}>
+            <Button size="sm" disabled={locked || (!own && remaining <= 0) || run.isPending} onClick={() => run.mutate("summarize")}>
               <Wand2 className="size-4" />Summarise
             </Button>
-            <Button size="sm" variant="secondary" disabled={locked || remaining <= 0 || run.isPending} onClick={() => run.mutate("classify")}>
+            <Button size="sm" variant="secondary" disabled={locked || (!own && remaining <= 0) || run.isPending} onClick={() => run.mutate("classify")}>
               Suggest a type
             </Button>
-            <Button size="sm" variant="secondary" disabled={locked || remaining <= 0 || run.isPending} onClick={() => run.mutate("extract")}>
+            <Button size="sm" variant="secondary" disabled={locked || (!own && remaining <= 0) || run.isPending} onClick={() => run.mutate("extract")}>
               Pull out details
             </Button>
           </div>

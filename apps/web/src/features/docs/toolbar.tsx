@@ -2,10 +2,11 @@ import { useState } from "react";
 import type { Editor } from "@tiptap/react";
 import {
   Bold, ChevronDown, Code, Highlighter, Italic, Link2, List,
-  ListChecks, ListOrdered, Minus, Palette, Quote, Redo2, Strikethrough, Table2, Underline,
+  ListChecks, ListOrdered, Minus, Palette, Quote, Redo2, Sparkles, Strikethrough, Table2, Underline,
   Undo2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Eraser,
 } from "lucide-react";
 import { cn } from "@data-vault/ui";
+import { useDocAi } from "./ai-assist";
 
 const FONT_FAMILIES = [
   { label: "Default", value: "" },
@@ -41,6 +42,7 @@ interface ToolbarProps {
  */
 export function DocToolbar({ editor, inTable = false }: ToolbarProps) {
   const [showColours, setShowColours] = useState(false);
+  const ai = useDocAi();
   if (!editor) return null;
 
   const heading = editor.isActive("heading", { level: 1 }) ? 1 : editor.isActive("heading", { level: 2 }) ? 2 : editor.isActive("heading", { level: 3 }) ? 3 : 0;
@@ -75,6 +77,7 @@ export function DocToolbar({ editor, inTable = false }: ToolbarProps) {
     <div className="flex flex-wrap items-center gap-1 border-b border-line bg-surface px-3 py-2 text-sm">
       <ToolButton label="Undo" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()}><Undo2 className="size-4" /></ToolButton>
       <ToolButton label="Redo" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()}><Redo2 className="size-4" /></ToolButton>
+      {ai.ready ? <ToolButton label="Ask the AI" onClick={() => ai.openAi()}><Sparkles className="size-4" /></ToolButton> : null}
       <Separator />
 
       <Select label="Style" value={String(heading)} onChange={(value) => {

@@ -7,6 +7,7 @@ import { useAuth } from "../../lib/auth";
 import { PageHeader } from "../../components/page";
 import { useToast } from "../../components/feedback";
 import { ImportPanel } from "./import-panel";
+import { AiConnectionsPanel } from "./ai-connections-panel";
 import { setTheme as chooseTheme, storedTheme, type Theme } from "../../lib/theme";
 
 export function SettingsPage() {
@@ -114,14 +115,18 @@ export function SettingsPage() {
             <div className="min-w-0 flex-1">
               <h2 className="text-lg font-semibold">Free AI credits</h2>
               <p className="mt-1 text-sm leading-6 text-muted">
-                {credits.data
-                  ? `${credits.data.remaining} of ${credits.data.allowance} left today. Your allowance refreshes when the day rolls over.`
-                  : "Checking your allowance…"}
+                {credits.data?.ownConnection
+                  ? `The AI is answered by your own key · ${credits.data.ownConnection.model}. The free credits are not used.`
+                  : credits.data
+                    ? `${credits.data.remaining} of ${credits.data.allowance} left today. Your allowance refreshes when the day rolls over.`
+                    : "Checking your allowance…"}
               </p>
               {credits.data?.reason ? <p className="mt-2 text-sm font-medium text-amber-800 dark:text-amber-200">{credits.data.reason}</p> : null}
             </div>
           </div>
         </section>
+
+        <AiConnectionsPanel />
 
         <ImportPanel />
 

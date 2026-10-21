@@ -301,6 +301,7 @@ export function DocsPage() {
                 version={selected.version}
                 arrangeMode={selected.arrangeMode}
                 isCurrent={Boolean(isCurrent)}
+                noteId={selected.id}
                 onTitleChange={(title) => { void api.updateNote(id, { title }); }}
                 onIconChange={(icon) => { void api.updateNote(id, { icon }); }}
                 onSave={async (content, baseVersion) => {

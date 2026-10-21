@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import {
   CheckSquare, Code, Eraser, Heading1, Heading2, Heading3, Image as ImageIcon, Link2, List, ListOrdered,
-  Minus, Quote, Table2, Type,
+  Minus, Quote, Sparkles, Table2, Type,
 } from "lucide-react";
 import { cn } from "@data-vault/ui";
+import { useDocAi } from "./ai-assist";
 
 interface SlashCommand {
   id: string;
@@ -30,6 +31,7 @@ const COMMANDS: SlashCommand[] = [
     if (address?.trim() && /^https:\/\//i.test(address.trim())) editor.chain().focus().setImage({ src: address.trim() }).run();
   } },
   { id: "table", label: "Table", hint: "A grid of cells", icon: <Table2 className="size-4" />, run: (editor) => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+  { id: "ai", label: "AI", hint: "Ask the AI about this block", icon: <Sparkles className="size-4" />, run: () => undefined },
 ];
 
 function filtered(term: string) {
@@ -49,6 +51,7 @@ export function SlashMenu({ editor }: { editor: Editor | null }) {
   const [term, setTerm] = useState("");
   const [index, setIndex] = useState(0);
   const [position, setPosition] = useState({ top: 0, left: 0 });
+  const ai = useDocAi();
 
   useEffect(() => {
     if (!editor) return;
@@ -85,7 +88,16 @@ export function SlashMenu({ editor }: { editor: Editor | null }) {
   const choose = (command: SlashCommand) => {
     if (!editor) return;
     editor.chain().focus().deleteRange({ from: editor.state.selection.from - term.length - 1, to: editor.state.selection.from }).run();
-    command.run(editor);
+    /**
+     * The AI works on a part of the doc, and the command knows which part:
+     * the block the cursor is in.
+     */
+    if (command.id === "ai") {
+      const { $from } = editor.state.selection;
+      ai.openAi({ from: $from.start(), to: $from.end() });
+    } else {
+      command.run(editor);
+    }
     setOpen(false);
     setTerm("");
     setIndex(0);
@@ -149,6 +161,7 @@ export function SlashMenu({ editor }: { editor: Editor | null }) {
  * It holds the things people reach for most often while writing.
  */
 export function SelectionMenu({ editor }: { editor: Editor | null }) {
+  const ai = useDocAi();
   if (!editor) return null;
   const setLink = () => {
     const current = editor.getAttributes("link").href as string | undefined;
@@ -168,6 +181,7 @@ export function SelectionMenu({ editor }: { editor: Editor | null }) {
       <BubbleButton label="Underline" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}><span className="text-xs underline">U</span></BubbleButton>
       <BubbleButton label="Highlight" active={editor.isActive("highlight")} onClick={() => editor.chain().focus().toggleHighlight({ color: "#fff3a3" }).run()}><span className="rounded bg-[#fff3a3] px-1 text-[10px]">H</span></BubbleButton>
       <BubbleButton label="Link" active={editor.isActive("link")} onClick={setLink}><Link2 className="size-3.5" /></BubbleButton>
+      {ai.ready ? <BubbleButton label="Ask the AI" onClick={() => ai.openAi()}><Sparkles className="size-3.5" /></BubbleButton> : null}
       <BubbleButton label="Clear" onClick={() => editor.chain().focus().unsetAllMarks().run()}><Eraser className="size-3.5" /></BubbleButton>
     </div>
   );

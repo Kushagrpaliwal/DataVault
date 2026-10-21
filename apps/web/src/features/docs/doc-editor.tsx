@@ -10,6 +10,7 @@ import { GripVertical, Star } from "lucide-react";
 import { Button } from "@data-vault/ui";
 import { DocToolbar } from "./toolbar";
 import { SelectionMenu, SlashMenu } from "./slash-menu";
+import { DocAiProvider } from "./ai-assist";
 import { DocOutline } from "./outline";
 import { ClipNodeView } from "./clip-node-view";
 import { SectionHeadingView } from "./section-heading-view";
@@ -46,6 +47,8 @@ interface DocEditorProps {
   arrangeMode: ArrangeMode;
   /** True when this doc is the one the extension adds to. */
   isCurrent: boolean;
+  /** The doc this is, so that the AI may be asked about it. */
+  noteId?: string | undefined;
   onTitleChange: (title: string) => void;
   onIconChange: (icon: string | null) => void;
   onSave: (content: JSONContent, baseVersion: number) => Promise<number>;
@@ -61,7 +64,7 @@ interface DocEditorProps {
  * word processor shows it.
  */
 export function DocEditor({
-  title, icon, content, version, arrangeMode, isCurrent,
+  title, icon, content, version, arrangeMode, isCurrent, noteId,
   onTitleChange, onIconChange, onSave, onConflict, onMakeCurrent,
 }: DocEditorProps) {
   const [dirty, setDirty] = useState(false);
@@ -174,80 +177,82 @@ export function DocEditor({
   }, [conflict?.latestVersion]);
 
   return (
-    <div className="flex min-h-0 flex-1 gap-6">
-      <div className="min-w-0 flex-1">
-        <div className="sticky top-0 z-20">
-          <DocToolbar editor={editor} />
-          <div className="flex items-center justify-between gap-3 border-b border-line bg-canvas/95 px-3 py-2 text-xs text-muted backdrop-blur">
-            <SaveBadge status={autosave.status} error={autosave.error} />
-            <div className="flex items-center gap-2">
-              {isCurrent ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#dce9e5] px-2.5 py-1 font-medium text-deep-text"><Star className="size-3" />Current doc for the extension</span>
-              ) : onMakeCurrent ? (
-                <button onClick={onMakeCurrent} className="rounded-full border border-line px-2.5 py-1 font-medium hover:bg-soft">Use as the extension's doc</button>
-              ) : null}
+    <DocAiProvider noteId={noteId} editor={editor}>
+      <div className="flex min-h-0 flex-1 gap-6">
+        <div className="min-w-0 flex-1">
+          <div className="sticky top-0 z-20">
+            <DocToolbar editor={editor} />
+            <div className="flex items-center justify-between gap-3 border-b border-line bg-canvas/95 px-3 py-2 text-xs text-muted backdrop-blur">
+              <SaveBadge status={autosave.status} error={autosave.error} />
+              <div className="flex items-center gap-2">
+                {isCurrent ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#dce9e5] px-2.5 py-1 font-medium text-deep-text"><Star className="size-3" />Current doc for the extension</span>
+                ) : onMakeCurrent ? (
+                  <button onClick={onMakeCurrent} className="rounded-full border border-line px-2.5 py-1 font-medium hover:bg-soft">Use as the extension's doc</button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          {conflict ? (
+            <div className="mx-auto mt-4 max-w-[860px] px-4">
+              <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 p-4 text-sm text-amber-900 dark:text-amber-100">
+                <span className="flex-1">This doc was changed somewhere else. Which version should be kept?</span>
+                <Button size="sm" variant="secondary" onClick={() => resolveConflict("mine")}>Keep mine</Button>
+                <Button size="sm" variant="secondary" onClick={() => resolveConflict("theirs")}>Load theirs</Button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mx-auto mt-6 max-w-[860px] px-4 pb-24">
+            <div className="rounded-2xl border border-line bg-surface px-10 py-12 shadow-[0_1px_3px_rgba(0,0,0,.04)] md:px-16">
+              <div className="flex items-start gap-3">
+                <button
+                  title="Change the icon"
+                  aria-label="Change the icon"
+                  onClick={() => {
+                    const next = window.prompt("Pick an emoji for this doc", icon ?? "📄");
+                    if (next !== null) onIconChange(next.trim() || null);
+                  }}
+                  className="mt-1 grid size-12 shrink-0 place-items-center rounded-xl bg-soft text-2xl"
+                >
+                  {icon ?? "📄"}
+                </button>
+                <textarea
+                  value={titleValue}
+                  onChange={(event) => { setTitleValue(event.target.value); onTitleChange(event.target.value); }}
+                  onBlur={() => { setDirty(true); }}
+                  rows={1}
+                  aria-label="Title of the doc"
+                  placeholder="Untitled doc"
+                  className="w-full resize-none overflow-hidden border-0 bg-transparent text-4xl font-semibold leading-tight tracking-tight outline-none placeholder:text-[#c4c4c4]"
+                />
+              </div>
+
+              <div className="mt-6">
+                <EditorContent editor={editor} />
+              </div>
             </div>
           </div>
         </div>
 
-        {conflict ? (
-          <div className="mx-auto mt-4 max-w-[860px] px-4">
-            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 p-4 text-sm text-amber-900 dark:text-amber-100">
-              <span className="flex-1">This doc was changed somewhere else. Which version should be kept?</span>
-              <Button size="sm" variant="secondary" onClick={() => resolveConflict("mine")}>Keep mine</Button>
-              <Button size="sm" variant="secondary" onClick={() => resolveConflict("theirs")}>Load theirs</Button>
-            </div>
-          </div>
+        <DocOutline editor={editor} />
+
+        {editor ? (
+          <>
+            <BubbleMenu editor={editor} options={{ placement: "top" }}>
+              <SelectionMenu editor={editor} />
+            </BubbleMenu>
+            <DragHandle editor={editor}>
+              <span className="grid size-6 cursor-grab place-items-center rounded-md bg-soft text-muted shadow-sm">
+                <GripVertical className="size-3.5" />
+              </span>
+            </DragHandle>
+            <SlashMenu editor={editor} />
+          </>
         ) : null}
-
-        <div className="mx-auto mt-6 max-w-[860px] px-4 pb-24">
-          <div className="rounded-2xl border border-line bg-surface px-10 py-12 shadow-[0_1px_3px_rgba(0,0,0,.04)] md:px-16">
-            <div className="flex items-start gap-3">
-              <button
-                title="Change the icon"
-                aria-label="Change the icon"
-                onClick={() => {
-                  const next = window.prompt("Pick an emoji for this doc", icon ?? "📄");
-                  if (next !== null) onIconChange(next.trim() || null);
-                }}
-                className="mt-1 grid size-12 shrink-0 place-items-center rounded-xl bg-soft text-2xl"
-              >
-                {icon ?? "📄"}
-              </button>
-              <textarea
-                value={titleValue}
-                onChange={(event) => { setTitleValue(event.target.value); onTitleChange(event.target.value); }}
-                onBlur={() => { setDirty(true); }}
-                rows={1}
-                aria-label="Title of the doc"
-                placeholder="Untitled doc"
-                className="w-full resize-none overflow-hidden border-0 bg-transparent text-4xl font-semibold leading-tight tracking-tight outline-none placeholder:text-[#c4c4c4]"
-              />
-            </div>
-
-            <div className="mt-6">
-              <EditorContent editor={editor} />
-            </div>
-          </div>
-        </div>
       </div>
-
-      <DocOutline editor={editor} />
-
-      {editor ? (
-        <>
-          <BubbleMenu editor={editor} options={{ placement: "top" }}>
-            <SelectionMenu editor={editor} />
-          </BubbleMenu>
-          <DragHandle editor={editor}>
-            <span className="grid size-6 cursor-grab place-items-center rounded-md bg-soft text-muted shadow-sm">
-              <GripVertical className="size-3.5" />
-            </span>
-          </DragHandle>
-          <SlashMenu editor={editor} />
-        </>
-      ) : null}
-    </div>
+    </DocAiProvider>
   );
 }
 
