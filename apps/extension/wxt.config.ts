@@ -78,6 +78,13 @@ export default defineConfig({
     /**
      * The keyboard shortcuts.
      *
+     * There are three of them, and each one saves something: the text goes
+     * into a doc, or it starts a doc of its own, or it is saved on its own.
+     * The action of the toolbar button is not one of them, because it saves
+     * nothing: it opens the panel, which the button in the toolbar already
+     * does. Leaving it out keeps the page where the keys are chosen short
+     * and free of a row that says nothing.
+     *
      * Ctrl+Shift+P is left alone because Edge opens InPrivate with it, and
      * Ctrl+Shift+N is left alone because Chrome uses it for Incognito.
      * Ctrl+Shift+D and Ctrl+Shift+A are left alone too, because Chrome keeps
@@ -85,9 +92,9 @@ export default defineConfig({
      * hand one of those to an extension by itself, and it can take it back, so
      * a shortcut on one of those keys may never arrive.
      *
-     * Chrome allows at most four suggested keys, and there are four
+     * Chrome allows at most four suggested keys, and there are three
      * commands, so each one is given a key of its own. Every one of these
-     * keys was watched being handed to an extension by Chrome, so all four
+     * keys was watched being handed to an extension by Chrome, so all three
      * can be filled in.
      *
      * Chrome only fills them in the first time the extension is installed,
@@ -96,20 +103,17 @@ export default defineConfig({
      * each command has, and offers a free one when it has none.
      */
     commands: {
-      "_execute_action": {
-        suggested_key: { default: "Alt+Shift+O", mac: "Alt+Shift+O" },
-      },
       "add-to-doc": {
         suggested_key: { default: "Alt+Shift+D", mac: "Alt+Shift+D" },
-        description: "Add the selected text to the current doc.",
+        description: "Adds the selected text to the current doc.",
       },
       "new-doc": {
         suggested_key: { default: "Alt+Shift+F", mac: "Alt+Shift+F" },
-        description: "Start a new doc. Following clips go into it.",
+        description: "Starts a new doc for the pieces that follow.",
       },
       "save-as-item": {
         suggested_key: { default: "Alt+Shift+S", mac: "Alt+Shift+S" },
-        description: "Save the selected text as a separate saved item.",
+        description: "Saves the selected text as its own item.",
       },
     },
   }),

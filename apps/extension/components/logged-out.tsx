@@ -32,9 +32,9 @@ export function LoggedOut({ onSignedIn, capturePending = false }: { onSignedIn: 
 
   return (
     <div className="flex min-h-72 flex-col items-center justify-center p-7 text-center">
-      <span className="grid size-14 place-items-center rounded-2xl bg-[#b8a4ed]">{capturePending ? <ScanText className="size-6" /> : <KeyRound className="size-6" />}</span>
+      <span className="grid size-14 place-items-center rounded-2xl bg-lavender text-deep">{capturePending ? <ScanText className="size-6" /> : <KeyRound className="size-6" />}</span>
       <h2 className="mt-5 text-xl font-semibold">{capturePending ? "Sign in to save" : "Connect DataVault"}</h2>
-      <p className="mt-2 text-sm leading-6 text-[#6a6a6a]">
+      <p className="mt-2 text-sm leading-6 text-muted">
         {capturePending
           ? "Your selected text is waiting safely in this browser. Sign in, then check it and save."
           : "Sign in on the DataVault website. Your password never reaches the extension."}

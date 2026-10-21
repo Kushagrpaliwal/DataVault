@@ -5,17 +5,16 @@ import { chromeOwnsShortcut, formatShortcut, recommendShortcut, sameShortcut } f
  * The shortcuts DataVault offers.
  *
  * The identifiers match the manifest, so the browser reports them under the
- * same names. The action of the toolbar button is one of them as well: Chrome
- * adds it on its own, and it is the one that opens the panel.
+ * same names.
+ *
+ * There are three of them, and each one saves something. The action of the
+ * toolbar button is not one of them: it opens the panel and saves nothing,
+ * and the button in the toolbar already does that.
  */
-export const ACTION_COMMAND_ID = "_execute_action";
-
 export interface CommandDescription {
   id: string;
   /** What the shortcut is called in the interface. */
   label: string;
-  /** Where the shortcut sends the selected text. */
-  hint: string;
   /** The key the extension would like this command to have. */
   preferred: string;
 }
@@ -23,17 +22,16 @@ export interface CommandDescription {
 /**
  * What each shortcut does.
  *
- * The wording says where the text ends up, because "save" means two
- * different things here: a doc, or the Saved list.
+ * The name says where the text ends up, because "save" means two different
+ * things here: a doc, or the Saved list.
  *
  * The order is the order Chrome shows them in. The keys are ones Chrome is
- * known to hand out, so all four can be filled in.
+ * known to hand out, so all three can be filled in.
  */
 export const COMMANDS: CommandDescription[] = [
-  { id: ACTION_COMMAND_ID, label: "Open DataVault", hint: "Opens the panel without saving anything.", preferred: "Alt+Shift+O" },
-  { id: "add-to-doc", label: "Add to the current doc", hint: "Puts the selected text into your doc.", preferred: "Alt+Shift+D" },
-  { id: "new-doc", label: "Start a new doc", hint: "The pieces that follow go into a new doc.", preferred: "Alt+Shift+F" },
-  { id: "save-as-item", label: "Save as a separate item", hint: "Puts the selected text in your Saved list.", preferred: "Alt+Shift+S" },
+  { id: "add-to-doc", label: "Add to the current doc", preferred: "Alt+Shift+D" },
+  { id: "new-doc", label: "Start a new doc", preferred: "Alt+Shift+F" },
+  { id: "save-as-item", label: "Save as a separate item", preferred: "Alt+Shift+S" },
 ];
 
 export interface CommandState extends CommandDescription {

@@ -124,8 +124,8 @@ export function DocsView({ onSignedOut }: { onSignedOut?: () => void }) {
 
   return (
     <div className="p-4">
-      <div className="rounded-2xl bg-[#1a3a3a] p-4 text-white">
-        <p className="text-xs font-semibold uppercase tracking-[.13em] text-[#a4d4c5]">Current doc</p>
+      <div className="rounded-2xl bg-deep p-4 text-white">
+        <p className="text-xs font-semibold uppercase tracking-[.13em] text-on-deep">Current doc</p>
         <EditableTitle
           title={current.title ?? "No doc yet"}
           disabled={!current.noteId}
@@ -149,14 +149,14 @@ export function DocsView({ onSignedOut }: { onSignedOut?: () => void }) {
       </div>
 
       <div className="mt-4">
-        <label htmlFor="quick-add" className="text-xs font-semibold uppercase tracking-[.13em] text-[#6a6a6a]">Quick add</label>
+        <label htmlFor="quick-add" className="text-xs font-semibold uppercase tracking-[.13em] text-muted">Quick add</label>
         <textarea
           id="quick-add"
           value={body}
           onChange={(event) => setBody(event.target.value)}
           rows={3}
           placeholder="Type a thought and add it to the doc…"
-          className="mt-2 w-full rounded-xl border border-[#ded8ca] bg-white p-3 text-sm outline-none focus:border-[#1a3a3a]"
+          className="mt-2 w-full rounded-xl border border-line-strong bg-surface p-3 text-sm outline-none focus:border-deep"
         />
         <div className="mt-2 grid grid-cols-2 gap-2">
           <Button size="sm" disabled={busy || !body.trim()} onClick={() => void quickAdd()}>{busy ? "Adding…" : "Add to doc"}</Button>
@@ -165,8 +165,8 @@ export function DocsView({ onSignedOut }: { onSignedOut?: () => void }) {
       </div>
 
       {currentHtml ? (
-        <details className="mt-4 rounded-2xl border border-[#e5dfd1] bg-white p-3" open>
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[.13em] text-[#6a6a6a]">Read the doc</summary>
+        <details className="mt-4 rounded-2xl border border-line bg-surface p-3" open>
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[.13em] text-muted">Read the doc</summary>
           <div className="datavault-prose mt-3 text-sm" dangerouslySetInnerHTML={{ __html: currentHtml }} />
         </details>
       ) : null}
@@ -175,7 +175,7 @@ export function DocsView({ onSignedOut }: { onSignedOut?: () => void }) {
 
       <div className="mt-5">
         <div className="relative">
-          <Search className="absolute left-3 top-3 size-4 text-[#6a6a6a]" />
+          <Search className="absolute left-3 top-3 size-4 text-muted" />
           <Input className="pl-9" value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Find a doc…" />
         </div>
         <ul className="mt-3 space-y-1">
@@ -183,13 +183,13 @@ export function DocsView({ onSignedOut }: { onSignedOut?: () => void }) {
             <li key={doc.id} className="flex items-center gap-1">
               <button
                 onClick={() => void choose(doc.id)}
-                className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-[#f5f0e0]"
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-soft"
                 title={doc.id === current.noteId ? "This is the current doc" : "Make this the current doc"}
               >
                 <span className="text-base">{doc.icon ?? "📄"}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{doc.title}</span>
-                  <span className="block truncate text-xs text-[#6a6a6a]">{doc.clipCount} pieces</span>
+                  <span className="block truncate text-xs text-muted">{doc.clipCount} pieces</span>
                 </span>
               </button>
               {/**
@@ -201,13 +201,13 @@ export function DocsView({ onSignedOut }: { onSignedOut?: () => void }) {
                 title={doc.id === current.noteId ? "This is the current doc" : "Make this the current doc"}
                 aria-label={doc.id === current.noteId ? `${doc.title} is the current doc` : `Make ${doc.title} the current doc`}
                 aria-pressed={doc.id === current.noteId}
-                className={cn("grid size-7 shrink-0 place-items-center rounded-lg text-[#6a6a6a] hover:bg-[#f5f0e0]", doc.id === current.noteId ? "text-[#1a3a3a]" : "opacity-60")}
+                className={cn("grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-soft", doc.id === current.noteId ? "text-deep" : "opacity-60")}
               >
                 <Star className={cn("size-3.5", doc.id === current.noteId && "fill-current")} />
               </button>
               <button
                 onClick={() => void browser.tabs.create({ url: `${WEB_URL}/docs/${doc.id}` })}
-                className="grid size-8 shrink-0 place-items-center rounded-lg text-[#6a6a6a] hover:bg-[#f5f0e0]"
+                className="grid size-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-soft"
                 title="Open in DataVault"
                 aria-label={`Open ${doc.title} in DataVault`}
               >
@@ -216,13 +216,13 @@ export function DocsView({ onSignedOut }: { onSignedOut?: () => void }) {
             </li>
           ))}
           {!visible.length ? (
-            <li className="flex items-center gap-2 px-2 py-4 text-sm text-[#6a6a6a]"><FileText className="size-4" />No docs yet.</li>
+            <li className="flex items-center gap-2 px-2 py-4 text-sm text-muted"><FileText className="size-4" />No docs yet.</li>
           ) : null}
         </ul>
       </div>
 
       {lastClip ? (
-        <p className="mt-4 flex items-center gap-2 text-xs text-[#6a6a6a]">
+        <p className="mt-4 flex items-center gap-2 text-xs text-muted">
           <RotateCcw className="size-3.5" />The last note can still be taken back out.
         </p>
       ) : null}

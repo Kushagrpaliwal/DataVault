@@ -199,22 +199,22 @@ export function PopupApp() {
   };
 
   return (
-    <main className="w-[360px] bg-[#fffaf0]">
+    <main className="w-[360px] bg-canvas">
       <ExtensionHeader />
       {authenticated === false ? (
         <LoggedOut onSignedIn={() => void load()} />
       ) : authenticated === null ? (
-        <div className="p-8 text-center text-sm text-[#6a6a6a]">Opening DataVault…</div>
+        <div className="p-8 text-center text-sm text-muted">Opening DataVault…</div>
       ) : (
         <>
           <AiCreditStrip />
 
-          <section className="space-y-2 border-b border-[#e5dfd1] p-4">
-            <div className="rounded-2xl bg-[#1a3a3a] p-4 text-white">
+          <section className="space-y-2 border-b border-line p-4">
+            <div className="rounded-2xl bg-deep p-4 text-white">
               <div className="flex items-start gap-3">
-                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/10"><FileText className="size-4" /></span>
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-surface/10"><FileText className="size-4" /></span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold uppercase tracking-[.13em] text-[#a4d4c5]">Current doc</p>
+                  <p className="text-xs font-semibold uppercase tracking-[.13em] text-on-deep">Current doc</p>
                   <EditableTitle
                     title={currentDoc?.title ?? "No doc yet"}
                     disabled={!currentDoc}
@@ -259,15 +259,15 @@ export function PopupApp() {
           </section>
 
           <section className="space-y-2 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[.13em] text-[#6a6a6a]">Save as a separate item</p>
-            <div className="rounded-2xl border border-[#e5dfd1] bg-white p-3">
-              <label htmlFor="popup-folder" className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.13em] text-[#6a6a6a]">
+            <p className="text-xs font-semibold uppercase tracking-[.13em] text-muted">Save as a separate item</p>
+            <div className="rounded-2xl border border-line bg-surface p-3">
+              <label htmlFor="popup-folder" className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.13em] text-muted">
                 <FolderOpen className="size-3.5" />
                 Save into
               </label>
               <select
                 id="popup-folder"
-                className="mt-2 h-11 w-full rounded-xl border border-[#ded8ca] bg-white px-3 text-sm"
+                className="mt-2 h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm"
                 value={folderId}
                 onChange={(event) => void chooseFolder(event.target.value)}
               >
@@ -279,7 +279,7 @@ export function PopupApp() {
                   ))
                   : <option value="">The default folder</option>}
               </select>
-              <p className="mt-1 text-xs leading-5 text-[#6a6a6a]">
+              <p className="mt-1 text-xs leading-5 text-muted">
                 The folder new items go into. It is the same folder you have on the website, and it is remembered for next time.
               </p>
             </div>
@@ -298,7 +298,7 @@ export function PopupApp() {
               {busy === "selection" ? "Saving…" : "Save highlighted text"}
             </Button>
             {!selection ? (
-              <p className="px-1 text-xs leading-5 text-[#6a6a6a]">
+              <p className="px-1 text-xs leading-5 text-muted">
                 Highlight text on the page to save just that part.
               </p>
             ) : null}
@@ -306,11 +306,11 @@ export function PopupApp() {
             {error ? <p className="mt-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
           </section>
 
-          <section className="border-t border-[#e5dfd1] p-4">
+          <section className="border-t border-line p-4">
             <label className="flex cursor-pointer items-start justify-between gap-3 text-sm">
               <span>
                 <span className="block font-medium">Save without reviewing</span>
-                <span className="mt-0.5 block text-xs leading-5 text-[#6a6a6a]">
+                <span className="mt-0.5 block text-xs leading-5 text-muted">
                   Skip the review step and save highlighted text straight away.
                 </span>
               </span>
@@ -323,9 +323,9 @@ export function PopupApp() {
             </label>
           </section>
 
-          <section className="border-t border-[#e5dfd1]">
+          <section className="border-t border-line">
             <button
-              className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium hover:bg-[#faf5e8]"
+              className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium hover:bg-hover"
               onClick={() => void browser.tabs.create({ url: `${WEB_URL}/saved` })}
             >
               <ExternalLink className="size-4" />
@@ -333,7 +333,7 @@ export function PopupApp() {
             </button>
           </section>
 
-          <footer className="flex items-center gap-2 border-t border-[#e5dfd1] px-4 py-3 text-xs text-[#6a6a6a]">
+          <footer className="flex items-center gap-2 border-t border-line px-4 py-3 text-xs text-muted">
             <span className="min-w-0 truncate">{session?.user.email}</span>
             <Button
               size="sm"

@@ -16,7 +16,7 @@ export function AiCreditStrip({ onUseCredit }: { onUseCredit?: () => void }) {
 
   if (!status.emailVerified || !status.consented) {
     return (
-      <div className="flex items-center gap-2 border-b border-[#e5dfd1] bg-[#f5f0e0] px-4 py-2 text-xs text-[#4a4a4a]">
+      <div className="flex items-center gap-2 border-b border-line bg-soft px-4 py-2 text-xs text-strong">
         <Lock className="size-3.5 shrink-0" />
         <span className="min-w-0 flex-1">
           {status.emailVerified
@@ -36,7 +36,7 @@ export function AiCreditStrip({ onUseCredit }: { onUseCredit?: () => void }) {
 
   if (status.remaining <= 0) {
     return (
-      <div className="flex items-center gap-2 border-b border-[#e5dfd1] bg-[#f5f0e0] px-4 py-2 text-xs text-[#4a4a4a]">
+      <div className="flex items-center gap-2 border-b border-line bg-soft px-4 py-2 text-xs text-strong">
         <Lock className="size-3.5 shrink-0" />
         <span className="min-w-0 flex-1">No AI credits left today. They come back tomorrow.</span>
       </div>
@@ -44,7 +44,7 @@ export function AiCreditStrip({ onUseCredit }: { onUseCredit?: () => void }) {
   }
 
   return (
-    <div className="flex items-center gap-2 border-b border-[#e5dfd1] px-4 py-2 text-xs text-[#4a4a4a]">
+    <div className="flex items-center gap-2 border-b border-line px-4 py-2 text-xs text-strong">
       <Sparkles className="size-3.5 shrink-0" />
       <span className="min-w-0 flex-1">
         {status.remaining} free AI {status.remaining === 1 ? "credit" : "credits"} left today
@@ -67,12 +67,12 @@ export function AiCreditStrip({ onUseCredit }: { onUseCredit?: () => void }) {
  */
 export function AiConsentPrompt({ onAgreed, onDeclined }: { onAgreed: () => void; onDeclined: () => void }) {
   return (
-    <div className="m-4 rounded-2xl bg-[#f5f0e0] p-4 text-sm">
+    <div className="m-4 rounded-2xl bg-soft p-4 text-sm">
       <h2 className="font-semibold">Send content to Google?</h2>
-      <p className="mt-2 text-xs leading-5 text-[#4a4a4a]">
+      <p className="mt-2 text-xs leading-5 text-strong">
         AI features send the text you choose to Google&apos;s Gemini model. The free tier we use may allow Google to use that content to improve their products.
       </p>
-      <p className="mt-2 text-xs leading-5 text-[#4a4a4a]">
+      <p className="mt-2 text-xs leading-5 text-strong">
         We send only the text you ask about, never your whole library.
       </p>
       <div className="mt-4 flex gap-2">

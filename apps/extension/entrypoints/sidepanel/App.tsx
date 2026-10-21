@@ -44,14 +44,14 @@ export function SidePanelApp() {
   useEffect(() => { void loadAuth(); return subscribeStorage(() => void loadAuth()); }, []);
 
   return (
-    <main className="min-h-screen bg-[#fffaf0]">
+    <main className="min-h-screen bg-canvas">
       <ExtensionHeader />
-      <nav className="flex items-center gap-1 border-b border-[#e5dfd1] p-2">
+      <nav className="flex items-center gap-1 border-b border-line p-2">
         {tabItems.map(([value, label, Icon]) => (
           <button
             key={value}
             onClick={() => setTab(value)}
-            className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-sm font-medium ${tab === value ? "bg-[#ebe6d6] text-black" : "text-[#6a6a6a] hover:bg-[#f5f0e0]"}`}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-sm font-medium ${tab === value ? "bg-soft text-ink" : "text-muted hover:bg-soft"}`}
           >
             <Icon className="size-4" />
             {label}
@@ -61,7 +61,7 @@ export function SidePanelApp() {
           onClick={() => setTab("settings")}
           aria-label="Settings"
           title="Settings"
-          className={`grid size-9 shrink-0 place-items-center rounded-xl ${tab === "settings" ? "bg-[#ebe6d6] text-black" : "text-[#6a6a6a] hover:bg-[#f5f0e0]"}`}
+          className={`grid size-9 shrink-0 place-items-center rounded-xl ${tab === "settings" ? "bg-soft text-ink" : "text-muted hover:bg-soft"}`}
         >
           <Settings className="size-4" />
         </button>
@@ -70,7 +70,7 @@ export function SidePanelApp() {
       {authenticated === false ? (
         <LoggedOut capturePending={hasPendingCapture} onSignedIn={() => { void loadAuth(); setTab("review"); setRefreshKey((key) => key + 1); }} />
       ) : null}
-      {authenticated === null ? <p className="p-8 text-center text-sm text-[#6a6a6a]">Opening DataVault…</p> : null}
+      {authenticated === null ? <p className="p-8 text-center text-sm text-muted">Opening DataVault…</p> : null}
       {authenticated === true ? <>
         <AiCreditStrip />
         {tab === "review" ? (
@@ -212,7 +212,7 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
       <div className="p-6 text-center">
         <CheckCircle2 className="mx-auto size-12 text-green-600" />
         <h2 className="mt-4 text-xl font-semibold">Saved</h2>
-        <p className="mt-2 text-sm leading-6 text-[#6a6a6a]">
+        <p className="mt-2 text-sm leading-6 text-muted">
           “{saved.title}” is now in your Saved list. It is also on the DataVault website.
         </p>
         <Button className="mt-5 w-full" variant="secondary" onClick={() => void browser.tabs.create({ url: `${WEB_URL}/saved` })}>
@@ -226,9 +226,9 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
     return (
       <div className="p-4">
         <div className="p-6 text-center">
-          <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#b8a4ed]"><ScanText className="size-6" /></span>
+          <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-lavender text-deep"><ScanText className="size-6" /></span>
           <h2 className="mt-5 text-xl font-semibold">Nothing to review</h2>
-          <p className="mt-2 text-sm leading-6 text-[#6a6a6a]">
+          <p className="mt-2 text-sm leading-6 text-muted">
             Select text on any page, right-click it, and choose <strong>Save to DataVault</strong>. It will show up here to check before saving.
           </p>
         </div>
@@ -246,7 +246,7 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
     <div className="p-4">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.15em] text-[#6a6a6a]">New item</p>
+          <p className="text-xs font-semibold uppercase tracking-[.15em] text-muted">New item</p>
           <h2 className="mt-1 text-xl font-semibold">Review and save</h2>
         </div>
         <Badge tone="teal">Not saved yet</Badge>
@@ -260,7 +260,7 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
 
         <div>
           <Label htmlFor="capture-type">Type</Label>
-          <select id="capture-type" className="h-11 w-full rounded-xl border border-[#ded8ca] bg-white px-3 text-sm" value={currentType} onChange={(event) => set("recordType", event.target.value)}>
+          <select id="capture-type" className="h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm" value={currentType} onChange={(event) => set("recordType", event.target.value)}>
             {typeOptions.map((item) => <option key={item} value={item}>{recordTypeLabel(item)}</option>)}
           </select>
         </div>
@@ -269,7 +269,7 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
           <Label htmlFor="capture-folder">Folder</Label>
           <select
             id="capture-folder"
-            className="h-11 w-full rounded-xl border border-[#ded8ca] bg-white px-3 text-sm"
+            className="h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm"
             value={folderId}
             onChange={(event) => { folderChosen.current = true; setFolderId(event.target.value); }}
           >
@@ -281,12 +281,12 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
               ))
               : <option value="">The default folder</option>}
           </select>
-          <p className="mt-1 text-xs leading-5 text-[#6a6a6a]">
+          <p className="mt-1 text-xs leading-5 text-muted">
             A folder holds your saved items, the same folders the website has. The folder chosen here is used for this item.
           </p>
         </div>
 
-        <details open className="rounded-xl bg-[#f5f0e0] p-3">
+        <details open className="rounded-xl bg-soft p-3">
           <summary className="cursor-pointer text-xs font-semibold">
             {{ selection: "Selected text", "page-info": "Page information", "page-text": "Page text" }[pending.contentKind ?? "selection"]}
             {pending.pageUrl ? ` · ${pending.domain}` : " · address not available"}
@@ -313,12 +313,12 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
         <WaitingCard items={waiting} onRetry={() => void retryWaiting()} onDiscard={() => void discardWaiting()} />
 
         {pending.screenshotDataUrl ? (
-          <section className="rounded-xl border border-[#e5dfd1] bg-white p-3">
+          <section className="rounded-xl border border-line bg-surface p-3">
             <label className="flex cursor-pointer items-start gap-3 text-sm">
               <input type="checkbox" className="mt-1" checked={Boolean(pending.attachScreenshot)} onChange={(event) => void chooseScreenshot(event.target.checked)} />
               <span>
                 <strong className="flex items-center gap-1"><Camera className="size-4" />Also save a screenshot</strong>
-                <span className="mt-1 block text-xs leading-5 text-[#6a6a6a]">Keeps a picture of the page as it looks right now.</span>
+                <span className="mt-1 block text-xs leading-5 text-muted">Keeps a picture of the page as it looks right now.</span>
               </span>
             </label>
             {pending.attachScreenshot ? (
@@ -326,7 +326,7 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
             ) : null}
           </section>
         ) : (
-          <p className="rounded-xl bg-[#f5f0e0] p-3 text-xs leading-5 text-[#6a6a6a]">
+          <p className="rounded-xl bg-soft p-3 text-xs leading-5 text-muted">
             A screenshot is not available on this page. You can still save the text.
           </p>
         )}
@@ -429,18 +429,18 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
     <>
       <div className="space-y-3 p-4">
         <div className="relative">
-          <Search className="absolute left-3 top-3 size-4 text-[#6a6a6a]" />
+          <Search className="absolute left-3 top-3 size-4 text-muted" />
           <Input className="pl-9" value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Search your saved items…" />
         </div>
         {folders.length ? (
           <div>
-            <label htmlFor="saved-folder" className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.13em] text-[#6a6a6a]">
+            <label htmlFor="saved-folder" className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.13em] text-muted">
               <FolderOpen className="size-3.5" />
               Folder
             </label>
             <select
               id="saved-folder"
-              className="mt-2 h-11 w-full rounded-xl border border-[#ded8ca] bg-white px-3 text-sm"
+              className="mt-2 h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm"
               value={folderId}
               onChange={(event) => setFolderId(event.target.value)}
             >
@@ -462,7 +462,7 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
         onSelect={setSelected}
         onDelete={(record) => void remove(record)}
       />
-      <div className="border-t border-[#e5dfd1] p-4">
+      <div className="border-t border-line p-4">
         <Button className="w-full" variant="secondary" onClick={() => void browser.tabs.create({ url: `${WEB_URL}/saved` })}>
           Open the full library<ExternalLink className="size-4" />
         </Button>
@@ -513,7 +513,7 @@ function QuickDetail({ record, onBack, onDeleted }: { record: SavedRecord; onBac
   return (
     <div className="p-4">
       <button className="mb-4 text-sm underline" onClick={onBack}>Back to saved items</button>
-      <div className="rounded-3xl bg-[#b8a4ed] p-5">
+      <div className="rounded-3xl bg-lavender p-5 text-deep">
         <Badge>{recordTypeLabel(record.recordType)}</Badge>
         <h2 className="mt-4 text-xl font-semibold">{record.title}</h2>
         <p className="mt-3 text-sm">{record.sourceDomain ?? "Saved in DataVault"}</p>
@@ -526,11 +526,11 @@ function QuickDetail({ record, onBack, onDeleted }: { record: SavedRecord; onBac
       {aiError ? <div className="mt-4"><AiErrorNote message={aiError.message} onOpenWebsite={aiError.needsWebsite} /></div> : null}
 
       {summary ? (
-        <div className="mt-4 rounded-2xl bg-[#f5f0e0] p-4">
-          <p className="text-xs font-semibold uppercase tracking-[.12em] text-[#6a6a6a]">Summary</p>
+        <div className="mt-4 rounded-2xl bg-soft p-4">
+          <p className="text-xs font-semibold uppercase tracking-[.12em] text-muted">Summary</p>
           <p className="mt-2 text-sm leading-6">{summary.summary}</p>
           {summary.keyPoints.length ? (
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5 text-[#4a4a4a]">
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5 text-strong">
               {summary.keyPoints.map((point) => <li key={point}>{point}</li>)}
             </ul>
           ) : null}
@@ -551,10 +551,10 @@ function QuickDetail({ record, onBack, onDeleted }: { record: SavedRecord; onBac
       {record.originalText ? (
         <div className="mt-4">
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-semibold text-[#6a6a6a]">Saved text</span>
-            <button onClick={copy} className="text-xs text-[#4a4a4a] underline">{copied ? "Copied!" : "Copy text"}</button>
+            <span className="text-xs font-semibold text-muted">Saved text</span>
+            <button onClick={copy} className="text-xs text-strong underline">{copied ? "Copied!" : "Copy text"}</button>
           </div>
-          <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-2xl bg-[#f5f0e0] p-4 font-mono text-xs leading-5">{record.originalText}</pre>
+          <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-2xl bg-soft p-4 font-mono text-xs leading-5">{record.originalText}</pre>
         </div>
       ) : null}
       <Button className="mt-4 w-full" variant="secondary" onClick={() => void browser.tabs.create({ url: `${WEB_URL}/saved/${record.id}` })}>
@@ -661,13 +661,13 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
 
   return (
     <div className="p-4">
-      <div className="rounded-3xl bg-[#1a3a3a] p-5 text-white">
+      <div className="rounded-3xl bg-deep p-5 text-white">
         <div className="grid size-12 place-items-center rounded-2xl bg-[#ff4d8b] text-lg font-semibold">{session?.user.name?.[0] ?? "D"}</div>
         <h2 className="mt-4 text-lg font-semibold">{session?.user.name}</h2>
         <p className="text-sm text-white/70">{session?.user.email}</p>
-        {session?.organizations.length ? <p className="mt-4 text-xs font-semibold uppercase tracking-[.13em] text-[#a4d4c5]">{session.organizations.find((item) => item.id === workspaceId)?.name ?? "Your workspace"}</p> : null}
+        {session?.organizations.length ? <p className="mt-4 text-xs font-semibold uppercase tracking-[.13em] text-on-deep">{session.organizations.find((item) => item.id === workspaceId)?.name ?? "Your workspace"}</p> : null}
         {session && !session.user.emailVerified ? (
-          <div className="mt-4 rounded-xl bg-white/10 p-3">
+          <div className="mt-4 rounded-xl bg-surface/10 p-3">
             <p className="text-xs font-semibold">Email address not confirmed</p>
             <p className="mt-1 text-xs leading-5 text-white/70">Confirm it on the website to unlock AI credits. Everything else works either way.</p>
             <button
@@ -681,11 +681,11 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
         ) : null}
       </div>
 
-      <div className="mt-4 rounded-2xl border bg-white p-4 text-sm">
+      <div className="mt-4 rounded-2xl border bg-surface p-4 text-sm">
         <h3 className="font-semibold">Free AI credits</h3>
         {credits.status?.available ? (
           <>
-            <p className="mt-2 text-xs leading-5 text-[#6a6a6a]">
+            <p className="mt-2 text-xs leading-5 text-muted">
               {credits.status.emailVerified && credits.status.consented
                 ? `${credits.status.remaining} of ${credits.status.allowance} left today. They come back when the day rolls over.`
                 : credits.status.reason}
@@ -701,7 +701,7 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
             ) : null}
           </>
         ) : (
-          <p className="mt-2 text-xs leading-5 text-[#6a6a6a]">AI features are not switched on for this server yet.</p>
+          <p className="mt-2 text-xs leading-5 text-muted">AI features are not switched on for this server yet.</p>
         )}
       </div>
 
@@ -723,12 +723,12 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
         </section>
       ) : null}
 
-      <div className="mt-4 rounded-2xl border bg-white p-4 text-sm">
+      <div className="mt-4 rounded-2xl border bg-surface p-4 text-sm">
         <h3 className="font-semibold">Docs</h3>
-        <p className="mt-2 text-xs leading-5 text-[#6a6a6a]">
+        <p className="mt-2 text-xs leading-5 text-muted">
           The shortcut adds the selected text to this doc. Start a new one whenever you want to change where things go.
         </p>
-        <p className="mt-2 rounded-xl bg-[#f5f0e0] p-3 text-sm font-medium">
+        <p className="mt-2 rounded-xl bg-soft p-3 text-sm font-medium">
           {preferences.currentDocTitle ?? "No doc yet"}
         </p>
         <Button size="sm" variant="secondary" className="mt-2 w-full" onClick={() => void browser.runtime.sendMessage({ action: "start-new-doc" })}>
@@ -737,18 +737,18 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
         <ShortcutHelp />
       </div>
 
-      <div className="mt-4 rounded-2xl border bg-white p-4 text-sm">
+      <div className="mt-4 rounded-2xl border bg-surface p-4 text-sm">
         <h3 className="font-semibold">Where things go</h3>
-        <p className="mt-1 text-xs leading-5 text-[#6a6a6a]">
+        <p className="mt-1 text-xs leading-5 text-muted">
           Everything the extension saves goes into this workspace. Change it here whenever you like.
         </p>
         {session?.organizations.length ? (
           <div className="mt-3">
             <p className="block font-medium">Workspace</p>
-            <p className="mt-1 rounded-xl border border-[#ded8ca] bg-[#fffdf8] px-3 py-2.5 text-sm">
+            <p className="mt-1 rounded-xl border border-line-strong bg-surface px-3 py-2.5 text-sm">
               {session.organizations.find((item) => item.id === workspaceId)?.name ?? "The signed-in workspace"}
             </p>
-            <p className="mt-1 text-xs leading-5 text-[#6a6a6a]">
+            <p className="mt-1 text-xs leading-5 text-muted">
               The extension saves into the workspace it was signed in for. To work in another one, sign in again from the DataVault website.
             </p>
           </div>
@@ -756,7 +756,7 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
         <label className="mt-3 block">
           <span className="block font-medium">Save new items to</span>
           <select
-            className="mt-2 h-11 w-full rounded-xl border border-[#ded8ca] bg-[#fffdf8] px-3 text-sm"
+            className="mt-2 h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm"
             value={folderValue}
             onChange={(event) => changeFolder(event.target.value)}
           >
@@ -768,7 +768,7 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
               ))
               : <option value="">The default folder</option>}
           </select>
-          <span className="mt-1 block text-xs leading-5 text-[#6a6a6a]">
+          <span className="mt-1 block text-xs leading-5 text-muted">
             The folder new items go into. It is the same folder you have on the website, and you can change it here at any time.
           </span>
         </label>
@@ -776,20 +776,20 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
         <label className="mt-4 flex cursor-pointer items-start justify-between gap-3">
           <span>
             <span className="block font-medium">Save without reviewing</span>
-            <span className="mt-1 block text-xs leading-5 text-[#6a6a6a]">Save highlighted text straight away instead of opening the review panel.</span>
+            <span className="mt-1 block text-xs leading-5 text-muted">Save highlighted text straight away instead of opening the review panel.</span>
           </span>
           <input type="checkbox" className="mt-1" checked={preferences.quickSaveSelectedText} disabled={!preferencesLoaded} onChange={(event) => updatePreferences({ quickSaveSelectedText: event.target.checked })} />
         </label>
 
-        <fieldset className="mt-4 border-t border-[#eee8da] pt-3">
+        <fieldset className="mt-4 border-t border-line-soft pt-3">
           <legend className="font-semibold">What “Save this page” keeps</legend>
-          <p className="mt-1 text-xs leading-5 text-[#6a6a6a]">Choose what the popup captures when you save a whole page.</p>
+          <p className="mt-1 text-xs leading-5 text-muted">Choose what the popup captures when you save a whole page.</p>
           {captureModes.map(([value, label, description]) => (
             <label key={value} className="mt-3 flex cursor-pointer items-start gap-3">
               <input type="radio" name="page-capture-mode" className="mt-1" checked={preferences.pageCaptureMode === value} disabled={!preferencesLoaded} onChange={() => updatePreferences({ pageCaptureMode: value })} />
               <span>
                 <span className="block font-medium">{label}</span>
-                <span className="mt-0.5 block text-xs leading-5 text-[#6a6a6a]">{description}</span>
+                <span className="mt-0.5 block text-xs leading-5 text-muted">{description}</span>
               </span>
             </label>
           ))}

@@ -14,17 +14,17 @@ export function RecordList({ records, loading, empty = "No saved items yet.", on
   if (loading) return <LoadingState label="Loading your saved items…" />;
   if (!records?.length) return <EmptyState title="Nothing here yet" description={empty} />;
   return (
-    <div className="divide-y divide-[#eee8da]">
+    <div className="divide-y divide-line-soft">
       {records.map((record) => (
-        <div key={record.id} className="flex items-center hover:bg-[#faf5e8]">
+        <div key={record.id} className="flex items-center hover:bg-hover">
           <button
             className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
             onClick={() => onSelect ? onSelect(record) : void chrome.tabs.create({ url: `${WEB_URL}/saved/${record.id}` })}
           >
-            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#f5f0e0]"><RecordTypeIcon type={record.recordType} /></span>
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-soft"><RecordTypeIcon type={record.recordType} /></span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold">{record.title}</span>
-              <span className="mt-0.5 block truncate text-xs text-[#6a6a6a]">
+              <span className="mt-0.5 block truncate text-xs text-muted">
                 {record.sourceDomain ?? recordTypeLabel(record.recordType)} · {formatDistanceToNow(new Date(record.createdAt), { addSuffix: true })}
               </span>
             </span>
