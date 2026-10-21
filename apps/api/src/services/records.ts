@@ -7,7 +7,7 @@ import { AppError, notFound } from "../lib/errors";
 import { sha256 } from "../lib/crypto";
 import { likePattern } from "../lib/like";
 import { writeAudit } from "./audit";
-import { defaultVaultId } from "./vaults";
+import { defaultVaultId, linkCollections } from "./vaults";
 import { mapSavedRecord } from "./record-shape";
 
 type CreateInput = z.infer<typeof savedRecordCreateSchema>;
@@ -97,6 +97,11 @@ export async function createSavedRecord(context: TenantContext, request: Request
     if (!vault) throw new AppError(400, "INVALID_VAULT", "Choose a vault in this workspace.");
     const [record] = await tx.insert(savedRecords).values({ organizationId: context.organizationId, vaultId, recordType: input.recordType, title: input.title, description: input.description, originalText: input.originalText, sourceType: input.sourceType, sourceUrl: input.source?.url, sourceDomain: input.source?.domain, sourcePageTitle: input.source?.title, capturedAt: input.capturedAt ? new Date(input.capturedAt) : null, createdVia, metadata: input.metadata, captureKind: input.captureKind, reviewStatus: input.reviewStatus, privacyLevel: input.privacyLevel, createdBy: context.userId }).returning();
     if (!record) throw new Error("Record insert failed");
+    /**
+     * The collections the person chose are put on the item now, so that it
+     * lands in the right place without a second request.
+     */
+    await linkCollections(tx, context, record.id, vaultId, input.collectionIds);
     const evidenceText = input.originalText ?? input.description ?? input.title;
     const contentHash = await sha256(evidenceText.normalize("NFKC").trim());
     await tx.insert(evidenceSnapshots).values({ organizationId: context.organizationId, savedRecordId: record.id, sourceUrl: input.source?.url, sourceTitle: input.source?.title ?? input.title, sourceDomain: input.source?.domain, capturedText: evidenceText, contentHash, extractorId: input.source ? "manual-source" : "manual-entry", extractorVersion: "1", capturedAt: input.capturedAt ? new Date(input.capturedAt) : new Date() });

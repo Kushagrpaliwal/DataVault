@@ -241,6 +241,31 @@ export async function createTag(context: TenantContext, request: Request, input:
   });
 }
 
+/**
+ * Put an item into collections.
+ *
+ * A collection belongs to one folder, so the collections that are named have
+ * to belong to the folder the item is in, and to this workspace. Anything
+ * else is refused rather than quietly put somewhere else.
+ */
+export async function linkCollections(
+  tx: DatabaseTransaction,
+  context: TenantContext,
+  recordId: string,
+  vaultId: string,
+  collectionIds: string[],
+): Promise<void> {
+  if (!collectionIds.length) return;
+  const wanted = [...new Set(collectionIds)];
+  const collections = await tx.select({ id: vaultCollections.id }).from(vaultCollections).where(and(
+    eq(vaultCollections.organizationId, context.organizationId),
+    eq(vaultCollections.vaultId, vaultId),
+    inArray(vaultCollections.id, wanted),
+  ));
+  if (collections.length !== wanted.length) throw new AppError(400, "INVALID_COLLECTION", "Every collection must belong to the selected folder.");
+  await tx.insert(savedRecordCollections).values(collections.map((collection) => ({ organizationId: context.organizationId, savedRecordId: recordId, collectionId: collection.id })));
+}
+
 export async function organizeSavedRecord(context: TenantContext, request: Request, id: string, input: OrganizationInput) {
   return withTenant(context.organizationId, async (tx) => {
     const [record] = await tx.select().from(savedRecords).where(and(eq(savedRecords.organizationId, context.organizationId), eq(savedRecords.id, id))).limit(1);
@@ -249,10 +274,8 @@ export async function organizeSavedRecord(context: TenantContext, request: Reque
     const [vault] = await tx.select({ id: vaults.id }).from(vaults).where(and(eq(vaults.organizationId, context.organizationId), eq(vaults.id, vaultId))).limit(1);
     if (!vault) throw new AppError(400, "INVALID_VAULT", "Choose a vault in this workspace.");
     if (input.collectionIds) {
-      const collections = input.collectionIds.length ? await tx.select({ id: vaultCollections.id }).from(vaultCollections).where(and(eq(vaultCollections.organizationId, context.organizationId), eq(vaultCollections.vaultId, vaultId), inArray(vaultCollections.id, input.collectionIds))) : [];
-      if (collections.length !== input.collectionIds.length) throw new AppError(400, "INVALID_COLLECTION", "Every collection must belong to the selected vault.");
       await tx.delete(savedRecordCollections).where(and(eq(savedRecordCollections.organizationId, context.organizationId), eq(savedRecordCollections.savedRecordId, id)));
-      if (collections.length) await tx.insert(savedRecordCollections).values(collections.map((collection) => ({ organizationId: context.organizationId, savedRecordId: id, collectionId: collection.id })));
+      await linkCollections(tx, context, id, vaultId, input.collectionIds);
     } else if (vaultId !== record.vaultId) {
       /**
        * The item moved to another folder, so the collections it had, which

@@ -7,9 +7,15 @@ import type {
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type OrganizationCreateInput = z.infer<typeof organizationCreateSchema>;
-export type SavedRecordCreateInput = z.infer<typeof savedRecordCreateSchema>;
+export type SavedRecordCreateInput = z.input<typeof savedRecordCreateSchema>;
 export type SavedRecord = z.infer<typeof savedRecordSchema>;
-export type CaptureCreateInput = z.infer<typeof captureCreateSchema>;
+/**
+ * The shape of a capture request.
+ *
+ * The input type is used rather than the output type, because a field that
+ * has a default may be left out by the client that sends it.
+ */
+export type CaptureCreateInput = z.input<typeof captureCreateSchema>;
 export type ParsedCapture = z.infer<typeof parsedCaptureSchema>;
 export type VaultCreateInput = z.infer<typeof vaultCreateSchema>;
 export type Note = z.infer<typeof noteSchema>;

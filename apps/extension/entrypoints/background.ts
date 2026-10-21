@@ -5,6 +5,7 @@ import { WEB_URL, withOrganization } from "../lib/api";
 import { signInExtension } from "../lib/auth";
 import { addClipToCurrentDoc, addClipToDoc, broadcastNoteUpdate as broadcastNoteChanged, makeCurrentDoc, refreshCurrentDoc, removeClipFromDoc, startNewDoc } from "../lib/docs";
 import { folderForNewItems } from "../lib/folders";
+import { collectionForNewItems } from "../lib/collections";
 import { enqueuePendingCapture, getAuth, getPendingCaptures, getPreferences, removePendingCapture, subscribeStorage, updatePendingCapture, type CaptureQuality, type ExtensionPreferences, type PageDetails, type PendingCapture, type PendingDocClip } from "../lib/storage";
 import { recordExtensionError } from "../lib/errors";
 import { openReviewPanel, openReviewWindow as openReviewPanelWindow } from "../lib/panel";
@@ -303,7 +304,7 @@ async function stagePageCapture(tab: chrome.tabs.Tab, page?: PageDetails) {
   }
 }
 
-function capturePayload(pending: PendingCapture, vaultId?: string) {
+function capturePayload(pending: PendingCapture, vaultId?: string, collectionId?: string) {
   return {
     selectedText: pending.selectedText,
     originalText: pending.selectedText,
@@ -316,6 +317,7 @@ function capturePayload(pending: PendingCapture, vaultId?: string) {
     captureKind: pending.contentKind === "page-text" ? "page-text" as const : pending.contentKind === "page-info" ? "page" as const : "selection" as const,
     tagNames: [],
     vaultId,
+    ...(collectionId ? { collectionIds: [collectionId] } : {}),
   };
 }
 
@@ -328,8 +330,13 @@ function capturePayload(pending: PendingCapture, vaultId?: string) {
  */
 async function saveCapture(pending: PendingCapture) {
   const vaultId = await folderForNewItems();
+  /**
+   * The collection belongs to the folder, so it is only used when the
+   * folder is the one that was chosen.
+   */
+  const collectionId = await collectionForNewItems(vaultId);
   try {
-    return await withOrganization((api) => api.createCapture(capturePayload(pending, vaultId), pending.idempotencyKey));
+    return await withOrganization((api) => api.createCapture(capturePayload(pending, vaultId, collectionId), pending.idempotencyKey));
   } catch (error) {
     if (vaultId && error instanceof DataVaultApiError && error.code === "INVALID_VAULT") {
       return withOrganization((api) => api.createCapture(capturePayload(pending, undefined), pending.idempotencyKey));

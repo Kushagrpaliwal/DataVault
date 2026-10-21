@@ -22,6 +22,13 @@ export const savedRecordCreateSchema = z.object({
   captureKind: z.enum(CAPTURE_KINDS).default("note"),
   reviewStatus: z.enum(VAULT_ITEM_STATUSES).default("inbox"),
   privacyLevel: z.enum(PRIVACY_LEVELS).default("private"),
+  /**
+   * The collections the item goes into.
+   *
+   * A collection belongs to one folder, so every collection named here has
+   * to belong to the folder the item is in.
+   */
+  collectionIds: z.array(uuidSchema).max(20).default([]),
 });
 
 export const savedRecordPatchSchema = savedRecordCreateSchema.partial().refine((value) => Object.keys(value).length > 0, "No changes supplied");

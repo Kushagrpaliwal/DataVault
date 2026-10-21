@@ -19,6 +19,7 @@ import { recordAiConsent, summariseItem, useAiCredits } from "../../lib/ai";
 import { signOutExtension } from "../../lib/auth";
 import { WEB_URL, withOrganization } from "../../lib/api";
 import { currentFolderId, listFolders, rememberFolder, type FolderOption } from "../../lib/folders";
+import { listCollections, collectionForFolder, type CollectionOption } from "../../lib/collections";
 import {
   getAuth, getPreferences, getReviewCapture, getRetryCaptures, clearRetryCaptures, setPendingCapture, setPreferences,
   subscribeStorage, type ExtensionPreferences, type PageCaptureMode, type PendingCapture,
@@ -95,6 +96,14 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
   const [parsed, setParsed] = useState<ParsedCapture>({ confidence: {} });
   const [folderId, setFolderId] = useState("");
   const [folders, setFolders] = useState<FolderOption[]>([]);
+  /**
+   * The collections inside the folder that is chosen.
+   *
+   * There is only a list of them when the folder has some, so the picker
+   * is only shown when there is something to choose.
+   */
+  const [collections, setCollections] = useState<CollectionOption[]>([]);
+  const [collectionId, setCollectionId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState<SavedCapture>();
@@ -115,6 +124,15 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
    * the item is being looked at.
    */
   const folderChosen = useRef(false);
+  /**
+   * The folder and the collection that were picked for this item.
+   *
+   * The panel re-reads itself every few minutes when the sign-in is
+   * renewed, so the choices are kept here and not thrown away while the
+   * item is being looked at.
+   */
+  const folderRef = useRef("");
+  const collectionRef = useRef("");
 
   const load = async () => {
     const value = await getReviewCapture();
@@ -127,6 +145,8 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
        * for the last item is not carried over to the next one.
        */
       folderChosen.current = false;
+      folderRef.current = "";
+      collectionRef.current = "";
       setParsed(await defaultCaptureExtractor.extract({
         text: value.selectedText,
         pageTitle: value.pageTitle,
@@ -143,8 +163,53 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
        * The folder the settings point at is only used when it belongs to
        * the workspace the panel is in.
        */
-      if (!folderChosen.current) setFolderId(await currentFolderId(listed));
+      if (!folderChosen.current) {
+        folderRef.current = await currentFolderId(listed);
+        setFolderId(folderRef.current);
+      }
     } catch { /* The folder list is optional. */ }
+    /**
+     * The collections belong to one folder, so the list of them follows
+     * the folder that is chosen.
+     */
+    try {
+      const inside = await listCollections(folderRef.current);
+      setCollections(inside);
+      if (!collectionRef.current) {
+        /**
+         * A new item starts with the collection that is set, the same way
+         * it starts with the folder that is set.
+         */
+        const remembered = (await collectionForFolder(folderRef.current, inside)) ?? "";
+        collectionRef.current = remembered;
+        setCollectionId(remembered);
+      } else if (!inside.some((collection) => collection.id === collectionRef.current)) {
+        collectionRef.current = "";
+        setCollectionId("");
+      }
+    } catch { /* The collection list is optional. */ }
+  };
+
+  /**
+   * Choose the folder this item goes into.
+   *
+   * The collections belong to one folder, so the list of them is asked for
+   * again when the folder changes.
+   */
+  const chooseFolder = async (next: string) => {
+    folderChosen.current = true;
+    folderRef.current = next;
+    setFolderId(next);
+    try {
+      const inside = await listCollections(next);
+      setCollections(inside);
+      if (!inside.some((collection) => collection.id === collectionRef.current)) {
+        collectionRef.current = "";
+        setCollectionId("");
+      }
+    } catch {
+      setCollections([]);
+    }
   };
 
   useEffect(() => { void load(); return subscribeStorage(() => void load()); }, []);
@@ -185,6 +250,7 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
           captureQuality: current.captureQuality,
           parsedData: { ...parsed, title: cleanTitle }, recordType: parsed.recordType ?? "other", confirmDuplicate: true,
           captureKind: current.contentKind === "page-text" ? "page-text" : current.contentKind === "page-info" ? "page" : "selection", tagNames: [], vaultId: folderId || undefined,
+          ...(collectionId ? { collectionIds: [collectionId] } : {}),
         }, current.idempotencyKey));
         const resultRecord = result.record as Record<string, unknown> | undefined;
         if (!resultRecord?.id) throw new Error("DataVault did not return the saved item.");
@@ -271,7 +337,7 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
             id="capture-folder"
             className="h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm"
             value={folderId}
-            onChange={(event) => { folderChosen.current = true; setFolderId(event.target.value); }}
+            onChange={(event) => void chooseFolder(event.target.value)}
           >
             {folders.length
               ? folders.map((folder) => (
@@ -285,6 +351,28 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
             A folder holds your saved items, the same folders the website has. The folder chosen here is used for this item.
           </p>
         </div>
+
+        {collections.length ? (
+          <div>
+            <Label htmlFor="capture-collection">Collection</Label>
+            <select
+              id="capture-collection"
+              className="h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm"
+              value={collectionId}
+              onChange={(event) => { collectionRef.current = event.target.value; setCollectionId(event.target.value); }}
+            >
+              <option value="">None</option>
+              {collections.map((collection) => (
+                <option key={collection.id} value={collection.id}>
+                  {collection.name}{typeof collection.itemCount === "number" ? ` (${collection.itemCount})` : ""}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              A collection is a group inside the folder, like a sub-folder. The item goes into the one chosen here.
+            </p>
+          </div>
+        ) : null}
 
         <details open className="rounded-xl bg-soft p-3">
           <summary className="cursor-pointer text-xs font-semibold">
@@ -389,6 +477,14 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
    */
   const [folders, setFolders] = useState<FolderOption[]>([]);
   const [folderId, setFolderId] = useState("");
+  /**
+   * The collection being looked at.
+   *
+   * A collection belongs to one folder, so the list of them follows the
+   * folder that is chosen.
+   */
+  const [collections, setCollections] = useState<CollectionOption[]>([]);
+  const [collectionId, setCollectionId] = useState("");
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebounced(term.trim()), 250);
@@ -399,6 +495,21 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
     void listFolders().then(setFolders).catch(() => undefined);
   }, []);
 
+  /**
+   * The collections of the folder that is chosen.
+   *
+   * The list is asked for again when the folder changes, so a collection
+   * that is not in the folder any more is never chosen.
+   */
+  useEffect(() => {
+    void listCollections(folderId || undefined)
+      .then((inside) => {
+        setCollections(inside);
+        setCollectionId((current) => (inside.some((collection) => collection.id === current) ? current : ""));
+      })
+      .catch(() => setCollections([]));
+  }, [folderId]);
+
   useEffect(() => {
     setRecords(undefined);
     /**
@@ -407,10 +518,10 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
      * The panel used to hide anything saved on the website, which made the
      * list look empty even when there was plenty to read.
      */
-    void withOrganization((api) => api.listSavedRecords({ q: debounced || undefined, limit: 30, vaultId: folderId || undefined }))
+    void withOrganization((api) => api.listSavedRecords({ q: debounced || undefined, limit: 30, vaultId: folderId || undefined, collectionId: collectionId || undefined }))
       .then((data) => setRecords(data.items))
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your saved items."));
-  }, [refreshKey, debounced, folderId]);
+  }, [refreshKey, debounced, folderId, collectionId]);
 
   const remove = async (record: SavedRecord) => {
     if (!window.confirm(`Move “${record.title}” to Trash? You can restore it later from the DataVault website.`)) return;
@@ -448,6 +559,27 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
               {folders.map((folder) => (
                 <option key={folder.id} value={folder.id}>
                   {folder.name}{typeof folder.itemCount === "number" ? ` (${folder.itemCount})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+        {collections.length ? (
+          <div>
+            <label htmlFor="saved-collection" className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.13em] text-muted">
+              <FolderOpen className="size-3.5" />
+              Collection
+            </label>
+            <select
+              id="saved-collection"
+              className="mt-2 h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm"
+              value={collectionId}
+              onChange={(event) => setCollectionId(event.target.value)}
+            >
+              <option value="">All collections</option>
+              {collections.map((collection) => (
+                <option key={collection.id} value={collection.id}>
+                  {collection.name}{typeof collection.itemCount === "number" ? ` (${collection.itemCount})` : ""}
                 </option>
               ))}
             </select>

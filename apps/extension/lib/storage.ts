@@ -20,6 +20,15 @@ export interface ExtensionPreferences {
    */
   defaultVaultOrganizationId?: string | undefined;
   /**
+   * The collection new items go into.
+   *
+   * A collection belongs to one folder, so the folder it was chosen in is
+   * remembered with it. It is only used while that folder is the one that
+   * is chosen.
+   */
+  defaultCollectionId?: string | undefined;
+  defaultCollectionVaultId?: string | undefined;
+  /**
    * The doc that the keyboard shortcut adds to.
    *
    * It is a mirror of the server's own answer, so the extension and the

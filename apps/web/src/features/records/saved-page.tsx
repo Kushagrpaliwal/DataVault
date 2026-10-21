@@ -647,10 +647,11 @@ function ManualSaveModal({
         reviewStatus: "inbox",
         privacyLevel: "private",
         metadata: {},
+        collectionIds: collectionId ? [collectionId] : [],
       });
       const tagNames = tags.split(",").map((tag) => tag.trim()).filter(Boolean);
-      if (collectionId || tagNames.length) {
-        await api.organizeSavedRecord(item.id, { collectionIds: collectionId ? [collectionId] : [], tagNames });
+      if (tagNames.length) {
+        await api.organizeSavedRecord(item.id, { tagNames });
       }
       return item;
     },
@@ -693,11 +694,15 @@ function ManualSaveModal({
           </div>
         </div>
         <div>
-          <Label htmlFor="manual-collection">Collection <span className="font-normal text-muted">(optional)</span></Label>
-          <select id="manual-collection" className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm" value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
-            <option value="">None</option>
-            {(collections.data ?? []).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
-          </select>
+          {collections.data?.length ? (
+            <>
+              <Label htmlFor="manual-collection">Collection <span className="font-normal text-muted">(optional)</span></Label>
+              <select id="manual-collection" className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm" value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
+                <option value="">None</option>
+                {(collections.data ?? []).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
+              </select>
+            </>
+          ) : null}
         </div>
         <div>
           <Label htmlFor="manual-tags">Tags <span className="font-normal text-muted">(separate with commas)</span></Label>

@@ -14,6 +14,7 @@ import { signOutExtension } from "../../lib/auth";
 import { WEB_URL, withOrganization } from "../../lib/api";
 import { refreshCurrentDoc, renameDoc, startNewDoc } from "../../lib/docs";
 import { currentFolderId, listFolders, rememberFolder, type FolderOption } from "../../lib/folders";
+import { collectionForFolder, listCollections, rememberCollection, type CollectionOption } from "../../lib/collections";
 import { openReviewPanel, openReviewWindow } from "../../lib/panel";
 
 /**
@@ -40,6 +41,14 @@ export function PopupApp() {
    */
   const [folders, setFolders] = useState<FolderOption[]>([]);
   const [folderId, setFolderId] = useState("");
+  /**
+   * The collections inside the folder that is chosen.
+   *
+   * There is only a list of them when the folder has some, so the picker
+   * is only shown when there is something to choose.
+   */
+  const [collections, setCollections] = useState<CollectionOption[]>([]);
+  const [collectionId, setCollectionId] = useState("");
 
   const load = async () => {
     const auth = await getAuth();
@@ -53,7 +62,11 @@ export function PopupApp() {
       setCurrentDoc(current?.noteId ? { id: current.noteId, title: current.title ?? "Untitled doc", clipCount: current.clipCount ?? 0 } : null);
       const listed = await listFolders();
       setFolders(listed);
-      setFolderId(await currentFolderId(listed));
+      const folder = await currentFolderId(listed);
+      setFolderId(folder);
+      const inside = await listCollections(folder);
+      setCollections(inside);
+      setCollectionId((await collectionForFolder(folder, inside)) ?? "");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not reach DataVault.");
     }
@@ -172,6 +185,26 @@ export function PopupApp() {
   const chooseFolder = async (next: string) => {
     setFolderId(next);
     await rememberFolder(next);
+    /**
+     * The collections belong to one folder, so the list of them is asked
+     * for again when the folder changes.
+     */
+    const inside = await listCollections(next);
+    setCollections(inside);
+    const remembered = (await collectionForFolder(next, inside)) ?? "";
+    setCollectionId(remembered);
+    await rememberCollection(remembered, next);
+  };
+
+  /**
+   * Choose the collection new items go into.
+   *
+   * It is remembered with the folder it belongs to, so that it is only used
+   * while that folder is chosen.
+   */
+  const chooseCollection = async (next: string) => {
+    setCollectionId(next);
+    await rememberCollection(next || undefined, folderId || undefined);
   };
 
   const signOut = async () => {
@@ -282,6 +315,30 @@ export function PopupApp() {
               <p className="mt-1 text-xs leading-5 text-muted">
                 The folder new items go into. It is the same folder you have on the website, and it is remembered for next time.
               </p>
+              {collections.length ? (
+                <>
+                  <label htmlFor="popup-collection" className="mt-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.13em] text-muted">
+                    <FolderOpen className="size-3.5" />
+                    Collection
+                  </label>
+                  <select
+                    id="popup-collection"
+                    className="mt-2 h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm"
+                    value={collectionId}
+                    onChange={(event) => void chooseCollection(event.target.value)}
+                  >
+                    <option value="">None</option>
+                    {collections.map((collection) => (
+                      <option key={collection.id} value={collection.id}>
+                        {collection.name}{typeof collection.itemCount === "number" ? ` (${collection.itemCount})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs leading-5 text-muted">
+                    The collection inside the folder. It is the same one you have on the website.
+                  </p>
+                </>
+              ) : null}
             </div>
             <Button className="w-full justify-start" onClick={() => void savePage()} disabled={busy !== null}>
               <ScanText className="size-4" />
