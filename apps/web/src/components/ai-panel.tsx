@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { Lock, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@data-vault/ui";
+import { DataVaultApiError } from "@data-vault/api-client";
 import type { AiClassificationResult, AiExtractionResult, AiSummaryResult } from "@data-vault/types";
 import { useAuth } from "../lib/auth";
 import { ErrorMessage, Modal, useToast } from "./feedback";
@@ -51,6 +53,67 @@ export interface AiPanelProps {
   recordId?: string | undefined;
   /** Called with the suggested type and tags, so the caller can apply them. */
   onApply?: (result: AiClassificationResult) => void;
+}
+
+/**
+ * The reason the AI features are closed, and the way to open them.
+ *
+ * Two things stop every AI feature: the address has not been confirmed,
+ * or the person has not agreed to send content to the model provider. The
+ * search by meaning is an AI feature as well, so it says the same thing
+ * here and offers the same way out, instead of showing a bare error.
+ */
+export function AiAccessNotice({ error, onAgreed }: { error: unknown; onAgreed?: () => void }) {
+  const { api } = useAuth();
+  const client = useQueryClient();
+  const code = error instanceof DataVaultApiError ? error.code : "";
+  const consent = useMutation({
+    mutationFn: () => api.aiConsent(),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["ai-credits"] });
+      onAgreed?.();
+    },
+  });
+
+  if (code === "EMAIL_NOT_VERIFIED") {
+    return (
+      <div className="rounded-2xl bg-soft p-4">
+        <p className="text-sm font-semibold">Confirm your email address to use this.</p>
+        <p className="mt-1 text-sm leading-6 text-muted">
+          The confirmation link was sent when the account was made. A new one can be sent from Settings.
+        </p>
+        <Link to="/settings" className="mt-3 inline-block text-sm font-medium underline">Open Settings</Link>
+      </div>
+    );
+  }
+
+  if (code === "AI_CONSENT_REQUIRED") {
+    return (
+      <div className="rounded-2xl bg-soft p-4">
+        <p className="text-sm font-semibold">Agree to send content to Google for AI features</p>
+        <p className="mt-1 text-sm leading-6 text-muted">
+          AI features work by sending the text you choose to Google&apos;s Gemini model. The free tier we use may allow
+          Google to use that content to improve their products.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button size="sm" disabled={consent.isPending} onClick={() => consent.mutate()}>
+            {consent.isPending ? "Saving…" : "Agree and continue"}
+          </Button>
+        </div>
+        {consent.error ? (
+          <div className="mt-3">
+            <ErrorMessage message={consent.error instanceof Error ? consent.error.message : "Could not save your choice."} />
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <p className="rounded-2xl bg-soft p-4 text-sm leading-6 text-muted">
+      {error instanceof Error ? error.message : "That did not work."}
+    </p>
+  );
 }
 
 /**

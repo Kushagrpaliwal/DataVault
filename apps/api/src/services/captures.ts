@@ -21,7 +21,7 @@ export async function createCapture(context: TenantContext, request: Request, in
   const normalizedText = input.selectedText.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
   const captureHash = await sha256(normalizedText);
 
-  return withTenant(context.organizationId, async (tx) => {
+  const saved = await withTenant(context.organizationId, async (tx) => {
     const vaultId = input.vaultId ?? await defaultVaultId(tx, context.organizationId);
     const [vault] = await tx.select({ id: vaults.id }).from(vaults).where(and(eq(vaults.organizationId, context.organizationId), eq(vaults.id, vaultId))).limit(1);
     if (!vault) throw new AppError(400, "INVALID_VAULT", "Choose a vault in this workspace.");
@@ -52,18 +52,21 @@ export async function createCapture(context: TenantContext, request: Request, in
     await tx.insert(processingJobs).values({ organizationId: context.organizationId, savedRecordId: record.id, kind: "capture-index", status: "completed", payload: { captureKind: input.captureKind, sourceDomain: input.source.domain, captureQuality: input.captureQuality ?? null }, completedAt: new Date() });
 
     await writeAudit(tx, context, request, { action: "captured", resourceType: "saved_record", resourceId: record.id, newValues: { recordType, captureKind: input.captureKind, vaultId, sourceDomain: input.source.domain } });
-    const saved = { record: mapSavedRecord(record), parser: { id: defaultCaptureExtractor.id, version: defaultCaptureExtractor.version, result: parsed } };
-    /**
-     * The numbers that say what the item is about are made afterwards, so
-     * that the capture is not held up while the model is asked. An item that
-     * cannot be given numbers is still saved, and simply does not turn up
-     * in a search by meaning.
-     */
-    if (env) {
-      void indexRecord(env, context, record.id, record.title, record.originalText).catch(() => undefined);
-    }
-    return saved;
+    return { record: mapSavedRecord(record), parser: { id: defaultCaptureExtractor.id, version: defaultCaptureExtractor.version, result: parsed } };
   });
+
+  /**
+   * The numbers that say what the item is about are made afterwards, so
+   * that the capture is not held up while the model is asked. The item is
+   * already written down by then, so the numbers cannot be lost.
+   *
+   * An item that cannot be given numbers is still saved, and simply does
+   * not turn up in a search by meaning.
+   */
+  if (env) {
+    void indexRecord(env, context, saved.record.id, saved.record.title, saved.record.originalText ?? null).catch(() => undefined);
+  }
+  return saved;
 }
 
 /**

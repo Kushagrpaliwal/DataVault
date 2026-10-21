@@ -11,12 +11,14 @@ That means the credit system is not really about the user's own allowance. It is
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `AI_GLOBAL_DAILY_REQUESTS` | 900 | The shared daily budget. Set this to the requests-per-day shown in your AI Studio account, minus headroom. |
+| `AI_GLOBAL_DAILY_EMBEDDINGS` | 900 | The shared daily budget for the numbers that make a search by meaning work. It is a budget of its own, because making numbers is not the same as writing an answer. |
 | `AI_GLOBAL_MINUTE_REQUESTS` | 12 | The shared per-minute cap, under the 15 RPM limit of `gemini-3.1-flash-lite`. |
 | `AI_USER_DAILY_CREDITS` | 20 | How many credits one user gets per day. |
 | `AI_USER_MINUTE_REQUESTS` | 5 | How many requests one user can make per minute. |
 | `AI_MAX_INPUT_TOKENS` | 4000 | The largest amount of text sent to the model. |
 | `AI_MAX_OUTPUT_TOKENS` | 400 | The largest answer accepted back. |
 | `GEMINI_MODEL` | `gemini-3.1-flash-lite` | The model to use. Must be free-tier eligible. |
+| `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-2` | The model that turns text into numbers. It is a different model from the one that writes, and its name is a setting because the old one was switched off by Google on 2026-01-14. |
 
 **Credits are daily, not monthly, and reset at midnight Pacific.** That is the same moment the Gemini quota resets, so a user's allowance and the shared pool they draw from refresh together and nothing is wasted.
 
@@ -45,6 +47,14 @@ One credit is one request to the model. There are three features:
 | `extract` | Structured fields: the author, the publication date, the claim the passage makes, and any figure it quotes. |
 
 Answers are cached against a hash of the exact request, so asking the same question twice costs one credit, not two. With a quota this small, that is the single biggest saving available.
+
+## The search by meaning
+
+The search by meaning is a fourth thing that asks the model, and it is behind the same controls as the other three: the server must have a key, the address must be confirmed, the person must have agreed to send content to the provider, and there must be room in the shared budget. The numbers of a question are kept, so a question that is asked twice is asked of the model once. The search is limited to twenty a minute, and making the numbers of every item again is allowed three times a day.
+
+Making numbers does **not** spend the person's own credits. Nothing is asked of them and nothing is read by them, so it is counted only against `AI_GLOBAL_DAILY_EMBEDDINGS`.
+
+The numbers themselves are 768 long, which is the size Google's own guide recommends, and the rows are small because of it. An item that was archived is not found by a search by meaning, and neither is one that is in the trash.
 
 ## Privacy
 
@@ -86,8 +96,10 @@ Only the text the user asked about is sent. The whole library is never sent, and
 | `POST` | `/api/v1/ai/summarize` | Summarise a saved item. |
 | `POST` | `/api/v1/ai/classify` | Suggest a type and tags. |
 | `POST` | `/api/v1/ai/extract` | Pull out structured fields. |
+| `GET` | `/api/v1/search/semantic` | A search by meaning. |
+| `POST` | `/api/v1/search/semantic/reindex` | Make the numbers of every item again. |
 
-All three AI routes require the `ai.use` permission, a confirmed email address, a recorded consent, and an available credit.
+All three AI routes require the `ai.use` permission, a confirmed email address, a recorded consent, and an available credit. The search by meaning asks for the same three things, and a budget of its own besides.
 
 ## Turning it on
 

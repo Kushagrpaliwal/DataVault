@@ -6,12 +6,13 @@ import type { DataVaultAuth } from "../auth/better-auth";
 import { getTenantContext } from "../auth/context";
 import { requireCsrf } from "../auth/csrf";
 import { success } from "../lib/http";
+import { enforceRateLimit, RATE_LIMITS } from "../lib/rate-limit-policies";
 import { getDashboard } from "../services/dashboard";
 import { globalSearch } from "../services/search";
 import { listAuditLogs } from "../services/audit";
 import { getAttachment, saveScreenshot } from "../services/attachments";
-import { embedText } from "../services/gemini";
-import { reindexWorkspace, semanticSearch } from "../services/semantic";
+import { assertEmbeddingAllowed } from "../services/ai-credits";
+import { embedQuery, reindexWorkspace, semanticSearch } from "../services/semantic";
 
 const auditQuerySchema = paginationQuerySchema.extend({ resourceType: z.string().max(80).optional() });
 
@@ -27,12 +28,19 @@ export function createMiscRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
      * numbers are close to them are the ones that mean the same thing. An
      * item about the sea is found by a question that never says the word
      * sea.
+     *
+     * The numbers are made by the model, so the search is behind the same
+     * controls as the other AI features: the person must have agreed to
+     * send content to the provider, and the search is limited so that it
+     * cannot be used to grind the shared allowance down.
      */
     .get("/api/v1/search/semantic", async ({ query, request }) => {
+      await enforceRateLimit(request, env, RATE_LIMITS.semanticSearch);
       const context = await getTenantContext(request, auth, env, "captures.read");
+      await assertEmbeddingAllowed(env, { userId: context.userId, organizationId: context.organizationId });
       const input = searchQuerySchema.parse(query);
-      const embedding = await embedText(env, input.q);
-      return success(await semanticSearch(context, embedding, input.limit));
+      const embedding = await embedQuery(env, input.q);
+      return success(await semanticSearch(env, context, embedding, input.limit));
     })
     /**
      * Make the numbers of every item in the workspace again.
@@ -42,7 +50,9 @@ export function createMiscRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
      */
     .post("/api/v1/search/semantic/reindex", async ({ request }) => {
       await requireCsrf(request, auth, env);
+      await enforceRateLimit(request, env, RATE_LIMITS.semanticReindex);
       const context = await getTenantContext(request, auth, env, "captures.update");
+      await assertEmbeddingAllowed(env, { userId: context.userId, organizationId: context.organizationId });
       return success(await reindexWorkspace(context, env));
     })
     .post("/api/v1/saved-records/:id/attachments", async ({ params, request, set }) => { await requireCsrf(request, auth, env); set.status = 201; return success(await saveScreenshot(await getTenantContext(request, auth, env, "captures.update"), request, env, uuidSchema.parse(params.id))); })

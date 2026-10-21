@@ -47,6 +47,28 @@ export const RATE_LIMITS = {
   passwordSetup: { name: "password-setup", max: 10, windowSeconds: 900 },
   /** AI calls, per user. */
   ai: { name: "ai", max: 5, windowSeconds: 60 },
+  /**
+   * A search by meaning.
+   *
+   * Every one of these asks the model for the numbers of the question, so
+   * they are given a budget of their own rather than sharing the one for
+   * writing.
+   */
+  semanticSearch: { name: "semantic-search", max: 20, windowSeconds: 60 },
+  /**
+   * Making the numbers of every item in the workspace again.
+   *
+   * It is the largest thing the AI side does, so it is allowed once a day
+   * for an account.
+   */
+  semanticReindex: { name: "semantic-reindex", max: 3, windowSeconds: 86_400 },
+  /**
+   * Bringing material in.
+   *
+   * An import writes a great many rows, so it is not something that can be
+   * done over and over.
+   */
+  imports: { name: "imports", max: 10, windowSeconds: 3_600 },
 } satisfies Record<string, Policy>;
 
 export interface LimitOutcome extends RateLimitResult {

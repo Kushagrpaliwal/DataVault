@@ -66,11 +66,26 @@ const serverEnvironmentSchema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default("gemini-3.1-flash-lite"),
   /**
+   * The model that turns text into numbers.
+   *
+   * It is a different model from the one that writes, and it has its own
+   * life: the old one was switched off by Google, so the name is a setting
+   * rather than a constant in the code.
+   */
+  GEMINI_EMBEDDING_MODEL: z.string().default("gemini-embedding-2"),
+  /**
    * The Gemini free tier enforces requests-per-day per project, shared by
    * every user of the product. These mirror the quota shown in AI Studio so
    * the server throttles itself before Google does.
    */
   AI_GLOBAL_DAILY_REQUESTS: z.coerce.number().int().min(0).default(900),
+  /**
+   * The budget for the numbers that make a search by meaning work.
+   *
+   * Making numbers is cheaper than writing, but it is not free, and it is
+   * shared by everybody, so it has a budget of its own.
+   */
+  AI_GLOBAL_DAILY_EMBEDDINGS: z.coerce.number().int().min(0).default(900),
   AI_GLOBAL_MINUTE_REQUESTS: z.coerce.number().int().min(0).default(12),
   AI_USER_DAILY_CREDITS: z.coerce.number().int().min(0).default(20),
   AI_USER_MINUTE_REQUESTS: z.coerce.number().int().min(0).default(5),

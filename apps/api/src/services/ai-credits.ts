@@ -61,7 +61,7 @@ async function effectiveAllowance(env: ServerEnvironment, periodStart: Date): Pr
  * everybody, so they cannot be kept in a table that is scoped to one person
  * or one workspace.
  */
-async function globalCounter(key: "requests" | "users", periodStart: Date): Promise<number> {
+async function globalCounter(key: "requests" | "users" | "embeddings", periodStart: Date): Promise<number> {
   const [row] = await getDatabase()
     .select({ value: aiGlobalCounters.value })
     .from(aiGlobalCounters)
@@ -75,6 +75,20 @@ async function globalBudgetRemaining(env: ServerEnvironment, periodStart: Date):
   if (env.AI_GLOBAL_DAILY_REQUESTS <= 0) return 0;
   const used = await globalCounter("requests", periodStart);
   return Math.max(0, env.AI_GLOBAL_DAILY_REQUESTS - used);
+}
+
+/**
+ * How many numbers are left in the shared daily budget.
+ *
+ * Making the numbers of a saved item is not the same as writing an answer:
+ * the person did not ask for it and will not read it, so it does not spend
+ * their own credits. It is still a call to the model provider, so it is
+ * counted against a budget that everybody shares.
+ */
+export async function embeddingBudgetRemaining(env: ServerEnvironment, periodStart: Date): Promise<number> {
+  if (env.AI_GLOBAL_DAILY_EMBEDDINGS <= 0) return 0;
+  const used = await globalCounter("embeddings", periodStart);
+  return Math.max(0, env.AI_GLOBAL_DAILY_EMBEDDINGS - used);
 }
 
 /** How many distinct users have spent a credit since the period started. */
@@ -91,6 +105,19 @@ async function countGlobalUsage(tx: DatabaseTransaction, periodStart: Date, firs
     .onConflictDoUpdate({ target: [aiGlobalCounters.key, aiGlobalCounters.periodStart], set: { value: sql`${aiGlobalCounters.value} + 1`, updatedAt: new Date() } });
   if (!firstRequestOfTheDay) return;
   await tx.insert(aiGlobalCounters).values({ key: "users", periodStart, value: 1 })
+    .onConflictDoUpdate({ target: [aiGlobalCounters.key, aiGlobalCounters.periodStart], set: { value: sql`${aiGlobalCounters.value} + 1`, updatedAt: new Date() } });
+}
+
+/**
+ * Count one set of numbers.
+ *
+ * The counter is the same shape as the one for requests, and it is kept
+ * apart from them because making numbers is a different thing from writing
+ * an answer, and has a budget of its own.
+ */
+export async function countEmbedding(periodStart: Date): Promise<void> {
+  await getDatabase()
+    .insert(aiGlobalCounters).values({ key: "embeddings", periodStart, value: 1 })
     .onConflictDoUpdate({ target: [aiGlobalCounters.key, aiGlobalCounters.periodStart], set: { value: sql`${aiGlobalCounters.value} + 1`, updatedAt: new Date() } });
 }
 
@@ -167,6 +194,29 @@ export interface CreditReservation {
   model: string;
   /** True when this request was already charged and is being replayed. */
   replay: boolean;
+}
+
+/**
+ * Check that making numbers is allowed.
+ *
+ * The numbers that make the search by meaning work are made without the
+ * person asking for them, so they need the same permissions as the AI
+ * features they sit beside: the server must have a key, the address must
+ * be confirmed, the person must have agreed to send content to the model
+ * provider, and there must be room in the shared budget.
+ *
+ * The person's own credits are not spent. Nothing is asked of them and
+ * nothing is read by them, so only the shared budget is touched.
+ */
+export async function assertEmbeddingAllowed(env: ServerEnvironment, context: CreditContext): Promise<void> {
+  const status = await readCreditStatus(env, context);
+  if (!status.available) throw new AppError(503, "AI_NOT_AVAILABLE", status.reason ?? "AI features are not available.");
+  if (!status.emailVerified) throw new AppError(403, "EMAIL_NOT_VERIFIED", "Confirm your email address to unlock AI credits.");
+  if (!status.consented) throw new AppError(403, "AI_CONSENT_REQUIRED", "Agree to send content to Google before using AI features.");
+  const remaining = await embeddingBudgetRemaining(env, pacificDayStart());
+  if (remaining <= 0) {
+    throw new AppError(429, "AI_BUDGET_EXHAUSTED", "The free AI allowance for today has been used up. Please try again tomorrow.");
+  }
 }
 
 export interface ReserveOptions {

@@ -8,7 +8,7 @@ import { Button, cn, EmptyState, RecordTypeIcon } from "@data-vault/ui";
 import { useAuth } from "../lib/auth";
 import { useVaultSync } from "../lib/use-vault-sync";
 import { Modal } from "./feedback";
-import { AiCreditBadge } from "./ai-panel";
+import { AiAccessNotice, AiCreditBadge } from "./ai-panel";
 
 const navigation = [
   ["Overview", "/", LayoutDashboard],
@@ -242,7 +242,7 @@ function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => void })
   }, [term]);
 
   const query = useQuery({ queryKey: ["global-search", debounced], queryFn: () => api.search(debounced, 1, 20), enabled: open && debounced.length > 1 && !byMeaning });
-  const meaning = useQuery({ queryKey: ["semantic-search", debounced], queryFn: () => api.semanticSearch(debounced, 20), enabled: open && debounced.length > 1 && byMeaning });
+  const meaning = useQuery({ queryKey: ["semantic-search", debounced], queryFn: () => api.semanticSearch(debounced, 20), enabled: open && debounced.length > 1 && byMeaning, retry: false });
   const notes = useQuery({ queryKey: ["notes", "search", debounced], queryFn: () => api.listNotes({ q: debounced, limit: 10 }), enabled: open && debounced.length > 1 });
   const quickActions = [
     ["Open your saved items", "/saved"],
@@ -362,7 +362,10 @@ function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => void })
               </div>
             </div>
           ) : null}
-          {!hasNotes && !hasRecords && !query.isLoading && !meaning.isLoading ? (
+          {byMeaning && meaning.error ? (
+            <AiAccessNotice error={meaning.error} onAgreed={() => { void meaning.refetch(); }} />
+          ) : null}
+          {!hasNotes && !hasRecords && !query.isLoading && !meaning.isLoading && !meaning.error ? (
             <EmptyState title="No matches" description="Try a different word, or check the spelling. Search looks through titles, saved text, website names and your docs." />
           ) : null}
         </div>

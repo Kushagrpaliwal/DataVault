@@ -174,7 +174,7 @@ export class DataVaultApiClient {
   /** A search by meaning: the items that say the same thing as the question. */
   semanticSearch = (q: string, limit = 20) => this.request<{ items: SemanticResult[]; total: number }>("/api/v1/search/semantic", {}, { q, limit });
   /** Make the numbers of every item in the workspace again. */
-  reindexSemantic = () => this.request<{ indexed: number; skipped: number }>("/api/v1/search/semantic/reindex", { method: "POST", body: "{}" });
+  reindexSemantic = () => this.request<{ indexed: number; skipped: number; remaining: number }>("/api/v1/search/semantic/reindex", { method: "POST", body: "{}" });
   dashboard = () => this.request<Record<string, unknown>>("/api/v1/dashboard");
   auditLogs = (query?: Record<string, QueryValue>) => this.request<PaginationResult<Record<string, unknown>>>("/api/v1/audit-logs", {}, query);
   uploadScreenshot = (recordId: string, file: File) => { const form = new FormData(); form.set("file", file); return this.request<Record<string, unknown>>(`/api/v1/saved-records/${recordId}/attachments`, { method: "POST", body: form }); };

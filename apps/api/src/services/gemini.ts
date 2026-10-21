@@ -105,13 +105,29 @@ export async function generateJson(env: ServerEnvironment, input: GeminiGenerate
 }
 
 /**
- * The model that turns text into a list of numbers.
+ * What the numbers are for.
  *
- * The numbers say what the text is about, and two texts that mean the same
- * thing have numbers that are close together. It is a different model from
- * the one that writes, because a model that writes is not asked to do this.
+ * A document and a question are not the same thing. A document is the thing
+ * that is being looked for, and a question is somebody looking for it. The
+ * model is told which is which, because the numbers are better when it
+ * knows, and because a question and a document are then close to each other
+ * for the right reasons.
  */
-export const EMBEDDING_MODEL = "text-embedding-004";
+export type EmbeddingPurpose = "document" | "query";
+
+const TASK_TYPES: Record<EmbeddingPurpose, "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY"> = {
+  document: "RETRIEVAL_DOCUMENT",
+  query: "RETRIEVAL_QUERY",
+};
+
+/**
+ * How long the list of numbers is.
+ *
+ * The model can make a shorter list, and a shorter list is a smaller row in
+ * the database and a quicker search. The size is the one Google's own guide
+ * recommends, and the quality hardly changes at it.
+ */
+const EMBEDDING_DIMENSIONS = 768;
 
 /**
  * Turn a text into a list of numbers.
@@ -119,18 +135,27 @@ export const EMBEDDING_MODEL = "text-embedding-004";
  * The list is what the search by meaning is made of: the numbers of a
  * question and the numbers of an item are compared, and the ones that are
  * close together are the ones that mean the same thing.
+ *
+ * The model is named in the environment, because its name changes: the model
+ * this used to ask for was switched off by Google, and a name written in the
+ * code cannot be changed without a new release.
  */
-export async function embedText(env: ServerEnvironment, text: string): Promise<number[]> {
+export async function embedText(env: ServerEnvironment, text: string, purpose: EmbeddingPurpose = "document"): Promise<number[]> {
   if (!env.geminiApiKey) throw new AppError(503, "AI_NOT_AVAILABLE", "AI features are not switched on for this server yet.");
+  const model = env.GEMINI_EMBEDDING_MODEL;
   const contents = text.trim().slice(0, 8_000);
   if (!contents) throw new AppError(400, "AI_EMPTY_INPUT", "There is nothing to work with yet.");
 
   let response: Response;
   try {
-    response = await fetch(`${GEMINI_ENDPOINT}/${encodeURIComponent(EMBEDDING_MODEL)}:embedContent`, {
+    response = await fetch(`${GEMINI_ENDPOINT}/${encodeURIComponent(model)}:embedContent`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": env.geminiApiKey },
-      body: JSON.stringify({ content: { parts: [{ text: contents }] } }),
+      body: JSON.stringify({
+        content: { parts: [{ text: contents }] },
+        outputDimensionality: EMBEDDING_DIMENSIONS,
+        taskType: TASK_TYPES[purpose],
+      }),
     });
   } catch {
     throw new AppError(502, "AI_UNREACHABLE", "The AI service could not be reached. Please try again.");
