@@ -1,10 +1,11 @@
 import { and, asc, count, desc, eq, ilike, isNotNull, isNull, or, sql } from "drizzle-orm";
-import { attachments, auditLogs, captureSources, customers, evidenceSnapshots, invoicePayments, invoices, payments, recurringPayments, refunds, savedRecordCollections, savedRecords, savedRecordTags, savedViews, tags, vaultCollections, vaults, vendors, withTenant } from "@data-vault/database";
+import { attachments, auditLogs, captureSources, evidenceSnapshots, savedRecordCollections, savedRecords, savedRecordTags, savedViews, tags, vaultCollections, vaults, withTenant } from "@data-vault/database";
 import type { z } from "zod";
 import type { savedRecordCreateSchema, savedRecordListQuerySchema, savedRecordPatchSchema } from "@data-vault/schemas";
 import type { TenantContext } from "../auth/context";
 import { AppError, notFound } from "../lib/errors";
 import { sha256 } from "../lib/crypto";
+import { likePattern } from "../lib/like";
 import { writeAudit } from "./audit";
 import { defaultVaultId } from "./vaults";
 import { mapSavedRecord } from "./record-shape";
@@ -21,12 +22,11 @@ export async function listSavedRecords(context: TenantContext, query: ListQuery)
     if (!query.trash) conditions.push(query.archived ? isNotNull(savedRecords.archivedAt) : isNull(savedRecords.archivedAt));
     if (query.recordType) conditions.push(eq(savedRecords.recordType, query.recordType));
     if (query.createdVia) conditions.push(eq(savedRecords.createdVia, query.createdVia));
-    if (query.status) conditions.push(eq(savedRecords.summaryStatus, query.status));
     if (query.vaultId) conditions.push(eq(savedRecords.vaultId, query.vaultId));
     if (query.reviewStatus) conditions.push(eq(savedRecords.reviewStatus, query.reviewStatus));
     if (query.tag) conditions.push(sql`exists (select 1 from saved_record_tags record_tags inner join tags record_tags_tag on record_tags_tag.id = record_tags.tag_id where record_tags.saved_record_id = ${savedRecords.id} and record_tags.organization_id = ${context.organizationId} and lower(record_tags_tag.name) = lower(${query.tag}))`);
     if (query.collectionId) conditions.push(sql`exists (select 1 from saved_record_collections record_collections where record_collections.saved_record_id = ${savedRecords.id} and record_collections.organization_id = ${context.organizationId} and record_collections.collection_id = ${query.collectionId})`);
-    if (query.q) conditions.push(or(ilike(savedRecords.title, `%${query.q}%`), ilike(savedRecords.description, `%${query.q}%`), ilike(savedRecords.originalText, `%${query.q}%`), ilike(savedRecords.sourceDomain, `%${query.q}%`), ilike(savedRecords.summaryParty, `%${query.q}%`), sql`${savedRecords.summaryAmount}::text ilike ${`%${query.q.replace(/[₹,$\s]/g, "")}%`}`)!);
+    if (query.q) conditions.push(or(ilike(savedRecords.title, likePattern(query.q)), ilike(savedRecords.description, likePattern(query.q)), ilike(savedRecords.originalText, likePattern(query.q)), ilike(savedRecords.sourceDomain, likePattern(query.q)), ilike(savedRecords.sourcePageTitle, likePattern(query.q)))!);
     const where = and(...conditions);
     const orderColumn = query.sort === "title" ? savedRecords.title : query.sort === "updatedAt" ? savedRecords.updatedAt : query.sort === "recordType" ? savedRecords.recordType : savedRecords.createdAt;
     const [rows, totalRows] = await Promise.all([
@@ -42,16 +42,15 @@ export async function getSavedRecord(context: TenantContext, id: string) {
   return withTenant(context.organizationId, async (tx) => {
     const [record] = await tx.select().from(savedRecords).where(and(eq(savedRecords.organizationId, context.organizationId), eq(savedRecords.id, id))).limit(1);
     if (!record) throw notFound("saved_record");
-    const [capture, payment, files, audit, snapshots, collections, recordTags] = await Promise.all([
+    const [capture, files, audit, snapshots, collections, recordTags] = await Promise.all([
       tx.select().from(captureSources).where(and(eq(captureSources.organizationId, context.organizationId), eq(captureSources.savedRecordId, id))).limit(1),
-      tx.select().from(payments).where(and(eq(payments.organizationId, context.organizationId), eq(payments.savedRecordId, id))).limit(1),
       tx.select({ id: attachments.id, fileName: attachments.fileName, mimeType: attachments.mimeType, byteSize: attachments.byteSize, createdAt: attachments.createdAt }).from(attachments).where(and(eq(attachments.organizationId, context.organizationId), eq(attachments.savedRecordId, id))),
       tx.select().from(auditLogs).where(and(eq(auditLogs.organizationId, context.organizationId), eq(auditLogs.resourceId, id))).orderBy(desc(auditLogs.createdAt)).limit(100),
       tx.select().from(evidenceSnapshots).where(and(eq(evidenceSnapshots.organizationId, context.organizationId), eq(evidenceSnapshots.savedRecordId, id))).orderBy(desc(evidenceSnapshots.capturedAt)),
       tx.select({ id: vaultCollections.id, name: vaultCollections.name, color: vaultCollections.color }).from(savedRecordCollections).innerJoin(vaultCollections, eq(vaultCollections.id, savedRecordCollections.collectionId)).where(and(eq(savedRecordCollections.organizationId, context.organizationId), eq(savedRecordCollections.savedRecordId, id))),
       tx.select({ id: tags.id, name: tags.name, color: tags.color }).from(savedRecordTags).innerJoin(tags, eq(tags.id, savedRecordTags.tagId)).where(and(eq(savedRecordTags.organizationId, context.organizationId), eq(savedRecordTags.savedRecordId, id))),
     ]);
-    return { ...mapSavedRecord(record), metadata: record.metadata, capture: capture[0] ?? null, payment: payment[0] ?? null, collections, tags: recordTags, evidence: snapshots.map((snapshot) => ({ ...snapshot, capturedAt: snapshot.capturedAt.toISOString(), createdAt: snapshot.createdAt.toISOString() })), attachments: files.map((file) => ({ ...file, createdAt: file.createdAt.toISOString() })), audit: audit.map((entry) => ({ ...entry, createdAt: entry.createdAt.toISOString() })) };
+    return { ...mapSavedRecord(record), metadata: record.metadata, capture: capture[0] ?? null, collections, tags: recordTags, evidence: snapshots.map((snapshot) => ({ ...snapshot, capturedAt: snapshot.capturedAt.toISOString(), createdAt: snapshot.createdAt.toISOString() })), attachments: files.map((file) => ({ ...file, createdAt: file.createdAt.toISOString() })), audit: audit.map((entry) => ({ ...entry, createdAt: entry.createdAt.toISOString() })) };
   });
 }
 
@@ -91,11 +90,6 @@ export async function setRecordArchived(context: TenantContext, request: Request
   return withTenant(context.organizationId, async (tx) => {
     const [record] = await tx.update(savedRecords).set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() }).where(and(eq(savedRecords.organizationId, context.organizationId), eq(savedRecords.id, id))).returning();
     if (!record) throw notFound("saved_record");
-    await tx.update(payments).set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() }).where(and(eq(payments.organizationId, context.organizationId), eq(payments.savedRecordId, id)));
-    await tx.update(invoices).set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() }).where(and(eq(invoices.organizationId, context.organizationId), eq(invoices.savedRecordId, id)));
-    await tx.update(customers).set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() }).where(and(eq(customers.organizationId, context.organizationId), eq(customers.savedRecordId, id)));
-    await tx.update(vendors).set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() }).where(and(eq(vendors.organizationId, context.organizationId), eq(vendors.savedRecordId, id)));
-    await tx.update(recurringPayments).set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() }).where(and(eq(recurringPayments.organizationId, context.organizationId), eq(recurringPayments.savedRecordId, id)));
     await writeAudit(tx, context, request, { action: archived ? "archived" : "restored", resourceType: "saved_record", resourceId: id, newValues: { archived } });
     return mapSavedRecord(record);
   });
@@ -105,27 +99,6 @@ export async function trashSavedRecord(context: TenantContext, request: Request,
   return withTenant(context.organizationId, async (tx) => {
     const [record] = await tx.select().from(savedRecords).where(and(eq(savedRecords.organizationId, context.organizationId), eq(savedRecords.id, id))).for("update").limit(1);
     if (!record) throw notFound("saved_record");
-    const [payment, customer, vendor, invoice, refund, recurring] = await Promise.all([
-      tx.select().from(payments).where(and(eq(payments.organizationId, context.organizationId), eq(payments.savedRecordId, id))).limit(1),
-      tx.select({ id: customers.id }).from(customers).where(and(eq(customers.organizationId, context.organizationId), eq(customers.savedRecordId, id))).limit(1),
-      tx.select({ id: vendors.id }).from(vendors).where(and(eq(vendors.organizationId, context.organizationId), eq(vendors.savedRecordId, id))).limit(1),
-      tx.select({ id: invoices.id }).from(invoices).where(and(eq(invoices.organizationId, context.organizationId), eq(invoices.savedRecordId, id))).limit(1),
-      tx.select({ id: refunds.id }).from(refunds).where(and(eq(refunds.organizationId, context.organizationId), eq(refunds.savedRecordId, id))).limit(1),
-      tx.select({ id: recurringPayments.id }).from(recurringPayments).where(and(eq(recurringPayments.organizationId, context.organizationId), eq(recurringPayments.savedRecordId, id))).limit(1),
-    ]);
-    if (customer[0] || vendor[0] || invoice[0] || refund[0] || recurring[0]) throw new AppError(409, "CAPTURE_HAS_BUSINESS_RECORD", "This saved item is linked to business records and cannot be permanently deleted. Archive it instead.");
-
-    const generatedPayment = payment[0];
-    if (generatedPayment) {
-      const [allocations, paymentRefunds] = await Promise.all([
-        tx.select({ id: invoicePayments.id }).from(invoicePayments).where(and(eq(invoicePayments.organizationId, context.organizationId), eq(invoicePayments.paymentId, generatedPayment.id))).limit(1),
-        tx.select({ id: refunds.id }).from(refunds).where(and(eq(refunds.organizationId, context.organizationId), eq(refunds.paymentId, generatedPayment.id))).limit(1),
-      ]);
-      if (generatedPayment.invoiceId || allocations[0] || paymentRefunds[0]) throw new AppError(409, "CAPTURE_PAYMENT_IN_USE", "This capture's generated payment is linked to financial history and cannot be permanently deleted. Archive it instead.");
-      await tx.delete(auditLogs).where(and(eq(auditLogs.organizationId, context.organizationId), eq(auditLogs.resourceType, "payment"), eq(auditLogs.resourceId, generatedPayment.id)));
-      await tx.delete(payments).where(and(eq(payments.organizationId, context.organizationId), eq(payments.id, generatedPayment.id)));
-    }
-
     /**
      * The item itself is not destroyed, it is moved to the trash, so its
      * history is kept. Deleting the audit trail here meant a restored item

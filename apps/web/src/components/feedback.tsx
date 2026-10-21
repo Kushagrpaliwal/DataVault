@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, X } from "lucide-react";
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button, cn } from "@data-vault/ui";
 
 export function ErrorMessage({ message }: { message: string }) {
@@ -21,7 +21,53 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export function useToast() { const value = useContext(ToastContext); if (!value) throw new Error("Missing ToastProvider"); return value; }
 
+/**
+ * A panel that sits over the page.
+ *
+ * The keyboard is kept inside the panel while it is open: escape closes it,
+ * and tabbing past the last control comes back to the first one. The
+ * control that opened the panel gets the focus back when it closes.
+ */
 export function Modal({ open, title, children, onClose, width = "max-w-xl" }: { open: boolean; title: string; children: ReactNode; onClose: () => void; width?: string }) {
+  const panel = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = panel.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    const timer = window.setTimeout(() => {
+      panel.current?.querySelector<HTMLElement>('button, input, textarea, select, a[href]')?.focus();
+    }, 0);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      window.clearTimeout(timer);
+      opener.current?.focus?.();
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
-  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div className={cn("max-h-[90vh] w-full overflow-y-auto rounded-3xl border border-[#dfd8c8] bg-[#fffaf0] p-6 shadow-xl", width)}><div className="mb-5 flex items-center justify-between"><h2 id="modal-title" className="text-xl font-semibold">{title}</h2><Button variant="ghost" size="sm" aria-label="Close" onClick={onClose}><X className="size-4" /></Button></div>{children}</div></div>;
+  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div ref={panel} className={cn("max-h-[90vh] w-full overflow-y-auto rounded-3xl border border-[#dfd8c8] bg-[#fffaf0] p-6 shadow-xl", width)}><div className="mb-5 flex items-center justify-between"><h2 id="modal-title" className="text-xl font-semibold">{title}</h2><Button variant="ghost" size="sm" aria-label="Close" onClick={onClose}><X className="size-4" /></Button></div>{children}</div></div>;
 }

@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { accounts, getDatabase, users } from "@data-vault/database";
 import {
   forgotPasswordSchema, loginSchema, registerSchema, requestPasswordSetupSchema,
-  resetPasswordSchema, setPasswordSchema, verifyEmailSchema,
+  resetPasswordSchema, setPasswordSchema, twoFactorVerifySchema, verifyEmailSchema,
 } from "@data-vault/schemas";
 import type { ServerEnvironment } from "@data-vault/config";
 import type { DataVaultAuth } from "../auth/better-auth";
@@ -14,7 +14,9 @@ import { AppError } from "../lib/errors";
 import { success } from "../lib/http";
 import { createMailer } from "../lib/mailer";
 import { enforceRateLimit, enforceScopeLimit, RATE_LIMITS } from "../lib/rate-limit-policies";
+import { clientIp } from "../lib/client-ip";
 import { canReceiveVerification } from "../auth/disposable-email";
+import { verifyTurnstile } from "../auth/turnstile";
 import {
   completePasswordSetup, findUsersWithoutPassword, issuePasswordSetupToken, passwordSetupUrl,
 } from "../auth/password-setup";
@@ -49,6 +51,12 @@ export function createAuthRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
       await enforceRateLimit(request, env, RATE_LIMITS.signup);
       const input = registerSchema.parse(body);
       /**
+       * The captcha is checked here rather than left to Better Auth, because
+       * that plugin only guards requests that arrive over HTTP and this route
+       * calls the sign-up endpoint directly.
+       */
+      await verifyTurnstile(env, request.headers.get("x-captcha-response"), clientIp(request, env));
+      /**
        * A throwaway inbox is the cheapest way to farm accounts, and every
        * account that can be verified with one is another set of free credits.
        */
@@ -79,6 +87,17 @@ export function createAuthRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
       await enforceScopeLimit(RATE_LIMITS.login, input.email);
       try {
         const result = await auth.api.signInEmail({ body: input, headers: request.headers, returnHeaders: true });
+        /**
+         * An account with two-factor authentication on gets a challenge
+         * instead of a session. There is no session to read here, so the
+         * answer used to be read as though there was one, and signing in
+         * with a second factor failed with a server fault.
+         */
+        const challenge = result.response as { twoFactorRedirect?: boolean; twoFactorMethods?: string[] };
+        if (challenge.twoFactorRedirect) {
+          applyAuthHeaders(set, result.headers);
+          return success({ twoFactorRequired: true, twoFactorMethods: challenge.twoFactorMethods ?? [] });
+        }
         applyAuthHeaders(set, result.headers);
         const organizations = await listOrganizations(result.response.user.id);
         return success({
@@ -86,6 +105,28 @@ export function createAuthRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
           organizations,
           emailVerified: result.response.user.emailVerified,
           csrfToken: await import("../lib/crypto").then(({ sha256 }) => sha256(`${result.response.token}:${env.SESSION_SECRET}`)),
+        });
+      } catch (error) { return mapAuthError(error); }
+    })
+    /**
+     * Finish a sign-in that needs a second factor.
+     *
+     * The password was accepted, so Better Auth left a short-lived challenge
+     * cookie behind. This route exchanges the code for a real session.
+     */
+    .post("/api/v1/auth/two-factor/verify", async ({ body, request, set }) => {
+      const input = twoFactorVerifySchema.parse(body);
+      await enforceRateLimit(request, env, RATE_LIMITS.login);
+      try {
+        const result = await auth.api.verifyTOTP({ body: { code: input.code, trustDevice: input.trustDevice }, headers: request.headers, returnHeaders: true });
+        const verified = result.response as { token: string; user: { id: string; name: string; email: string; emailVerified: boolean; createdAt: Date } };
+        applyAuthHeaders(set, result.headers);
+        const organizations = await listOrganizations(verified.user.id);
+        return success({
+          user: { ...verified.user, createdAt: verified.user.createdAt.toISOString() },
+          organizations,
+          emailVerified: verified.user.emailVerified,
+          csrfToken: await import("../lib/crypto").then(({ sha256 }) => sha256(`${verified.token}:${env.SESSION_SECRET}`)),
         });
       } catch (error) { return mapAuthError(error); }
     })

@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, ilike, isNotNull, isNull, or } from "drizzle-orm";
-import { noteRevisions, notes, userNotePrefs, withTenant } from "@data-vault/database";
+import { noteRevisions, notes, userNotePrefs, vaults, withTenant } from "@data-vault/database";
 import { appendClip, docExcerpt, docToPlainText, findClipByHash, removeClip, type ClipContent } from "@data-vault/notes";
 import { htmlToClipContent, validateDoc } from "@data-vault/notes/html";
 import type { JSONContent } from "@tiptap/core";
@@ -10,6 +10,8 @@ import type { DatabaseTransaction } from "@data-vault/database";
 import type { TenantContext } from "../auth/context";
 import { AppError, notFound } from "../lib/errors";
 import { sha256 } from "../lib/crypto";
+import { likePattern } from "../lib/like";
+import { assertSameOrg } from "../lib/tenant-scope";
 import { writeAudit } from "./audit";
 
 type CreateInput = z.infer<typeof noteCreateSchema>;
@@ -81,7 +83,7 @@ export async function listNotes(context: TenantContext, query: ListQuery): Promi
     conditions.push(query.trash ? isNotNull(notes.deletedAt) : isNull(notes.deletedAt));
     if (query.parentId) conditions.push(eq(notes.parentId, query.parentId));
     if (query.pinned) conditions.push(eq(notes.isPinned, true));
-    if (query.q) conditions.push(or(ilike(notes.title, `%${query.q}%`), ilike(notes.contentText, `%${query.q}%`))!);
+    if (query.q) conditions.push(or(ilike(notes.title, likePattern(query.q)), ilike(notes.contentText, likePattern(query.q)))!);
     const rows = await tx.select().from(notes).where(and(...conditions))
       .orderBy(desc(notes.isPinned), asc(notes.position), desc(notes.updatedAt))
       .limit(query.limit)
@@ -103,6 +105,12 @@ export async function createNote(context: TenantContext, request: Request, input
     const title = input.title?.trim() || DEFAULT_TITLE;
     const checked = validateDoc(input.content ?? { type: "doc", content: [{ type: "paragraph" }] });
     if (!checked.valid) throw new AppError(400, "INVALID_NOTE_CONTENT", checked.message);
+    /**
+     * The folder and the parent doc are named by the client, so both are
+     * checked against this workspace before they are written down.
+     */
+    if (input.vaultId) await assertSameOrg(tx, vaults, input.vaultId, context.organizationId, "folder");
+    if (input.parentId) await assertSameOrg(tx, notes, input.parentId, context.organizationId, "doc");
     const [note] = await tx.insert(notes).values({
       organizationId: context.organizationId,
       vaultId: input.vaultId ?? null,
@@ -123,6 +131,36 @@ export async function createNote(context: TenantContext, request: Request, input
 }
 
 /**
+ * A copy of a doc.
+ *
+ * The copy keeps everything the original had, so it can be worked on without
+ * changing the one that was already there.
+ */
+export async function duplicateNote(context: TenantContext, request: Request, id: string): Promise<Note> {
+  return withTenant(context.organizationId, async (tx) => {
+    const [source] = await tx.select().from(notes).where(and(eq(notes.organizationId, context.organizationId), eq(notes.id, id))).limit(1);
+    if (!source) throw notFound("note");
+    const [copy] = await tx.insert(notes).values({
+      organizationId: context.organizationId,
+      vaultId: source.vaultId,
+      title: source.title,
+      icon: source.icon,
+      content: source.content as Record<string, unknown>,
+      contentText: source.contentText,
+      arrangeMode: source.arrangeMode,
+      isPinned: false,
+      clipCount: source.clipCount,
+      lastClippedAt: source.lastClippedAt,
+      createdBy: context.userId,
+      updatedBy: context.userId,
+    }).returning();
+    if (!copy) throw new Error("Note duplicate insert failed");
+    await writeAudit(tx, context, request, { action: "created", resourceType: "note", resourceId: copy.id, newValues: { title: copy.title, duplicatedFrom: source.id } });
+    return mapNote(copy);
+  });
+}
+
+/**
  * Change a doc.
  *
  * The editor sends the version it started from. When the doc has moved on
@@ -136,6 +174,8 @@ export async function updateNote(context: TenantContext, request: Request, id: s
     if (input.baseVersion !== undefined && input.baseVersion !== before.version) {
       throw new AppError(409, "NOTE_VERSION_CONFLICT", "This doc was changed somewhere else.", { note: mapNote(before) });
     }
+    /** The parent doc is named by the client, so it is checked against this workspace. */
+    if (input.parentId) await assertSameOrg(tx, notes, input.parentId, context.organizationId, "doc");
     let content = before.content as Record<string, unknown>;
     if (input.content !== undefined) {
       const checked = validateDoc(input.content);

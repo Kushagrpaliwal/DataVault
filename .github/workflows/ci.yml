@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_ENV: test
+  API_PORT: "3000"
+  API_URL: http://localhost:3000
+  WEB_URL: http://localhost:5173
+  VITE_API_URL: http://localhost:3000
+  VITE_WEB_URL: http://localhost:5173
+  WXT_API_URL: http://localhost:3000
+  WXT_WEB_URL: http://localhost:5173
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/data_vault_test
+  DATABASE_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+  TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/data_vault_test
+  DB_AUTO_CREATE: "true"
+  SESSION_SECRET: ci-session-secret-that-is-at-least-32-characters-long
+  JWT_SECRET: ci-jwt-secret-that-is-at-least-32-characters-long
+  ALLOWED_ORIGINS: http://localhost:5173
+  EXTENSION_REDIRECT_URL: https://ci-extension-id.chromiumapp.org/data-vault-auth
+  TRUSTED_PROXY_HOPS: "0"
+  TURNSTILE_SECRET_KEY: ""
+  TURNSTILE_SITE_KEY: ""
+  GEMINI_API_KEY: ""
+  SMTP_HOST: ""
+  SMTP_FROM: DataVault <no-reply@example.com>
+
+jobs:
+  verify:
+    name: Typecheck, lint and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+
+      - name: Cache Bun packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Create and migrate the test database
+        run: bun run db:migrate
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Test
+        run: bun run test
+
+      - name: Build
+        run: bun run build

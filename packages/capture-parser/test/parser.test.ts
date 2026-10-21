@@ -4,21 +4,35 @@ import { RuleBasedExtractor } from "../src";
 describe("RuleBasedExtractor", () => {
   const extractor = new RuleBasedExtractor();
 
-  test("extracts an INR UPI expense", async () => {
-    const parsed = await extractor.extract({ text: "₹18,500 paid to Rahul Sharma\nUPI\nUTR 8293849283\n06 Sep 2026" });
-    expect(parsed).toMatchObject({ recordType: "expense", amount: "18500.00", currency: "INR", party: "Rahul Sharma", utr: "8293849283", paymentMethod: "UPI", date: "2026-09-06" });
+  test("reads an article byline and publication date", async () => {
+    const parsed = await extractor.extract({
+      text: "Coastal cities are warming twice as fast as the interior, a new study finds.\n\nBy Priya Raman\n12 March 2026\n\nThe researchers compared thirty years of satellite readings.",
+    });
+    expect(parsed.recordType).toBe("article");
+    expect(parsed.author).toBe("Priya Raman");
+    expect(parsed.publishedAt).toBe("2026-03-12");
+    expect(parsed.claim).toContain("Coastal cities");
   });
 
-  test("extracts slash-formatted bank captures", async () => {
-    const parsed = await extractor.extract({ text: "UPI/DR/625043922311/Rahul\nAmount Debited ₹2,499\n05/09/2026\nUTR 625043922311" });
-    expect(parsed.amount).toBe("2499.00");
-    expect(parsed.party).toBe("Rahul");
-    expect(parsed.date).toBe("2026-09-05");
+  test("keeps a figure that carries a unit", async () => {
+    const parsed = await extractor.extract({ text: "About 42% of respondents said they would switch providers. The rest were undecided." });
+    expect(parsed.number).toBe("42%");
+  });
+
+  test("ignores a bare number that is not a statistic", async () => {
+    const parsed = await extractor.extract({ text: "See chapter 4 for the full method and the raw figures." });
+    expect(parsed.number).toBeUndefined();
+  });
+
+  test("marks a short quotation as a quote", async () => {
+    const parsed = await extractor.extract({ text: "“The model is not ready for the field,” the lead author said." });
+    expect(parsed.isQuote).toBe(true);
+    expect(parsed.recordType).toBe("quote");
   });
 
   test("preserves safe fallback behavior", async () => {
     const parsed = await extractor.extract({ text: "Remember this reference later", pageTitle: "Notes" });
-    expect(parsed.recordType).toBe("other");
-    expect(parsed.title).toBe("Notes");
+    expect(parsed.recordType).toBe("highlight");
+    expect(parsed.title).toBe("Remember this reference later");
   });
 });

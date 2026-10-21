@@ -57,6 +57,19 @@ export const noteCurrentSchema = z.object({
   noteId: uuidSchema.nullable(),
 });
 
+/**
+ * What the AI is asked for.
+ *
+ * `apply` says the answer the user agreed to should be written into the
+ * doc, and `previewId` says which answer that is. The answer is kept on the
+ * server, so applying it costs no second credit and writes exactly what was
+ * shown.
+ */
+export const noteAiRequestSchema = z.object({
+  apply: z.boolean().default(false),
+  previewId: uuidSchema.optional(),
+});
+
 export const noteRevisionRestoreSchema = z.object({
   noteId: uuidSchema,
 });

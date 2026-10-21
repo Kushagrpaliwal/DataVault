@@ -8,6 +8,7 @@ import {
 import { Button, Input, Label } from "@data-vault/ui";
 import { Eye, EyeOff, MailCheck } from "lucide-react";
 import type { z } from "zod";
+import type { AuthSession } from "@data-vault/types";
 import { useAuth } from "../../lib/auth";
 import { ErrorMessage } from "../../components/feedback";
 
@@ -26,6 +27,12 @@ export function LoginPage() {
   const location = useLocation();
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  /**
+   * An account with two-factor authentication on gets a code instead of a
+   * session, so the sign-in is finished in two steps.
+   */
+  const [needsCode, setNeedsCode] = useState(false);
+  const [code, setCode] = useState("");
   const form = useForm<z.infer<typeof loginSchema>>({ resolver: zodResolver(loginSchema), defaultValues: { email: "", password: "" } });
 
   /**
@@ -34,14 +41,48 @@ export function LoginPage() {
    * would leave the extension waiting for a connection that never happens.
    */
   if (session) return <Navigate to={authDestination(location, "/")} replace />;
+
+  const finish = (result: AuthSession) => {
+    setSession(result);
+    navigate(authDestination(location, "/"));
+  };
+
+  if (needsCode) {
+    return (
+      <AuthFrame title="One more step" description="Enter the code from your authenticator app.">
+        <form className="space-y-4" onSubmit={async (event) => {
+          event.preventDefault();
+          setError("");
+          try {
+            finish(await api.verifyTwoFactor({ code: code.trim() }));
+          } catch (caught) {
+            setError(caught instanceof Error ? caught.message : "That code was not accepted.");
+          }
+        }}>
+          {error ? <ErrorMessage message={error} /> : null}
+          <div>
+            <Label htmlFor="code">Authenticator code</Label>
+            <Input id="code" inputMode="numeric" autoComplete="one-time-code" autoFocus value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="123456" />
+            <p className="mt-1 text-xs text-[#6a6a6a]">The six-digit code from your authenticator app.</p>
+          </div>
+          <Button className="w-full" type="submit">Sign in</Button>
+          <button type="button" className="w-full text-center text-sm underline" onClick={() => { setNeedsCode(false); setCode(""); setError(""); }}>Use a different account</button>
+        </form>
+      </AuthFrame>
+    );
+  }
+
   return (
     <AuthFrame title="Welcome back" description="Sign in to see everything you have saved.">
       <form className="space-y-4" onSubmit={form.handleSubmit(async (input) => {
         setError("");
         try {
           const result = await api.login(input);
-          setSession(result);
-          navigate(authDestination(location, "/"));
+          if ("twoFactorRequired" in result && result.twoFactorRequired) {
+            setNeedsCode(true);
+            return;
+          }
+          finish(result as AuthSession);
         } catch (caught) {
           setError(caught instanceof Error ? caught.message : "Could not sign in.");
         }

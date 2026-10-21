@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { BUILT_IN_ROLES, PERMISSIONS } from "@data-vault/schemas";
-import { categories, getDatabase, organizationMembers, organizations, paymentMethods, permissions, rolePermissions, roles, setTenantContext, userRoles } from "@data-vault/database";
+import { getDatabase, organizationMembers, organizations, permissions, rolePermissions, roles, setTenantContext, userRoles } from "@data-vault/database";
 import type { Organization } from "@data-vault/types";
 import type { z } from "zod";
 import type { organizationCreateSchema } from "@data-vault/schemas";
@@ -11,7 +11,7 @@ type OrganizationInput = z.infer<typeof organizationCreateSchema>;
 const rolePermissionsMap: Record<(typeof BUILT_IN_ROLES)[number], readonly string[]> = {
   super_admin: PERMISSIONS,
   admin: PERMISSIONS.filter((key) => key !== "settings.manage"),
-  accountant: PERMISSIONS.filter((key) => !["users.manage", "settings.manage"].includes(key) && !key.endsWith(".archive") && !key.endsWith(".delete")),
+  editor: PERMISSIONS.filter((key) => !["users.manage", "settings.manage"].includes(key) && !key.endsWith(".delete")),
   viewer: PERMISSIONS.filter((key) => key.endsWith(".read")),
   custom: [],
 };
@@ -52,11 +52,6 @@ export async function createOrganization(userId: string, input: OrganizationInpu
     const ownerRole = createdRoles.find((role) => role.slug === "super_admin");
     if (!ownerRole) throw new Error("Owner role missing");
     await tx.insert(userRoles).values({ organizationId: organization.id, userId, roleId: ownerRole.id });
-    await tx.insert(categories).values([
-      { organizationId: organization.id, name: "General", color: "#b8a4ed" }, { organizationId: organization.id, name: "Software", color: "#ff4d8b" },
-      { organizationId: organization.id, name: "Travel", color: "#ffb084" }, { organizationId: organization.id, name: "Professional Services", color: "#e8b94a" },
-    ]);
-    await tx.insert(paymentMethods).values(["UPI", "NEFT", "RTGS", "IMPS", "Cash", "Card"].map((name) => ({ organizationId: organization.id, name, kind: name.toLowerCase() })));
     return { id: organization.id, name: organization.name, slug: organization.slug, currency: organization.currency, locale: organization.locale, timeZone: organization.timeZone, isPersonal: organization.isPersonal, role: "super_admin", permissions: [...PERMISSIONS] };
   });
 }

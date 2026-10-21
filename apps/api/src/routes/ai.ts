@@ -45,7 +45,7 @@ export function createAiRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
       const input = summarySchema.parse(body);
       const { userId, organizationId } = await context(request, auth, env);
       const text = await resolveText({ userId, organizationId }, input);
-      const result = await runAiFeature(env, { userId, organizationId }, "summarize", text, requestId(request));
+      const result = await runAiFeature(env, { userId, organizationId }, "summarize", text, requestId(request, userId), { idempotencyKey: request.headers.get("idempotency-key") ?? undefined });
       return success(result);
     })
     .post("/api/v1/ai/classify", async ({ body, request }) => {
@@ -54,7 +54,7 @@ export function createAiRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
       const input = classifySchema.parse(body);
       const { userId, organizationId } = await context(request, auth, env);
       const text = await resolveText({ userId, organizationId }, input);
-      const result = await runAiFeature(env, { userId, organizationId }, "classify", text, requestId(request));
+      const result = await runAiFeature(env, { userId, organizationId }, "classify", text, requestId(request, userId), { idempotencyKey: request.headers.get("idempotency-key") ?? undefined });
       return success(result);
     })
     .post("/api/v1/ai/extract", async ({ body, request }) => {
@@ -63,7 +63,7 @@ export function createAiRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
       const input = extractSchema.parse(body);
       const { userId, organizationId } = await context(request, auth, env);
       const text = await resolveText({ userId, organizationId }, input);
-      const result = await runAiFeature(env, { userId, organizationId }, "extract", text, requestId(request));
+      const result = await runAiFeature(env, { userId, organizationId }, "extract", text, requestId(request, userId), { idempotencyKey: request.headers.get("idempotency-key") ?? undefined });
       return success(result);
     });
 }
@@ -89,8 +89,10 @@ async function resolveText(
  * A stable identifier for one attempt.
  *
  * The client sends an Idempotency-Key, so a retry after a network blip is
- * charged once rather than twice.
+ * charged once rather than twice. The key is scoped to the account, so one
+ * person cannot spend another person's request by guessing their key.
  */
-function requestId(request: Request): string {
-  return request.headers.get("idempotency-key") ?? crypto.randomUUID();
+function requestId(request: Request, userId: string): string {
+  const key = request.headers.get("idempotency-key");
+  return key ? `${userId}:${key}` : crypto.randomUUID();
 }

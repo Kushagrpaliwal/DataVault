@@ -8,8 +8,6 @@ export const booleanQuerySchema = z.preprocess((value) => {
   return value;
 }, z.boolean());
 export const currencySchema = z.string().regex(/^[A-Z]{3}$/, "Use a three-letter ISO currency code");
-export const moneySchema = z.string().regex(/^\d{1,16}(?:\.\d{1,2})?$/, "Enter a non-negative amount with up to two decimal places");
-export const signedMoneySchema = z.string().regex(/^-?\d{1,16}(?:\.\d{1,2})?$/);
 export const dateSchema = z.iso.date();
 export const dateTimeSchema = z.iso.datetime({ offset: true });
 
@@ -74,15 +72,6 @@ export const paginationQuerySchema = z.object({
 });
 
 export const sortDirectionSchema = z.enum(["asc", "desc"]);
-
-export const addressSchema = z.object({
-  line1: z.string().max(200).default(""),
-  line2: z.string().max(200).optional(),
-  city: z.string().max(100).default(""),
-  state: z.string().max(100).default(""),
-  postalCode: z.string().max(20).default(""),
-  country: z.string().length(2).default("IN"),
-});
 
 export const apiErrorSchema = z.object({
   code: z.string(),

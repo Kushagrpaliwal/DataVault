@@ -4,25 +4,41 @@ import { Elysia } from "elysia";
 import { getServerEnvironment } from "@data-vault/config";
 import { createAuth } from "./auth/better-auth";
 import { normalizeError } from "./lib/errors";
+import { AppError } from "./lib/errors";
 import { success } from "./lib/http";
 import { enforceRateLimit, RATE_LIMITS } from "./lib/rate-limit-policies";
 import { createAuthRoutes } from "./routes/auth";
 import { createAiRoutes } from "./routes/ai";
 import { createCaptureRoutes } from "./routes/captures";
 import { createExtensionAuthRoutes } from "./routes/extension-auth";
-import { createInvoiceRoutes } from "./routes/invoices";
 import { createMiscRoutes } from "./routes/misc";
 import { createNoteRoutes } from "./routes/notes";
 import { createOrganizationRoutes } from "./routes/organizations";
-import { createPartyRoutes } from "./routes/parties";
-import { createPaymentRoutes } from "./routes/payments";
 import { createRecordRoutes } from "./routes/records";
 import { createVaultRoutes } from "./routes/vaults";
 import { isTrustedWebOrigin } from "./auth/origins";
 import { ensurePermissionCatalog } from "./services/organizations";
 
+/**
+ * The largest request body the API accepts.
+ *
+ * A doc holds the pieces of several pages, so the limit is generous, but it
+ * is a limit: without one, a single request could ask the server to hold an
+ * unbounded amount of text in memory.
+ */
+const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
+
 export function createApp() {
   const env = getServerEnvironment();
+  /**
+   * Without a proxy in front of the API, every request looks like it came
+   * from the same place. The rate limits then fall back to the signed-in
+   * account, which is much better than one shared bucket, but the real fix
+   * is to say how many proxies are in front of the API.
+   */
+  if (env.NODE_ENV === "production" && env.trustedProxyHops === 0) {
+    console.warn("[datavault] TRUSTED_PROXY_HOPS is 0 in production, so no request address can be trusted. Rate limits are counted per signed-in account instead of per address. Set TRUSTED_PROXY_HOPS to the number of proxies in front of the API.");
+  }
   const auth = createAuth(env);
   const extensionId = new URL(env.EXTENSION_REDIRECT_URL).hostname.split(".")[0];
   const extensionOrigin = extensionId && /^[a-p]{32}$/.test(extensionId) ? `chrome-extension://${extensionId}` : null;
@@ -45,6 +61,22 @@ export function createApp() {
       set.headers["referrer-policy"] = "no-referrer";
       set.headers["permissions-policy"] = "camera=(), microphone=(), geolocation=()";
       if (env.NODE_ENV === "production") set.headers["strict-transport-security"] = "max-age=31536000; includeSubDomains";
+      /**
+       * A request body has a size limit.
+       *
+       * The length is taken from the header the browser sends, which is
+       * there for every ordinary request. The fields themselves carry their
+       * own limits as well, so a piece of a page cannot be larger than a doc
+       * is allowed to be.
+       */
+      const contentType = request.headers.get("content-type") ?? "";
+      const hasBody = request.method !== "GET" && request.method !== "HEAD";
+      if (hasBody && !contentType.startsWith("multipart/form-data")) {
+        const declaredLength = Number(request.headers.get("content-length") ?? 0);
+        if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BYTES) {
+          throw new AppError(413, "REQUEST_TOO_LARGE", "That request is too large.");
+        }
+      }
       const path = new URL(request.url).pathname;
       /**
        * Better Auth's own endpoints are reachable directly, so they need a
@@ -53,6 +85,14 @@ export function createApp() {
        */
       if (path.startsWith("/api/v1/internal-auth/")) {
         await enforceRateLimit(request, env, RATE_LIMITS.internalAuth);
+      }
+      /**
+       * Accounts are only created through our own route, which checks the
+       * captcha and refuses throwaway addresses. Reached directly, the
+       * internal sign-up endpoint would skip both of those checks.
+       */
+      if (path === "/api/v1/internal-auth/sign-up/email") {
+        throw new AppError(404, "NOT_FOUND", "Use /api/v1/auth/register to create an account.");
       }
       /**
        * Each kind of request gets its own budget.
@@ -66,7 +106,7 @@ export function createApp() {
           await enforceRateLimit(request, env, RATE_LIMITS.extensionRefresh);
         } else if (path.endsWith("/captures") || path.startsWith("/api/v1/notes")) {
           await enforceRateLimit(request, env, RATE_LIMITS.captures);
-        } else if (/\/auth\//.test(path) || path.endsWith("/refund")) {
+        } else if (/\/auth\//.test(path)) {
           await enforceRateLimit(request, env, RATE_LIMITS.internalAuth);
         }
       }
@@ -85,9 +125,6 @@ export function createApp() {
     .use(createOrganizationRoutes(auth, env))
     .use(createRecordRoutes(auth, env))
     .use(createVaultRoutes(auth, env))
-    .use(createPaymentRoutes(auth, env))
-    .use(createPartyRoutes(auth, env))
-    .use(createInvoiceRoutes(auth, env))
     .use(createCaptureRoutes(auth, env))
     .use(createNoteRoutes(auth, env))
     .use(createExtensionAuthRoutes(auth, env))

@@ -1,6 +1,7 @@
-import { and, count, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
-  aiConsents, aiCreditLedger, aiCreditPeriods, aiUsageEvents, getDatabase, users,
+  aiConsents, aiCreditLedger, aiCreditPeriods, aiGlobalCounters, aiUsageEvents, getDatabase, users,
+  type DatabaseTransaction, withUser,
 } from "@data-vault/database";
 import type { ServerEnvironment } from "@data-vault/config";
 import { AppError } from "../lib/errors";
@@ -53,25 +54,61 @@ async function effectiveAllowance(env: ServerEnvironment, periodStart: Date): Pr
   return { base, effective: Math.max(1, Math.min(base, share)) };
 }
 
+/**
+ * Read a counter that the whole product shares.
+ *
+ * The counters live in a table of their own because they are about
+ * everybody, so they cannot be kept in a table that is scoped to one person
+ * or one workspace.
+ */
+async function globalCounter(key: "requests" | "users", periodStart: Date): Promise<number> {
+  const [row] = await getDatabase()
+    .select({ value: aiGlobalCounters.value })
+    .from(aiGlobalCounters)
+    .where(and(eq(aiGlobalCounters.key, key), eq(aiGlobalCounters.periodStart, periodStart)))
+    .limit(1);
+  return row?.value ?? 0;
+}
+
 /** How many requests are left in the shared daily budget. */
 async function globalBudgetRemaining(env: ServerEnvironment, periodStart: Date): Promise<number> {
   if (env.AI_GLOBAL_DAILY_REQUESTS <= 0) return 0;
-  const db = getDatabase();
-  const [row] = await db
-    .select({ count: count() })
-    .from(aiUsageEvents)
-    .where(gte(aiUsageEvents.createdAt, periodStart));
-  return Math.max(0, env.AI_GLOBAL_DAILY_REQUESTS - Number(row?.count ?? 0));
+  const used = await globalCounter("requests", periodStart);
+  return Math.max(0, env.AI_GLOBAL_DAILY_REQUESTS - used);
 }
 
 /** How many distinct users have spent a credit since the period started. */
 async function countActiveUsers(periodStart: Date): Promise<number> {
-  const db = getDatabase();
-  const rows = await db
-    .selectDistinct({ userId: aiUsageEvents.userId })
-    .from(aiUsageEvents)
-    .where(gte(aiUsageEvents.createdAt, periodStart));
-  return rows.length;
+  return globalCounter("users", periodStart);
+}
+
+/**
+ * Count one request and, the first time a person spends a credit in the
+ * period, count that person too.
+ */
+async function countGlobalUsage(tx: DatabaseTransaction, periodStart: Date, firstRequestOfTheDay: boolean) {
+  await tx.insert(aiGlobalCounters).values({ key: "requests", periodStart, value: 1 })
+    .onConflictDoUpdate({ target: [aiGlobalCounters.key, aiGlobalCounters.periodStart], set: { value: sql`${aiGlobalCounters.value} + 1`, updatedAt: new Date() } });
+  if (!firstRequestOfTheDay) return;
+  await tx.insert(aiGlobalCounters).values({ key: "users", periodStart, value: 1 })
+    .onConflictDoUpdate({ target: [aiGlobalCounters.key, aiGlobalCounters.periodStart], set: { value: sql`${aiGlobalCounters.value} + 1`, updatedAt: new Date() } });
+}
+
+/**
+ * How many credits this user has spent today.
+ *
+ * The allowance belongs to the person, not to the workspace, so the count
+ * covers every workspace the person is in. Counting per workspace meant a
+ * new workspace was a fresh allowance, and the free credits could be
+ * multiplied simply by making another one.
+ */
+async function usedCredits(userId: string, organizationId: string, periodStart: Date): Promise<number> {
+  const [row] = await withUser(userId, organizationId, (tx) => tx
+    .select({ used: aiCreditPeriods.used })
+    .from(aiCreditPeriods)
+    .where(and(eq(aiCreditPeriods.userId, userId), eq(aiCreditPeriods.periodStart, periodStart)))
+    .limit(1));
+  return row?.used ?? 0;
 }
 
 /** Read the current balance without spending anything. */
@@ -83,15 +120,6 @@ export async function readCreditStatus(env: ServerEnvironment, context: CreditCo
     .from(users)
     .where(eq(users.id, context.userId))
     .limit(1);
-  const [period] = await db
-    .select({ granted: aiCreditPeriods.granted, used: aiCreditPeriods.used })
-    .from(aiCreditPeriods)
-    .where(and(
-      eq(aiCreditPeriods.organizationId, context.organizationId),
-      eq(aiCreditPeriods.userId, context.userId),
-      eq(aiCreditPeriods.periodStart, periodStart),
-    ))
-    .limit(1);
   const [consent] = await db
     .select({ acceptedAt: aiConsents.acceptedAt })
     .from(aiConsents)
@@ -99,7 +127,7 @@ export async function readCreditStatus(env: ServerEnvironment, context: CreditCo
     .limit(1);
 
   const { base, effective } = await effectiveAllowance(env, periodStart);
-  const used = period?.used ?? 0;
+  const used = await usedCredits(context.userId, context.organizationId, periodStart);
   const available = Boolean(env.geminiApiKey);
   const reason = !available
     ? "AI features are not switched on for this server yet."
@@ -136,11 +164,21 @@ export interface CreditReservation {
   replay: boolean;
 }
 
+export interface ReserveOptions {
+  /** The key the client sent, kept as it was so reuse can be spotted. */
+  idempotencyKey?: string | undefined;
+}
+
 /**
  * Take one credit out of the user's allowance.
  *
  * The period row is locked for the duration of the transaction, so two
  * concurrent requests cannot both see the last credit and both spend it.
+ *
+ * The request id is scoped to the account, so one person cannot spend
+ * another person's request by guessing their key. A key that has already
+ * been used, whether by this person or by anybody else, is refused rather
+ * than quietly turned into a free second call.
  */
 export async function reserveCredit(
   env: ServerEnvironment,
@@ -148,15 +186,47 @@ export async function reserveCredit(
   feature: string,
   model: string,
   requestId: string,
+  options: ReserveOptions = {},
 ): Promise<CreditReservation> {
   const db = getDatabase();
+  const periodStart = pacificDayStart();
+
+  /**
+   * Has this key already been used?
+   *
+   * The key is remembered as the client sent it, so a key that turns up in
+   * another account is caught here rather than being treated as a new
+   * request.
+   */
+  if (options.idempotencyKey) {
+    const seen = await db
+      .select({ userId: aiCreditLedger.userId, organizationId: aiCreditLedger.organizationId, feature: aiCreditLedger.reason })
+      .from(aiCreditLedger)
+      .where(eq(aiCreditLedger.idempotencyKey, options.idempotencyKey))
+      .limit(1);
+    const owner = seen[0];
+    if (owner) {
+      if (owner.userId !== context.userId) {
+        throw new AppError(409, "IDEMPOTENCY_KEY_REUSED", "This request key has already been used. Send a new one.");
+      }
+      if (owner.organizationId !== context.organizationId || owner.feature !== feature) {
+        throw new AppError(409, "IDEMPOTENCY_KEY_REUSED", "This request key has already been used for a different request. Send a new one.");
+      }
+    }
+  }
+
   const existing = await db
     .select({ id: aiCreditLedger.id })
     .from(aiCreditLedger)
     .where(eq(aiCreditLedger.requestId, requestId))
     .limit(1);
   if (existing.length) {
-    return { requestId, userId: context.userId, organizationId: context.organizationId, periodStart: pacificDayStart(), feature, model, replay: true };
+    /**
+     * The same request, charged already. The caller must serve the answer
+     * from the response cache instead of asking the model again, otherwise
+     * the retry would be a second free call to the shared quota.
+     */
+    return { requestId, userId: context.userId, organizationId: context.organizationId, periodStart, feature, model, replay: true };
   }
 
   const status = await readCreditStatus(env, context);
@@ -170,22 +240,17 @@ export async function reserveCredit(
     throw new AppError(429, "AI_BUDGET_EXHAUSTED", "The free AI allowance for today has been used up. Please try again tomorrow.");
   }
 
-  const periodStart = pacificDayStart();
-  await db.transaction(async (tx) => {
+  await withUser(context.userId, context.organizationId, async (tx) => {
     const [period] = await tx
-      .select({ granted: aiCreditPeriods.granted, used: aiCreditPeriods.used })
+      .select({ used: aiCreditPeriods.used })
       .from(aiCreditPeriods)
-      .where(and(
-        eq(aiCreditPeriods.organizationId, context.organizationId),
-        eq(aiCreditPeriods.userId, context.userId),
-        eq(aiCreditPeriods.periodStart, periodStart),
-      ))
+      .where(and(eq(aiCreditPeriods.userId, context.userId), eq(aiCreditPeriods.periodStart, periodStart)))
       .limit(1)
       .for("update");
 
+    const firstRequestOfTheDay = !period;
     if (!period) {
       await tx.insert(aiCreditPeriods).values({
-        organizationId: context.organizationId,
         userId: context.userId,
         periodStart,
         granted: status.allowance,
@@ -194,11 +259,7 @@ export async function reserveCredit(
     } else {
       await tx.update(aiCreditPeriods)
         .set({ used: period.used + 1, updatedAt: new Date() })
-        .where(and(
-          eq(aiCreditPeriods.organizationId, context.organizationId),
-          eq(aiCreditPeriods.userId, context.userId),
-          eq(aiCreditPeriods.periodStart, periodStart),
-        ));
+        .where(and(eq(aiCreditPeriods.userId, context.userId), eq(aiCreditPeriods.periodStart, periodStart)));
     }
 
     await tx.insert(aiCreditLedger).values({
@@ -208,8 +269,11 @@ export async function reserveCredit(
       credits: -1,
       reason: feature,
       requestId,
+      ...(options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}),
       metadata: { model },
     });
+
+    await countGlobalUsage(tx, periodStart, firstRequestOfTheDay);
   });
 
   return { requestId, userId: context.userId, organizationId: context.organizationId, periodStart, feature, model, replay: false };
@@ -232,13 +296,11 @@ export async function recordUsage(reservation: CreditReservation, input: { input
 /** Give a credit back when the request never produced a usable answer. */
 export async function refundCredit(reservation: CreditReservation, reason: string): Promise<void> {
   if (reservation.replay) return;
-  const db = getDatabase();
-  await db.transaction(async (tx) => {
+  await withUser(reservation.userId, reservation.organizationId, async (tx) => {
     const [period] = await tx
       .select({ used: aiCreditPeriods.used })
       .from(aiCreditPeriods)
       .where(and(
-        eq(aiCreditPeriods.organizationId, reservation.organizationId),
         eq(aiCreditPeriods.userId, reservation.userId),
         eq(aiCreditPeriods.periodStart, reservation.periodStart),
       ))
@@ -248,7 +310,6 @@ export async function refundCredit(reservation: CreditReservation, reason: strin
       await tx.update(aiCreditPeriods)
         .set({ used: period.used - 1, updatedAt: new Date() })
         .where(and(
-          eq(aiCreditPeriods.organizationId, reservation.organizationId),
           eq(aiCreditPeriods.userId, reservation.userId),
           eq(aiCreditPeriods.periodStart, reservation.periodStart),
         ));
@@ -294,4 +355,18 @@ export async function listCreditActivity(context: CreditContext, limit = 20): Pr
     .orderBy(desc(aiCreditLedger.createdAt))
     .limit(limit);
   return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
+}
+
+/**
+ * The ledger rows that belong to a set of requests.
+ *
+ * Used to work out whether a request was refunded, which decides if a retry
+ * is a fresh attempt or a replay of one that already happened.
+ */
+export async function ledgerForRequests(requestIds: string[]): Promise<{ requestId: string | null; kind: string; credits: number }[]> {
+  if (!requestIds.length) return [];
+  return getDatabase()
+    .select({ requestId: aiCreditLedger.requestId, kind: aiCreditLedger.kind, credits: aiCreditLedger.credits })
+    .from(aiCreditLedger)
+    .where(inArray(aiCreditLedger.requestId, requestIds));
 }

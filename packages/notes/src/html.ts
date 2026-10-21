@@ -1,5 +1,5 @@
 import { generateJSON } from "@tiptap/html/server";
-import { getSchema, type JSONContent } from "@tiptap/core";
+import { generateHTML, getSchema, type JSONContent } from "@tiptap/core";
 import { noteExtensions } from "./extensions";
 
 /**
@@ -36,6 +36,22 @@ export function textToClipContent(text: string | null | undefined): JSONContent[
   const value = (text ?? "").trim();
   if (!value) return [];
   return value.split(/\n{2,}/).map((block) => ({ type: "paragraph", content: [{ type: "text", text: block }] }));
+}
+
+/**
+ * Render a doc as HTML.
+ *
+ * The same schema the editor uses is used here, so links, images and tables
+ * come out as they were written. A hand-written renderer loses them, and a
+ * doc that is shared loses the very things that make it worth reading.
+ */
+export function docToHtml(doc: JSONContent | null | undefined): string {
+  const content = doc ?? { type: "doc", content: [] };
+  try {
+    return generateHTML(content as never, noteExtensions());
+  } catch {
+    return "";
+  }
 }
 
 /**

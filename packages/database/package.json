@@ -17,7 +17,6 @@
     "@data-vault/config": "workspace:*",
     "@data-vault/schemas": "workspace:*",
     "better-auth": "^1.7.3",
-    "decimal.js": "^10.6.0",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9"
   },

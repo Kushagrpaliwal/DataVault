@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type {
-  captureCreateSchema, invoiceCreateSchema, loginSchema, noteSchema, noteSummarySchema, organizationCreateSchema, parsedCaptureSchema,
-  paymentCreateSchema, registerSchema, savedRecordCreateSchema, savedRecordSchema, vaultCreateSchema,
+  captureCreateSchema, loginSchema, noteSchema, noteSummarySchema, organizationCreateSchema, parsedCaptureSchema,
+  registerSchema, savedRecordCreateSchema, savedRecordSchema, vaultCreateSchema,
 } from "@data-vault/schemas";
 
 export type RegisterInput = z.infer<typeof registerSchema>;
@@ -9,8 +9,6 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type OrganizationCreateInput = z.infer<typeof organizationCreateSchema>;
 export type SavedRecordCreateInput = z.infer<typeof savedRecordCreateSchema>;
 export type SavedRecord = z.infer<typeof savedRecordSchema>;
-export type PaymentCreateInput = z.infer<typeof paymentCreateSchema>;
-export type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 export type CaptureCreateInput = z.infer<typeof captureCreateSchema>;
 export type ParsedCapture = z.infer<typeof parsedCaptureSchema>;
 export type VaultCreateInput = z.infer<typeof vaultCreateSchema>;
@@ -155,19 +153,13 @@ export interface SearchResult {
   resourceType: string;
   title: string;
   subtitle: string | null;
-  amount: string | null;
-  currency: string | null;
   occurredAt: string | null;
 }
 
 export interface DashboardSummary {
-  totalReceived: string;
-  totalPaid: string;
-  netCashFlow: string;
-  pendingPayments: string;
-  outstandingInvoices: string;
-  refunds: string;
+  /** Everything kept in this workspace. */
   savedRecords: number;
+  /** Items that arrived through the browser extension. */
   extensionCaptures: number;
   /** Items saved in the last seven days. */
   savedThisWeek: number;
@@ -175,6 +167,8 @@ export interface DashboardSummary {
   uniqueSources: number;
   /** Timestamp of the most recently saved item, or null when there are none. */
   lastSavedAt: string | null;
+  /** How many items there are of each kind. */
+  byType: { type: string; value: number }[];
 }
 
 /** Which sign-in methods this server offers. */
@@ -233,12 +227,14 @@ export interface AiClassificationResult {
 
 export interface AiExtractionResult {
   title: string;
-  amount?: string;
-  currency?: string;
-  date?: string;
-  party?: string;
-  reference?: string;
-  paymentMethod?: string;
+  /** The person or organisation credited as the author. */
+  author?: string;
+  /** When the material was published, as `YYYY-MM-DD`. */
+  publishedAt?: string;
+  /** The one-line claim the passage makes. */
+  claim?: string;
+  /** A figure quoted in the passage. */
+  number?: string;
 }
 
 export interface AiRunResult<T = unknown> {

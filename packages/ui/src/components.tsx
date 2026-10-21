@@ -2,11 +2,10 @@ import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import {
-  Banknote, Bookmark, CreditCard, DatabaseZap, File, FileText, Globe, Highlighter,
-  Image, Inbox, LoaderCircle, Package, Plane, Receipt, RotateCcw, ShoppingBag,
-  StickyNote, Ticket, UsersRound, Wallet,
+  Bookmark, DatabaseZap, File, FileText, Globe, Highlighter, Image, Inbox, Lightbulb,
+  LoaderCircle, Quote, ScrollText, ShoppingBag, StickyNote, Tags, UserRound, Zap,
 } from "lucide-react";
-import { cn, formatAmount } from "./utils";
+import { cn } from "./utils";
 
 const buttonVariants = cva("inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#1a3a3a] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50", {
   variants: {
@@ -40,10 +39,6 @@ export function Badge({ className, tone = "neutral", ...props }: React.HTMLAttri
   return <span className={cn("inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium", tones[tone], className)} {...props} />;
 }
 
-export function AmountDisplay({ amount, currency = "INR", className }: { amount: string | number; currency?: string; className?: string }) {
-  return <span className={cn("font-semibold tabular-nums", className)}>{formatAmount(amount, currency)}</span>;
-}
-
 export function LoadingState({ label = "Loading" }: { label?: string }) {
   return <div className="flex items-center justify-center gap-2 p-8 text-sm text-[#6a6a6a]"><LoaderCircle aria-hidden className="size-4 animate-spin" />{label}</div>;
 }
@@ -57,22 +52,19 @@ export function EmptyState({ title, description, action }: { title: string; desc
  * glyph so a new backend type never renders as a blank slot.
  */
 const recordTypeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  article: ScrollText,
+  quote: Quote,
+  statistic: Zap,
+  definition: Lightbulb,
+  person: UserRound,
+  product: ShoppingBag,
+  event: Tags,
   note: StickyNote,
   highlight: Highlighter,
   webpage: Globe,
   document: File,
-  receipt: Receipt,
-  invoice: FileText,
-  payment: Wallet,
-  subscription: Ticket,
-  expense: CreditCard,
-  income: Banknote,
-  refund: RotateCcw,
-  customer: UsersRound,
-  vendor: Package,
+  link: FileText,
   image: Image,
-  product: ShoppingBag,
-  travel: Plane,
   bookmark: Bookmark,
   other: DatabaseZap,
 };
@@ -88,23 +80,20 @@ export function RecordTypeIcon({ type, className }: { type: string; className?: 
  * the interface, so every picker renders through this map instead.
  */
 export const RECORD_TYPE_LABELS: Record<string, string> = {
-  payment: "Payment",
-  expense: "Expense",
-  income: "Income",
-  receipt: "Receipt",
-  invoice: "Invoice",
-  subscription: "Subscription",
-  customer: "Customer",
-  vendor: "Vendor",
-  refund: "Refund",
+  article: "Article",
+  quote: "Quote",
+  statistic: "Statistic",
+  definition: "Definition",
+  person: "Person",
+  product: "Product",
+  event: "Event",
   note: "Note",
   webpage: "Webpage",
   highlight: "Highlight",
   document: "Document",
   image: "Image",
-  product: "Product",
-  travel: "Travel",
   bookmark: "Bookmark",
+  link: "Link",
   other: "Other",
 };
 
@@ -114,13 +103,13 @@ export function recordTypeLabel(type: string | null | undefined) {
 }
 
 /**
- * The record types offered in the simplified pickers, in display order. The
- * long tail of financial-era types stays reachable through "Other" so nothing
- * becomes unsaveable, but a casual user never has to parse "invoice" vs
- * "payment" vs "expense" before their first capture.
+ * The record types offered in the simplified pickers, in display order.
+ *
+ * These are the ones a person is likely to reach for. The rest stay
+ * reachable through "Other", so nothing becomes unsaveable.
  */
 export const PRIMARY_RECORD_TYPES = [
-  "note", "highlight", "webpage", "receipt", "invoice", "subscription", "other",
+  "article", "quote", "statistic", "highlight", "note", "webpage", "other",
 ] as const;
 
 export function RecordTypeLabel({ type, className }: { type: string; className?: string }) {

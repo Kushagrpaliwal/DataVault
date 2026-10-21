@@ -159,11 +159,11 @@ export function RecordDetailPage() {
                     {query.data.archivedAt ? <RotateCcw className="size-4" /> : <Archive className="size-4" />}
                     {query.data.archivedAt ? "Restore" : "Archive"}
                   </Button>}
-                  {!["payment", "invoice", "customer", "vendor", "refund", "subscription"].includes(query.data.recordType) && !query.data.deletedAt ? <Button size="sm" variant="ghost" className="text-red-700" onClick={deleteCapture} disabled={remove.isPending}><Trash2 className="size-4" />Trash</Button> : null}
+                  {!query.data.deletedAt ? <Button size="sm" variant="ghost" className="text-red-700" onClick={deleteCapture} disabled={remove.isPending}><Trash2 className="size-4" />Trash</Button> : null}
                 </div>
               </div>
               <dl className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                <Field label="Category" value={query.data.category} />
+                <Field label="Type" value={query.data.recordType} />
                 <Field label="Created via" value={query.data.createdVia} />
                 <Field label="Review state" value={query.data.reviewStatus} />
                 <Field label="Created" value={format(new Date(query.data.createdAt), "dd MMM yyyy, h:mm a")} />

@@ -1,12 +1,10 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { KeyRound, LogOut, Mail, Monitor, Plus, ShieldCheck, Sparkles } from "lucide-react";
-import { Badge, Button, Input, Label, cn } from "@data-vault/ui";
+import { Badge, Button, cn } from "@data-vault/ui";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { PageHeader } from "../../components/page";
-import { Modal, useToast } from "../../components/feedback";
-import { QueryState } from "../../components/data-state";
+import { useToast } from "../../components/feedback";
 
 export function SettingsPage() {
   const { session, organization, api, setSession, selectOrganization } = useAuth();
@@ -159,7 +157,5 @@ export function SettingsPage() {
   </>;
 }
 
-export function CategoriesPage() { const { api } = useAuth(); const client = useQueryClient(); const { notify } = useToast(); const [kind, setKind] = useState<"category" | "payment-method">("category"); const [open, setOpen] = useState(false); const query = useQuery({ queryKey: ["reference-data"], queryFn: () => api.referenceData() }); const items = kind === "category" ? query.data?.categories : query.data?.paymentMethods; return <><PageHeader eyebrow="Configuration" title="Categories & payment methods" description="Workspace-specific labels used by the web app and browser extension." actions={<Button onClick={() => setOpen(true)}><Plus className="size-4"/>Add item</Button>}/><div className="mb-5 flex gap-2"><Button variant={kind === "category" ? "primary" : "secondary"} onClick={() => setKind("category")}>Categories</Button><Button variant={kind === "payment-method" ? "primary" : "secondary"} onClick={() => setKind("payment-method")}>Payment methods</Button></div><section className="panel"><QueryState loading={query.isLoading} error={query.error}/><div className="grid gap-px overflow-hidden rounded-2xl bg-[#eee8da] sm:grid-cols-2 lg:grid-cols-3">{items?.map((item) => <div key={String(item.id)} className="flex items-center gap-3 bg-[#fffdf8] p-5"><i className="size-4 rounded-full" style={{ background: String(item.color ?? "#1a3a3a") }}/><div><p className="font-semibold">{String(item.name)}</p>{item.kind ? <p className="text-xs text-[#6a6a6a]">{String(item.kind)}</p> : null}</div></div>)}</div></section><ReferenceModal open={open} kind={kind} onClose={() => setOpen(false)} onSaved={async () => { notify("Reference item created"); await client.invalidateQueries({ queryKey: ["reference-data"] }); setOpen(false); }}/></>; }
 
-function ReferenceModal({ open, kind, onClose, onSaved }: { open: boolean; kind: "category" | "payment-method"; onClose: () => void; onSaved: () => void }) { const { api } = useAuth(); const [name, setName] = useState(""); const [color, setColor] = useState("#b8a4ed"); const mutation = useMutation({ mutationFn: () => kind === "category" ? api.createCategory({ name, color }) : api.createPaymentMethod({ name, kind: name.toLowerCase().replaceAll(" ", "_") }), onSuccess: onSaved }); return <Modal open={open} onClose={onClose} title={`Add ${kind.replace("-", " ")}`}><form className="space-y-4" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}><div><Label>Name</Label><Input required value={name} onChange={(event) => setName(event.target.value)}/></div>{kind === "category" ? <div><Label>Color</Label><Input type="color" value={color} onChange={(event) => setColor(event.target.value)}/></div> : null}<div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={onClose}>Cancel</Button><Button disabled={mutation.isPending}>Create</Button></div></form></Modal>; }
 function Field({ label, value, capitalize = true }: { label: string; value?: string | undefined; capitalize?: boolean }) { return <div><dt className="text-xs uppercase tracking-[.12em] text-[#6a6a6a]">{label}</dt><dd className={capitalize ? "mt-1 font-medium capitalize" : "mt-1 font-medium"}>{value ?? "—"}</dd></div>; }

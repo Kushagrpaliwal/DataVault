@@ -50,6 +50,27 @@
       "when": 1792516376633,
       "tag": "0006_clammy_lila_cheney",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792568838965,
+      "tag": "0007_stale_saracen",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792568838966,
+      "tag": "0008_force_row_level_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792568943685,
+      "tag": "0009_demonic_kat_farrell",
+      "breakpoints": true
     }
   ]
 }

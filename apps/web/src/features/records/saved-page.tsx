@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive, ArrowDownUp, ChevronLeft, ChevronRight, Download, ExternalLink,
-  FolderOpen, Link2, Plus, RotateCcw, Search, Trash2, X,
+  FolderOpen, Library, Link2, Plus, RotateCcw, Search, Trash2, X,
 } from "lucide-react";
 import {
   Badge, Button, EmptyState, Input, Label, PRIMARY_RECORD_TYPES, RecordTypeIcon,
@@ -50,8 +50,14 @@ export function SavedPage() {
   }, [search]);
 
   const vaults = useQuery({ queryKey: ["vaults", organization?.id], queryFn: () => api.listVaults(), enabled: Boolean(organization) });
-  const activeVaultId = vaultId || vaults.data?.[0]?.id || "";
-  const collections = useQuery({ queryKey: ["collections", activeVaultId], queryFn: () => api.listCollections(activeVaultId), enabled: Boolean(activeVaultId) });
+  /**
+   * Every folder is shown until one is chosen.
+   *
+   * The page used to open on the first folder, so everything that was saved
+   * somewhere else was hidden without saying so.
+   */
+  const activeVaultId = vaultId;
+  const collections = useQuery({ queryKey: ["collections", activeVaultId], queryFn: () => api.listCollections(activeVaultId), enabled: Boolean(organization && activeVaultId) });
   const tags = useQuery({ queryKey: ["tags", organization?.id], queryFn: () => api.listTags(), enabled: Boolean(organization) });
 
   const query = useQuery({
@@ -414,6 +420,13 @@ function FilterRail({
 
       <section className="panel p-3">
         <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-[.14em] text-[#6a6a6a]">Folders</p>
+        <button
+          onClick={() => onVault("")}
+          className={`mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm ${activeVaultId === "" ? "bg-[#1a3a3a] text-white" : "hover:bg-[#f5f0e0]"}`}
+        >
+          <Library className="size-4" />
+          <span className="truncate">All folders</span>
+        </button>
         {vaults.map((vault) => (
           <button
             key={vault.id}

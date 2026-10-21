@@ -13,9 +13,7 @@ export function mapSavedRecord(row: typeof savedRecords.$inferSelect): SavedReco
     description: row.description, originalText: row.originalText, sourceType: row.sourceType,
     sourceUrl: row.sourceUrl, sourceDomain: row.sourceDomain, sourcePageTitle: row.sourcePageTitle,
     capturedAt: row.capturedAt?.toISOString() ?? null, createdVia: row.createdVia,
-    amount: row.summaryAmount, currency: row.summaryCurrency, party: row.summaryParty,
-    category: typeof row.metadata.categoryName === "string" ? row.metadata.categoryName : null,
-    status: row.summaryStatus, vaultId: row.vaultId, captureKind: row.captureKind, reviewStatus: row.reviewStatus, privacyLevel: row.privacyLevel,
+    vaultId: row.vaultId, captureKind: row.captureKind, reviewStatus: row.reviewStatus, privacyLevel: row.privacyLevel,
     createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), archivedAt: row.archivedAt?.toISOString() ?? null, deletedAt: row.deletedAt?.toISOString() ?? null,
   };
 }

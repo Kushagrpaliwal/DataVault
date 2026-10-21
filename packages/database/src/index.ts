@@ -22,9 +22,34 @@ export async function setTenantContext(transaction: DatabaseTransaction, organiz
   await transaction.execute(sql`select set_config('app.organization_id', ${organizationId}, true)`);
 }
 
+/**
+ * Tell the database which person is asking.
+ *
+ * The credit tables follow the person rather than the workspace, because the
+ * allowance belongs to the person. The row-level security rules on those
+ * tables read this value.
+ */
+export async function setUserContext(transaction: DatabaseTransaction, userId: string) {
+  await transaction.execute(sql`select set_config('app.user_id', ${userId}, true)`);
+}
+
 export function withTenant<T>(organizationId: string, operation: (transaction: DatabaseTransaction) => Promise<T>): Promise<T> {
   return getDatabase().transaction(async (transaction) => {
     await setTenantContext(transaction, organizationId);
+    return operation(transaction);
+  });
+}
+
+/**
+ * A transaction that knows both the workspace and the person.
+ *
+ * The credit tables are shared across a person's workspaces, so reading them
+ * needs the person as well as the workspace.
+ */
+export function withUser<T>(userId: string, organizationId: string, operation: (transaction: DatabaseTransaction) => Promise<T>): Promise<T> {
+  return getDatabase().transaction(async (transaction) => {
+    await setTenantContext(transaction, organizationId);
+    await setUserContext(transaction, userId);
     return operation(transaction);
   });
 }

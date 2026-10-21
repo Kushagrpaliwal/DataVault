@@ -1,7 +1,7 @@
 import type {
   AiActivityEntry, AiClassificationResult, AiCreditStatus, AiExtractionResult, AiRunResult, AiSummaryResult,
   ApiResponse, AuthMethods, AuthSession, CaptureCreateInput, ExtensionSession, ExtensionTokenSet, Note, NoteClipResult,
-  NoteRevision, NoteSummary, NoteWriteUpSection, Organization, PaginationResult, PaymentCreateInput, SavedRecord, Vault,
+  NoteRevision, NoteSummary, NoteWriteUpSection, Organization, PaginationResult, SavedRecord, Vault,
   VaultCollection, VaultCreateInput, VaultTag,
 } from "@data-vault/types";
 
@@ -90,8 +90,10 @@ export class DataVaultApiClient {
 
   getMe = () => this.request<AuthSession>("/api/v1/me");
   authMethods = () => this.request<AuthMethods>("/api/v1/auth/methods");
-  login = (body: { email: string; password: string }) => this.request<AuthSession>("/api/v1/auth/login", { method: "POST", body: JSON.stringify(body) });
-  register = (body: { name: string; email: string; password: string }) => this.request<AuthSession>("/api/v1/auth/register", { method: "POST", body: JSON.stringify(body) });
+  login = (body: { email: string; password: string }) => this.request<AuthSession | { twoFactorRequired: true; twoFactorMethods: string[] }>("/api/v1/auth/login", { method: "POST", body: JSON.stringify(body) });
+  /** Finish a sign-in that needs a second factor. */
+  verifyTwoFactor = (body: { code: string; trustDevice?: boolean }) => this.request<AuthSession>("/api/v1/auth/two-factor/verify", { method: "POST", body: JSON.stringify(body) });
+  register = (body: { name: string; email: string; password: string }, captchaToken?: string) => this.request<AuthSession>("/api/v1/auth/register", { method: "POST", headers: captchaToken ? { "X-Captcha-Response": captchaToken } : {}, body: JSON.stringify(body) });
   logout = () => this.request<void>("/api/v1/auth/logout", { method: "POST", body: "{}" });
   forgotPassword = (email: string) => this.request<void>("/api/v1/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
   resetPassword = (token: string, password: string) => this.request<void>("/api/v1/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) });
@@ -130,34 +132,11 @@ export class DataVaultApiClient {
   listSavedViews = () => this.request<Record<string, unknown>[]>("/api/v1/saved-views");
   createSavedView = (body: Record<string, unknown>) => this.request<Record<string, unknown>>("/api/v1/saved-views", { method: "POST", body: JSON.stringify(body) });
   deleteSavedView = (id: string) => this.request<void>(`/api/v1/saved-views/${id}`, { method: "DELETE", body: "{}" });
-  listPayments = (query?: Record<string, QueryValue>) => this.request<PaginationResult<Record<string, unknown>>>("/api/v1/payments", {}, query);
-  getPayment = (id: string) => this.request<Record<string, unknown>>(`/api/v1/payments/${id}`);
-  createPayment = (body: PaymentCreateInput, idempotencyKey = crypto.randomUUID()) => this.request<Record<string, unknown>>("/api/v1/payments", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
-  updatePayment = (id: string, body: Record<string, unknown>) => this.request<Record<string, unknown>>(`/api/v1/payments/${id}`, { method: "PATCH", body: JSON.stringify(body) });
-  refundPayment = (id: string, body: Record<string, unknown>, idempotencyKey = crypto.randomUUID()) => this.request<Record<string, unknown>>(`/api/v1/payments/${id}/refund`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
-  listCustomers = (query?: Record<string, QueryValue>) => this.request<PaginationResult<Record<string, unknown>>>("/api/v1/customers", {}, query);
-  getCustomer = (id: string) => this.request<Record<string, unknown>>(`/api/v1/customers/${id}`);
-  createCustomer = (body: Record<string, unknown>) => this.request<Record<string, unknown>>("/api/v1/customers", { method: "POST", body: JSON.stringify(body) });
-  updateCustomer = (id: string, body: Record<string, unknown>) => this.request<Record<string, unknown>>(`/api/v1/customers/${id}`, { method: "PATCH", body: JSON.stringify(body) });
-  listVendors = (query?: Record<string, QueryValue>) => this.request<PaginationResult<Record<string, unknown>>>("/api/v1/vendors", {}, query);
-  getVendor = (id: string) => this.request<Record<string, unknown>>(`/api/v1/vendors/${id}`);
-  createVendor = (body: Record<string, unknown>) => this.request<Record<string, unknown>>("/api/v1/vendors", { method: "POST", body: JSON.stringify(body) });
-  updateVendor = (id: string, body: Record<string, unknown>) => this.request<Record<string, unknown>>(`/api/v1/vendors/${id}`, { method: "PATCH", body: JSON.stringify(body) });
-  listInvoices = (query?: Record<string, QueryValue>) => this.request<PaginationResult<Record<string, unknown>>>("/api/v1/invoices", {}, query);
-  getInvoice = (id: string) => this.request<Record<string, unknown>>(`/api/v1/invoices/${id}`);
-  createInvoice = (body: Record<string, unknown>, idempotencyKey = crypto.randomUUID()) => this.request<Record<string, unknown>>("/api/v1/invoices", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
-  updateInvoice = (id: string, body: Record<string, unknown>) => this.request<Record<string, unknown>>(`/api/v1/invoices/${id}`, { method: "PATCH", body: JSON.stringify(body) });
-  listRecurring = (query?: Record<string, QueryValue>) => this.request<PaginationResult<Record<string, unknown>>>("/api/v1/recurring-payments", {}, query);
-  createRecurring = (body: Record<string, unknown>) => this.request<Record<string, unknown>>("/api/v1/recurring-payments", { method: "POST", body: JSON.stringify(body) });
-  referenceData = () => this.request<{ categories: Record<string, unknown>[]; paymentMethods: Record<string, unknown>[] }>("/api/v1/settings/reference-data");
-  createCategory = (body: Record<string, unknown>) => this.request<Record<string, unknown>>("/api/v1/settings/categories", { method: "POST", body: JSON.stringify(body) });
-  createPaymentMethod = (body: Record<string, unknown>) => this.request<Record<string, unknown>>("/api/v1/settings/payment-methods", { method: "POST", body: JSON.stringify(body) });
   createCapture = (body: CaptureCreateInput, idempotencyKey: string = crypto.randomUUID()) => this.request<Record<string, unknown>>("/api/v1/captures", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
   recentCaptures = () => this.request<SavedRecord[]>("/api/v1/captures/recent");
   search = (q: string, page = 1, limit = 20) => this.request<PaginationResult<Record<string, unknown>>>("/api/v1/search", {}, { q, page, limit });
   dashboard = () => this.request<Record<string, unknown>>("/api/v1/dashboard");
   auditLogs = (query?: Record<string, QueryValue>) => this.request<PaginationResult<Record<string, unknown>>>("/api/v1/audit-logs", {}, query);
-  report = (query: Record<string, QueryValue>) => this.request<Record<string, unknown>>("/api/v1/reports", {}, query);
   uploadScreenshot = (recordId: string, file: File) => { const form = new FormData(); form.set("file", file); return this.request<Record<string, unknown>>(`/api/v1/saved-records/${recordId}/attachments`, { method: "POST", body: form }); };
   getAttachmentBlob = (id: string) => this.requestBlob(`/api/v1/attachments/${id}`);
   extensionStart = (body: Record<string, unknown>) => this.request<{ authorizationUrl: string }>("/api/v1/extension/auth/start", { method: "POST", body: JSON.stringify(body) });
@@ -176,6 +155,8 @@ export class DataVaultApiClient {
   updateNote = (id: string, body: Record<string, unknown>) => this.request<Note>(`/api/v1/notes/${id}`, { method: "PATCH", body: JSON.stringify(body) });
   deleteNote = (id: string) => this.request<{ id: string }>(`/api/v1/notes/${id}`, { method: "DELETE" });
   restoreNote = (id: string) => this.request<Note>(`/api/v1/notes/${id}/restore`, { method: "POST", body: "{}" });
+  /** A copy of a doc. */
+  duplicateNote = (id: string, idempotencyKey: string = crypto.randomUUID()) => this.request<Note>(`/api/v1/notes/${id}/duplicate`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: "{}" });
   /** Add a piece of a web page to a doc. */
   addNoteClip = (id: string, body: Record<string, unknown>) => this.request<NoteClipResult>(`/api/v1/notes/${id}/clips`, { method: "POST", body: JSON.stringify(body) });
   /** Take a piece back out of a doc. */
@@ -183,9 +164,9 @@ export class DataVaultApiClient {
   listNoteRevisions = (id: string) => this.request<NoteRevision[]>(`/api/v1/notes/${id}/revisions`);
   restoreNoteRevision = (id: string, revisionId: string) => this.request<Note>(`/api/v1/notes/${id}/revisions/${revisionId}/restore`, { method: "POST", body: "{}" });
   /** Let the AI sort the doc into topics. */
-  organizeNote = (id: string, body: Record<string, unknown> = {}) => this.request<{ preview: boolean; sections: Array<{ title: string; clipIds: string[] }>; remaining: number }>(`/api/v1/notes/${id}/organize`, { method: "POST", body: JSON.stringify(body) });
+  organizeNote = (id: string, body: { apply?: boolean; previewId?: string } = {}) => this.request<{ preview: boolean; previewId?: string; sections: Array<{ title: string; clipIds: string[] }>; remaining: number }>(`/api/v1/notes/${id}/organize`, { method: "POST", body: JSON.stringify(body) });
   /** Turn the pieces into writing, with sentences that follow each other. */
-  writeUpNote = (id: string, body: Record<string, unknown> = {}) => this.request<{ preview: boolean; title: string; sections: NoteWriteUpSection[]; remaining: number }>(`/api/v1/notes/${id}/write-up`, { method: "POST", body: JSON.stringify(body) });
+  writeUpNote = (id: string, body: { apply?: boolean; previewId?: string } = {}) => this.request<{ preview: boolean; previewId?: string; title?: string; sections: NoteWriteUpSection[]; remaining: number }>(`/api/v1/notes/${id}/write-up`, { method: "POST", body: JSON.stringify(body) });
   /** Sort the pieces of a doc again, using the mode the doc is set to. */
   rearrangeNote = (id: string) => this.request<Note>(`/api/v1/notes/${id}/rearrange`, { method: "POST", body: "{}" });
   /** The doc the keyboard shortcut adds to. */

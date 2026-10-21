@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { dateSchema, dateTimeSchema, moneySchema, uuidSchema } from "./common";
+import { dateSchema, dateTimeSchema, uuidSchema } from "./common";
 import { CAPTURE_KINDS, RECORD_TYPES } from "./constants";
 import { sourceSchema } from "./records";
 
@@ -12,16 +12,27 @@ export const captureQualitySchema = z.object({
   likelyCookieBanner: z.boolean(),
   warnings: z.array(z.string().max(200)).max(10).default([]),
 });
+
+/**
+ * What a clip looks like once it has been read.
+ *
+ * These are the fields a researcher needs in order to cite the source later,
+ * so they describe the material itself rather than any transaction it may
+ * happen to mention.
+ */
 export const parsedCaptureSchema = z.object({
   recordType: z.enum(RECORD_TYPES).optional(),
   title: z.string().max(250).optional(),
-  amount: moneySchema.optional(),
-  currency: z.string().length(3).optional(),
-  party: z.string().max(250).optional(),
-  utr: z.string().max(120).optional(),
-  transactionReference: z.string().max(120).optional(),
-  paymentMethod: z.string().max(80).optional(),
-  date: dateSchema.optional(),
+  /** The person or organisation credited as the author. */
+  author: z.string().max(250).optional(),
+  /** When the material was first published, as `YYYY-MM-DD`. */
+  publishedAt: dateSchema.optional(),
+  /** The one-line claim the passage makes. */
+  claim: z.string().max(500).optional(),
+  /** A figure quoted in the passage, kept exactly as it was written. */
+  number: z.string().max(120).optional(),
+  /** True when the clip is a short quotation rather than a paragraph. */
+  isQuote: z.boolean().optional(),
   confidence: captureConfidenceSchema.default({}),
 });
 
@@ -33,8 +44,6 @@ export const captureCreateSchema = z.object({
   captureQuality: captureQualitySchema.optional(),
   parsedData: parsedCaptureSchema.optional(),
   recordType: z.enum(RECORD_TYPES).default("other"),
-  categoryId: uuidSchema.nullable().optional(),
-  paymentMethodId: uuidSchema.nullable().optional(),
   confirmDuplicate: z.boolean().default(false),
   vaultId: uuidSchema.optional(),
   captureKind: z.enum(CAPTURE_KINDS).default("selection"),

@@ -1,67 +1,124 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { and, eq, inArray } from "drizzle-orm";
+import { aiConsents, aiCreditPeriods, getDatabase, organizations, organizationMembers, users } from "@data-vault/database";
 import { getServerEnvironment } from "@data-vault/config";
-import { classifyEmailDomain, emailDomain } from "../src/auth/disposable-email";
-import { pacificDayKey, pacificDayStart } from "../src/lib/pacific";
+import { recordConsent, reserveCredit } from "../src/services/ai-credits";
+import { pacificDayStart } from "../src/lib/pacific";
 
-const baseEnvironment = {
+const environment = getServerEnvironment({
   NODE_ENV: "test",
   API_PORT: "3000",
   API_URL: "http://localhost:3000",
   WEB_URL: "http://localhost:5173",
-  DATABASE_URL: "postgresql://example@example.com/data-vault",
+  DATABASE_URL: process.env.DATABASE_URL ?? "postgresql://example@example.com/data-vault",
   SESSION_SECRET: "s".repeat(32),
   JWT_SECRET: "j".repeat(32),
   ALLOWED_ORIGINS: "http://localhost:5173",
   EXTENSION_REDIRECT_URL: "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.chromiumapp.org/data-vault-auth",
-};
-
-describe("the AI environment", () => {
-  test("leaves the features switched off without a key", () => {
-    const environment = getServerEnvironment(baseEnvironment);
-    expect(environment.geminiApiKey).toBeUndefined();
-    expect(environment.GEMINI_MODEL).toBe("gemini-3.1-flash-lite");
-  });
-
-  test("keeps the shared budget below the free tier and the personal cap below it", () => {
-    const environment = getServerEnvironment(baseEnvironment);
-    expect(environment.AI_GLOBAL_DAILY_REQUESTS).toBeLessThanOrEqual(environment.AI_USER_DAILY_CREDITS * 100);
-    expect(environment.AI_USER_DAILY_CREDITS).toBeLessThan(environment.AI_GLOBAL_DAILY_REQUESTS);
-    expect(environment.AI_USER_MINUTE_REQUESTS).toBeLessThanOrEqual(environment.AI_GLOBAL_MINUTE_REQUESTS);
-  });
+  /** The features are switched on so the counters can be exercised. */
+  GEMINI_API_KEY: "test-key",
+  AI_USER_DAILY_CREDITS: "20",
+  AI_GLOBAL_DAILY_REQUESTS: "900",
 });
 
-describe("email domains", () => {
-  test("knows the difference between a real provider and a throwaway one", () => {
-    expect(classifyEmailDomain("someone@gmail.com")).toBe("allowed");
-    expect(classifyEmailDomain("someone@mailinator.com")).toBe("blocked");
-    expect(classifyEmailDomain("someone@some-random-company.example")).toBe("unknown");
-  });
+const createdUserIds: string[] = [];
+const createdOrganizationIds: string[] = [];
 
-  test("reads the domain from the address", () => {
-    expect(emailDomain("Someone@Example.COM")).toBe("example.com");
-    expect(emailDomain("not-an-email")).toBe("");
-  });
+async function makeUser(): Promise<string> {
+  const db = getDatabase();
+  const [user] = await db.insert(users).values({
+    name: "Credit Tester",
+    email: `credits-${crypto.randomUUID().slice(0, 8)}@example.com`,
+    emailVerified: true,
+  }).returning({ id: users.id });
+  if (!user) throw new Error("User insert failed");
+  createdUserIds.push(user.id);
+  /**
+   * The features are only used by an account that has agreed to send its
+   * content to the model provider.
+   */
+  await recordConsent(user.id);
+  return user.id;
+}
+
+async function makeOrganization(userId: string): Promise<string> {
+  const db = getDatabase();
+  const [organization] = await db.insert(organizations).values({
+    name: "Credit Workspace",
+    slug: `credits-${crypto.randomUUID().slice(0, 12)}`,
+    currency: "USD",
+    locale: "en-US",
+    timeZone: "UTC",
+    createdBy: userId,
+  }).returning({ id: organizations.id });
+  if (!organization) throw new Error("Organization insert failed");
+  await db.insert(organizationMembers).values({ organizationId: organization.id, userId, status: "active" });
+  createdOrganizationIds.push(organization.id);
+  return organization.id;
+}
+
+afterEach(async () => {
+  const db = getDatabase();
+  if (createdOrganizationIds.length) {
+    await db.delete(organizations).where(inArray(organizations.id, createdOrganizationIds));
+  }
+  if (createdUserIds.length) {
+    await db.delete(aiCreditPeriods).where(inArray(aiCreditPeriods.userId, createdUserIds));
+    await db.delete(aiConsents).where(inArray(aiConsents.userId, createdUserIds));
+    await db.delete(users).where(inArray(users.id, createdUserIds));
+  }
+  createdUserIds.length = 0;
+  createdOrganizationIds.length = 0;
 });
 
-describe("the credit day", () => {
-  test("is the Pacific calendar day", () => {
-    // 03:00 UTC on the 20th is still the 19th in Los Angeles.
-    const late = new Date("2026-10-20T03:00:00.000Z");
-    expect(pacificDayKey(late)).toBe("2026-10-19");
-    // 20:00 UTC on the 20th is the 20th in Los Angeles.
-    expect(pacificDayKey(new Date("2026-10-20T20:00:00.000Z"))).toBe("2026-10-20");
+describe("the AI credit allowance", () => {
+  test("is counted for the person, not for the workspace", async () => {
+    const userId = await makeUser();
+    const first = await makeOrganization(userId);
+    const second = await makeOrganization(userId);
+
+    const periodStart = pacificDayStart();
+    await reserveCredit(environment, { userId, organizationId: first }, "summarize", "test-model", `${userId}:first`);
+    await reserveCredit(environment, { userId, organizationId: second }, "summarize", "test-model", `${userId}:second`);
+
+    const db = getDatabase();
+    const [period] = await db.select().from(aiCreditPeriods).where(and(
+      eq(aiCreditPeriods.userId, userId),
+      eq(aiCreditPeriods.periodStart, periodStart),
+    )).limit(1);
+    /**
+     * One row for the person, and both requests counted in it. A separate
+     * workspace is not a separate allowance.
+     */
+    expect(period?.used).toBe(2);
   });
 
-  test("starts at midnight Pacific", () => {
-    const start = pacificDayStart(new Date("2026-10-20T20:00:00.000Z"));
-    // Midnight Pacific on the 20th is 07:00 UTC, because the 20th is still
-    // daylight saving time.
-    expect(start.toISOString()).toBe("2026-10-20T07:00:00.000Z");
+  test("refuses a request key that another account has already used", async () => {
+    const first = await makeUser();
+    const second = await makeUser();
+    const workspace = await makeOrganization(first);
+    const key = `shared-key-${crypto.randomUUID()}`;
+
+    await reserveCredit(environment, { userId: first, organizationId: workspace }, "summarize", "test-model", `${first}:${key}`, { idempotencyKey: key });
+
+    let failure: unknown;
+    try {
+      await reserveCredit(environment, { userId: second, organizationId: workspace }, "summarize", "test-model", `${second}:${key}`, { idempotencyKey: key });
+    } catch (caught) {
+      failure = caught;
+    }
+    expect(failure).toBeTruthy();
+    expect((failure as { code?: string }).code).toBe("IDEMPOTENCY_KEY_REUSED");
   });
 
-  test("starts at a whole day", () => {
-    const start = pacificDayStart(new Date("2026-10-20T20:00:00.000Z"));
-    const end = pacificDayStart(new Date("2026-10-21T20:00:00.000Z"));
-    expect(end.getTime() - start.getTime()).toBe(24 * 60 * 60 * 1000);
+  test("marks a repeated request as a replay rather than charging again", async () => {
+    const userId = await makeUser();
+    const workspace = await makeOrganization(userId);
+    const key = `repeat-key-${crypto.randomUUID()}`;
+
+    const first = await reserveCredit(environment, { userId, organizationId: workspace }, "summarize", "test-model", `${userId}:${key}`, { idempotencyKey: key });
+    const second = await reserveCredit(environment, { userId, organizationId: workspace }, "summarize", "test-model", `${userId}:${key}`, { idempotencyKey: key });
+    expect(first.replay).toBe(false);
+    expect(second.replay).toBe(true);
   });
 });

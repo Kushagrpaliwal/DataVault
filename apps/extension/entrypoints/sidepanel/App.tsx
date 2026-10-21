@@ -93,10 +93,8 @@ export function SidePanelApp() {
 function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?: number) => void }) {
   const [pending, setPending] = useState<PendingCapture>();
   const [parsed, setParsed] = useState<ParsedCapture>({ confidence: {} });
-  const [categoryId, setCategoryId] = useState("");
   const [folderId, setFolderId] = useState("");
   const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
-  const [references, setReferences] = useState<{ categories: Record<string, unknown>[] }>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState<SavedCapture>();
@@ -137,7 +135,6 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
        */
       setFolderId(preferences.defaultVaultId && listed.some((folder) => folder.id === preferences.defaultVaultId) ? preferences.defaultVaultId : "");
     } catch { /* The folder list is optional. */ }
-    try { setReferences(await withOrganization((api) => api.referenceData())); } catch { /* Categories are optional. */ }
   };
 
   useEffect(() => { void load(); return subscribeStorage(() => void load()); }, []);
@@ -177,7 +174,7 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
           selectedText: current.selectedText, originalText: current.selectedText,
           source: { url: current.pageUrl, title: cleanTitle, domain: current.domain }, capturedAt: current.capturedAt,
           captureQuality: current.captureQuality,
-          parsedData: { ...parsed, title: cleanTitle }, recordType: parsed.recordType ?? "other", categoryId: categoryId || null, confirmDuplicate: true,
+          parsedData: { ...parsed, title: cleanTitle }, recordType: parsed.recordType ?? "other", confirmDuplicate: true,
           captureKind: current.contentKind === "page-text" ? "page-text" : current.contentKind === "page-info" ? "page" : "selection", tagNames: [], vaultId: folderId || preferences.defaultVaultId,
         }, current.idempotencyKey));
         const resultRecord = result.record as Record<string, unknown> | undefined;
@@ -272,20 +269,6 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
           </select>
           <p className="mt-1 text-xs leading-5 text-[#6a6a6a]">A folder holds your saved items, the same folders the website has.</p>
         </div>
-
-        {/**
-         * The category is the kind of payment this is. It is nothing to do
-         * with folders, so it is only asked for when it means something.
-         */}
-        {references?.categories.length ? (
-          <div>
-            <Label htmlFor="capture-category">Payment category</Label>
-            <select id="capture-category" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} className="h-11 w-full rounded-xl border border-[#ded8ca] bg-white px-3 text-sm">
-              <option value="">No category</option>
-              {references.categories.map((item) => <option key={String(item.id)} value={String(item.id)}>{String(item.name)}</option>)}
-            </select>
-          </div>
-        ) : null}
 
         <details open className="rounded-xl bg-[#f5f0e0] p-3">
           <summary className="cursor-pointer text-xs font-semibold">
@@ -390,7 +373,13 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
 
   useEffect(() => {
     setRecords(undefined);
-    void withOrganization((api) => api.listSavedRecords({ q: debounced || undefined, limit: 30, createdVia: "extension" }))
+    /**
+     * Everything in the workspace, not just what the extension saved.
+     *
+     * The panel used to hide anything saved on the website, which made the
+     * list look empty even when there was plenty to read.
+     */
+    void withOrganization((api) => api.listSavedRecords({ q: debounced || undefined, limit: 30 }))
       .then((data) => setRecords(data.items))
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your saved items."));
   }, [refreshKey, debounced]);
@@ -479,7 +468,6 @@ function QuickDetail({ record, onBack, onDeleted }: { record: SavedRecord; onBac
         <Badge>{recordTypeLabel(record.recordType)}</Badge>
         <h2 className="mt-4 text-xl font-semibold">{record.title}</h2>
         <p className="mt-3 text-sm">{record.sourceDomain ?? "Saved in DataVault"}</p>
-        {record.category ? <p className="mt-2 text-xs font-semibold uppercase tracking-wide">Folder · {record.category}</p> : null}
       </div>
 
       {needsConsent ? (

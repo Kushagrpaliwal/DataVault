@@ -1,12 +1,12 @@
 import { Elysia } from "elysia";
-import { noteClipSchema, noteCreateSchema, noteCurrentSchema, noteListQuerySchema, notePatchSchema, uuidSchema } from "@data-vault/schemas";
+import { noteAiRequestSchema, noteClipSchema, noteCreateSchema, noteCurrentSchema, noteListQuerySchema, notePatchSchema, uuidSchema } from "@data-vault/schemas";
 import type { ServerEnvironment } from "@data-vault/config";
 import type { DataVaultAuth } from "../auth/better-auth";
 import { getTenantContext } from "../auth/context";
 import { requireCsrf } from "../auth/csrf";
 import { success } from "../lib/http";
 import {
-  addClip, addCurrentClip, createNote, getCurrentNote, getNote, listNotes, listRevisions,
+  addClip, addCurrentClip, createNote, duplicateNote, getCurrentNote, getNote, listNotes, listRevisions,
   rearrangeNote, removeClipById, restoreNote, restoreRevision, setCurrentNote, trashNote, updateNote,
 } from "../services/notes";
 import { runIdempotent } from "../services/idempotency";
@@ -92,13 +92,27 @@ export function createNoteRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
     .post("/api/v1/notes/:id/write-up", async ({ body, params, request }) => {
       await requireCsrf(request, auth, env);
       const context = await getTenantContext(request, auth, env, "captures.update");
-      return success(await writeUpNote(env, context, request, uuidSchema.parse(params.id), body as { apply?: boolean } | undefined));
+      return success(await writeUpNote(env, context, request, uuidSchema.parse(params.id), noteAiRequestSchema.parse(body ?? {})));
     })
 
     /** Let the AI sort the doc into topics. */
     .post("/api/v1/notes/:id/organize", async ({ body, params, request }) => {
       await requireCsrf(request, auth, env);
       const context = await getTenantContext(request, auth, env, "captures.update");
-      return success(await organizeNote(env, context, request, uuidSchema.parse(params.id), body as { apply?: boolean } | undefined));
+      return success(await organizeNote(env, context, request, uuidSchema.parse(params.id), noteAiRequestSchema.parse(body ?? {})));
+    })
+
+    /**
+     * A copy of a doc.
+     *
+     * The copy starts empty, so it is a new place to write rather than a
+     * second copy of everything that was already there.
+     */
+    .post("/api/v1/notes/:id/duplicate", async ({ body, params, request, set }) => {
+      await requireCsrf(request, auth, env);
+      const context = await getTenantContext(request, auth, env, "captures.create");
+      const result = await runIdempotent(context, "note.duplicate", request.headers.get("idempotency-key"), body ?? {}, () => duplicateNote(context, request, uuidSchema.parse(params.id)) as Promise<Record<string, unknown>>);
+      set.status = 201;
+      return success(result);
     });
 }

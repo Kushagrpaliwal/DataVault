@@ -1,11 +1,17 @@
+/**
+ * The kinds of thing a saved item can be.
+ *
+ * These describe research material rather than bookkeeping: an article worth
+ * citing, a quote to reuse, a statistic to check, a definition, a person, a
+ * product, an event, and the plain formats a clip can arrive in.
+ */
 export const RECORD_TYPES = [
-  "payment", "expense", "income", "receipt", "invoice", "subscription",
-  "customer", "vendor", "refund", "note", "webpage", "highlight", "document",
-  "image", "product", "travel", "bookmark", "other",
+  "article", "quote", "statistic", "definition", "person", "product", "event",
+  "webpage", "highlight", "document", "image", "bookmark", "note", "link", "other",
 ] as const;
 
 export const CAPTURE_KINDS = [
-  "selection", "page", "page-text", "link", "image", "document", "note", "receipt",
+  "selection", "page", "page-text", "link", "image", "document", "note",
 ] as const;
 
 export const VAULT_KINDS = ["personal", "workspace"] as const;
@@ -14,22 +20,12 @@ export const PRIVACY_LEVELS = ["private", "workspace", "cloud-ai-opt-in"] as con
 
 export const CREATED_VIA = ["website", "extension", "api", "import"] as const;
 export const SOURCE_TYPES = ["manual", "browser_extension", "api", "import"] as const;
-export const PAYMENT_DIRECTIONS = ["incoming", "outgoing"] as const;
-export const PAYMENT_STATUSES = [
-  "pending", "completed", "failed", "cancelled", "partially_paid", "partially_refunded", "refunded",
-] as const;
-export const INVOICE_STATUSES = ["draft", "sent", "partially_paid", "paid", "overdue", "cancelled"] as const;
-export const INVOICE_KINDS = ["receivable", "payable"] as const;
-export const RECURRING_FREQUENCIES = ["daily", "weekly", "monthly", "quarterly", "yearly", "custom"] as const;
-export const RECURRING_STATUSES = ["active", "paused", "completed", "cancelled"] as const;
 
 export const PERMISSIONS = [
-  "payments.read", "payments.create", "payments.update", "payments.archive", "payments.refund",
   "captures.read", "captures.create", "captures.update", "captures.delete",
-  "invoices.read", "invoices.create", "invoices.update",
-  "customers.read", "customers.create", "customers.update",
-  "vendors.read", "vendors.create", "vendors.update",
+  "records.read", "records.create", "records.update", "records.delete",
+  "notes.read", "notes.create", "notes.update", "notes.delete",
   "reports.read", "users.manage", "settings.manage", "ai.use",
 ] as const;
 
-export const BUILT_IN_ROLES = ["super_admin", "admin", "accountant", "viewer", "custom"] as const;
+export const BUILT_IN_ROLES = ["super_admin", "admin", "editor", "viewer", "custom"] as const;

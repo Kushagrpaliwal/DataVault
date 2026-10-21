@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CAPTURE_KINDS, CREATED_VIA, PRIVACY_LEVELS, RECORD_TYPES, SOURCE_TYPES, VAULT_ITEM_STATUSES } from "./constants";
-import { booleanQuerySchema, dateTimeSchema, moneySchema, optionalHttpUrlSchema, paginationQuerySchema, sortDirectionSchema, uuidSchema } from "./common";
+import { booleanQuerySchema, dateTimeSchema, optionalHttpUrlSchema, paginationQuerySchema, sortDirectionSchema, uuidSchema } from "./common";
 
 export const sourceSchema = z.object({
   /** Missing when the browser would not tell the extension the page address. */
@@ -30,7 +30,6 @@ export const savedRecordListQuerySchema = paginationQuerySchema.extend({
   q: z.string().trim().max(200).optional(),
   recordType: z.enum(RECORD_TYPES).optional(),
   createdVia: z.enum(CREATED_VIA).optional(),
-  status: z.string().max(40).optional(),
   vaultId: uuidSchema.optional(),
   reviewStatus: z.enum(VAULT_ITEM_STATUSES).optional(),
   tag: z.string().trim().max(80).optional(),
@@ -63,11 +62,6 @@ export const savedRecordSchema = z.object({
   sourcePageTitle: z.string().nullable(),
   capturedAt: z.string().nullable(),
   createdVia: z.enum(CREATED_VIA),
-  amount: moneySchema.nullable(),
-  currency: z.string().nullable(),
-  party: z.string().nullable(),
-  category: z.string().nullable(),
-  status: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
   archivedAt: z.string().nullable(),

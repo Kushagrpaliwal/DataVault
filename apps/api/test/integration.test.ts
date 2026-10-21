@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { and, eq, inArray } from "drizzle-orm";
+import "./setup";
+import { afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { accounts, getDatabase, organizationMembers, organizations, roles, userRoles, users } from "@data-vault/database";
 import { app } from "../src";
 import { issuePasswordSetupToken } from "../src/auth/password-setup";
@@ -33,6 +34,15 @@ async function register(name: string, email: string): Promise<BrowserSession> {
   return { cookie: response.headers.getSetCookie()[0]!.split(";")[0]!, csrf: String(payload.data.csrfToken), userId };
 }
 
+beforeAll(async () => {
+  /**
+   * The rate limits are counted in the database, and they are meant to hold
+   * back a person who signs up over and over. A test run signs up more than
+   * once on purpose, so the counters are cleared before the run starts.
+   */
+  await getDatabase().execute(sql`delete from rate_limit_buckets`);
+});
+
 afterEach(async () => {
   const db = getDatabase();
   const personalOrganizations = createdUserIds.length ? await db.select({ id: organizations.id }).from(organizations).where(inArray(organizations.createdBy, createdUserIds)) : [];
@@ -44,13 +54,13 @@ afterEach(async () => {
 });
 
 describe("DataVault API integration", () => {
-  test("auth, tenancy, RBAC, payments, invoices, captures, idempotency, search, and extension auth", async () => {
+  test("auth, tenancy, RBAC, captures, idempotency, search, and extension auth", async () => {
     const admin = await register("Integration Admin", `admin-${suffix}@example.com`);
-    const orgAResult = await call("/api/v1/organizations", { method: "POST", session: admin, body: { name: `Integration A ${suffix}`, slug: `integration-a-${suffix}`, currency: "INR", locale: "en-IN", timeZone: "Asia/Kolkata" } });
+    const orgAResult = await call("/api/v1/organizations", { method: "POST", session: admin, body: { name: `Integration A ${suffix}`, slug: `integration-a-${suffix}`, currency: "USD", locale: "en-US", timeZone: "UTC" } });
     expect(orgAResult.response.status).toBe(201);
     const orgA = String(orgAResult.payload.data.id);
     createdOrganizationIds.push(orgA);
-    const orgBResult = await call("/api/v1/organizations", { method: "POST", session: admin, body: { name: `Integration B ${suffix}`, slug: `integration-b-${suffix}`, currency: "INR", locale: "en-IN", timeZone: "Asia/Kolkata" } });
+    const orgBResult = await call("/api/v1/organizations", { method: "POST", session: admin, body: { name: `Integration B ${suffix}`, slug: `integration-b-${suffix}`, currency: "USD", locale: "en-US", timeZone: "UTC" } });
     const orgB = String(orgBResult.payload.data.id);
     createdOrganizationIds.push(orgB);
     const vaultList = await call("/api/v1/vaults", { session: admin, organizationId: orgA });
@@ -60,54 +70,23 @@ describe("DataVault API integration", () => {
     const vaultId = String(defaultVault!.id);
     const researchCollection = await call("/api/v1/collections", { method: "POST", session: admin, organizationId: orgA, body: { vaultId, name: `Research ${suffix}`, color: "#b8a4ed" } });
     expect(researchCollection.response.status).toBe(201);
-    const tag = await call("/api/v1/tags", { method: "POST", session: admin, organizationId: orgA, body: { name: `receipt-${suffix}`, color: "#b8a4ed" } });
+    const tag = await call("/api/v1/tags", { method: "POST", session: admin, organizationId: orgA, body: { name: `reading-${suffix}`, color: "#b8a4ed" } });
     expect(tag.response.status).toBe(201);
 
-    const customerResult = await call("/api/v1/customers", { method: "POST", session: admin, organizationId: orgA, body: { name: "ABC Technologies", email: `abc-${suffix}@example.com`, tags: ["test"] } });
-    expect(customerResult.response.status).toBe(201);
-    const customerId = String(customerResult.payload.data.id);
-
-    const paymentBody = { direction: "incoming", customerId, amount: "1000.00", currency: "INR", taxAmount: "100.00", feeAmount: "10.00", discountAmount: "20.00", description: "Integration payment", paymentDate: "2026-09-06", status: "pending", utr: `UTR-${suffix}` };
-    const paymentOne = await call("/api/v1/payments", { method: "POST", session: admin, organizationId: orgA, idempotencyKey: `payment-${suffix}`, body: paymentBody });
-    const paymentRetry = await call("/api/v1/payments", { method: "POST", session: admin, organizationId: orgA, idempotencyKey: `payment-${suffix}`, body: paymentBody });
-    expect(paymentOne.response.status).toBe(201);
-    expect(paymentRetry.payload.data.id).toBe(paymentOne.payload.data.id);
-    expect(paymentOne.payload.data.netAmount).toBe("1090.00");
-    const paymentId = String(paymentOne.payload.data.id);
-    const complete = await call(`/api/v1/payments/${paymentId}`, { method: "PATCH", session: admin, organizationId: orgA, body: { status: "completed" } });
-    expect(complete.payload.data.status).toBe("completed");
-    const invalidTransition = await call(`/api/v1/payments/${paymentId}`, { method: "PATCH", session: admin, organizationId: orgA, body: { status: "pending" } });
-    expect(invalidTransition.response.status).toBe(409);
-    expect(invalidTransition.payload.error?.code).toBe("INVALID_PAYMENT_STATUS_TRANSITION");
-    const refund = await call(`/api/v1/payments/${paymentId}/refund`, { method: "POST", session: admin, organizationId: orgA, idempotencyKey: `refund-${suffix}`, body: { amount: "90.00", reason: "Integration partial refund", refundDate: "2026-09-07" } });
-    expect(refund.response.status).toBe(201);
-    const afterRefund = await call(`/api/v1/payments/${paymentId}`, { session: admin, organizationId: orgA });
-    expect(afterRefund.payload.data.status).toBe("partially_refunded");
-
-    const invoice = await call("/api/v1/invoices", { method: "POST", session: admin, organizationId: orgA, idempotencyKey: `invoice-${suffix}`, body: { kind: "receivable", customerId, issueDate: "2026-09-01", dueDate: "2026-09-30", currency: "INR", status: "sent", items: [{ description: "Implementation", quantity: "2", rate: "500.00", taxRate: "18", discountAmount: "100.00" }] } });
-    expect(invoice.response.status).toBe(201);
-    expect(invoice.payload.data.totalAmount).toBe("1062.00");
-    const invoiceId = String(invoice.payload.data.id);
-    await call("/api/v1/payments", { method: "POST", session: admin, organizationId: orgA, idempotencyKey: `allocation-${suffix}`, body: { direction: "incoming", customerId, invoiceId, amount: "500.00", currency: "INR", taxAmount: "0.00", feeAmount: "0.00", discountAmount: "0.00", paymentDate: "2026-09-07", status: "completed" } });
-    const invoiceAfter = await call(`/api/v1/invoices/${invoiceId}`, { session: admin, organizationId: orgA });
-    expect(invoiceAfter.payload.data.outstandingAmount).toBe("562.00");
-    expect(invoiceAfter.payload.data.status).toBe("partially_paid");
-
-    const captureBody = { selectedText: `₹12,500 paid to ABC Technologies\nUPI\nUTR CAP-${suffix}\n06 Sep 2026`, source: { url: "https://example.com/order/123", title: "Order Confirmation", domain: "example.com" }, recordType: "expense", confirmDuplicate: true, vaultId, captureKind: "receipt", tagNames: [`receipt-${suffix}`] };
+    const captureBody = { selectedText: `A finding about CAP-${suffix}\nBy Priya Raman\n12 March 2026\n\nAbout 42% of readers said the same.`, source: { url: "https://example.com/article/123", title: "A finding", domain: "example.com" }, recordType: "article", confirmDuplicate: true, vaultId, captureKind: "selection", tagNames: [`reading-${suffix}`] };
     const capture = await call("/api/v1/captures", { method: "POST", session: admin, organizationId: orgA, idempotencyKey: `capture-${suffix}`, body: captureBody });
     const captureRetry = await call("/api/v1/captures", { method: "POST", session: admin, organizationId: orgA, idempotencyKey: `capture-${suffix}`, body: captureBody });
     const separatelySavedCapture = await call("/api/v1/captures", { method: "POST", session: admin, organizationId: orgA, idempotencyKey: `capture-separate-${suffix}`, body: captureBody });
     expect(capture.response.status).toBe(201);
     expect((capture.payload.data.record as Record<string, unknown>).id).toBe((captureRetry.payload.data.record as Record<string, unknown>).id);
     expect((separatelySavedCapture.payload.data.record as Record<string, unknown>).id).not.toBe((capture.payload.data.record as Record<string, unknown>).id);
-    expect(((capture.payload.data.parser as Record<string, unknown>).result as Record<string, unknown>).party).toBe("ABC Technologies");
     const captureRecordId = String((capture.payload.data.record as Record<string, unknown>).id);
     const captureDetail = await call(`/api/v1/saved-records/${captureRecordId}`, { session: admin, organizationId: orgA });
     expect((captureDetail.payload.data.evidence as Record<string, unknown>[]).length).toBe(1);
-    expect((captureDetail.payload.data.tags as Record<string, unknown>[]).some((item) => item.name === `receipt-${suffix}`)).toBe(true);
+    expect((captureDetail.payload.data.tags as Record<string, unknown>[]).some((item) => item.name === `reading-${suffix}`)).toBe(true);
     const organizedCapture = await call(`/api/v1/saved-records/${captureRecordId}/organization`, { method: "PUT", session: admin, organizationId: orgA, body: { collectionIds: [String(researchCollection.payload.data.id)], reviewStatus: "reviewed" } });
     expect(organizedCapture.response.status).toBe(200);
-    const vaultFiltered = await call(`/api/v1/saved-records?vaultId=${vaultId}&collectionId=${String(researchCollection.payload.data.id)}&tag=receipt-${suffix}`, { session: admin, organizationId: orgA });
+    const vaultFiltered = await call(`/api/v1/saved-records?vaultId=${vaultId}&collectionId=${String(researchCollection.payload.data.id)}&tag=reading-${suffix}`, { session: admin, organizationId: orgA });
     expect(vaultFiltered.payload.data.total).toBe(1);
     const searchA = await call(`/api/v1/search?q=CAP-${suffix}`, { session: admin, organizationId: orgA });
     const searchB = await call(`/api/v1/search?q=CAP-${suffix}`, { session: admin, organizationId: orgB });
@@ -121,7 +100,7 @@ describe("DataVault API integration", () => {
     const [viewerRole] = await db.select().from(roles).where(and(eq(roles.organizationId, orgA), eq(roles.slug, "viewer"))).limit(1);
     await db.insert(organizationMembers).values({ organizationId: orgA, userId: viewer.userId });
     await db.insert(userRoles).values({ organizationId: orgA, userId: viewer.userId, roleId: viewerRole!.id });
-    const denied = await call("/api/v1/payments", { method: "POST", session: viewer, organizationId: orgA, idempotencyKey: `viewer-${suffix}`, body: paymentBody });
+    const denied = await call("/api/v1/captures", { method: "POST", session: viewer, organizationId: orgA, idempotencyKey: `viewer-${suffix}`, body: captureBody });
     expect(denied.response.status).toBe(403);
     expect(denied.payload.error?.code).toBe("PERMISSION_DENIED");
 
@@ -410,10 +389,10 @@ describe("DataVault API integration", () => {
 
   test("a doc in one workspace cannot be read from another", async () => {
     const admin = await register("Tenant Admin", `tenant-${suffix}@example.com`);
-    const orgA = await call("/api/v1/organizations", { method: "POST", session: admin, body: { name: `Tenant A ${suffix}`, slug: `tenant-a-${suffix}`, currency: "INR", locale: "en-IN", timeZone: "Asia/Kolkata" } });
+    const orgA = await call("/api/v1/organizations", { method: "POST", session: admin, body: { name: `Tenant A ${suffix}`, slug: `tenant-a-${suffix}`, currency: "USD", locale: "en-US", timeZone: "UTC" } });
     const organizationA = String(orgA.payload.data.id);
     createdOrganizationIds.push(organizationA);
-    const orgB = await call("/api/v1/organizations", { method: "POST", session: admin, body: { name: `Tenant B ${suffix}`, slug: `tenant-b-${suffix}`, currency: "INR", locale: "en-IN", timeZone: "Asia/Kolkata" } });
+    const orgB = await call("/api/v1/organizations", { method: "POST", session: admin, body: { name: `Tenant B ${suffix}`, slug: `tenant-b-${suffix}`, currency: "USD", locale: "en-US", timeZone: "UTC" } });
     const organizationB = String(orgB.payload.data.id);
     createdOrganizationIds.push(organizationB);
 
@@ -487,7 +466,7 @@ describe("DataVault API integration", () => {
     const personal = (first.payload.data as unknown as { id: string; isPersonal: boolean }[])[0]!;
     expect(personal.isPersonal).toBe(true);
 
-    const created = await call("/api/v1/organizations", { method: "POST", session: user, body: { name: `Order Workspace ${suffix}`, slug: `order-workspace-${suffix}`, currency: "INR", locale: "en-IN", timeZone: "Asia/Kolkata" } });
+    const created = await call("/api/v1/organizations", { method: "POST", session: user, body: { name: `Order Workspace ${suffix}`, slug: `order-workspace-${suffix}`, currency: "USD", locale: "en-US", timeZone: "UTC" } });
     expect(created.response.status).toBe(201);
     const workspaceId = String(created.payload.data.id);
     createdOrganizationIds.push(workspaceId);
@@ -503,5 +482,119 @@ describe("DataVault API integration", () => {
      */
     const again = await call("/api/v1/organizations", { session: user });
     expect((again.payload.data as unknown as { id: string }[])[0]?.id).toBe(workspaceId);
+  }, 30_000);
+
+  test("a trashed item is missing from the dashboard and from the search", async () => {
+    const user = await register("Trash Admin", `trash-${suffix}@example.com`);
+    const orgs = await call("/api/v1/organizations", { session: user });
+    const organizationId = String((orgs.payload.data as unknown as { id: string }[])[0]!.id);
+
+    const created = await call("/api/v1/saved-records", {
+      method: "POST",
+      session: user,
+      organizationId,
+      idempotencyKey: `trash-item-${suffix}`,
+      body: { recordType: "note", title: `Hidden by trash ${suffix}` },
+    });
+    expect(created.response.status).toBe(201);
+    const recordId = String(created.payload.data.id);
+
+    const before = await call("/api/v1/dashboard", { session: user, organizationId });
+    const beforeSummary = before.payload.data.summary as { savedRecords: number };
+    expect(beforeSummary.savedRecords).toBe(1);
+
+    const trashed = await call(`/api/v1/saved-records/${recordId}`, { method: "DELETE", session: user, organizationId });
+    expect(trashed.response.status).toBe(200);
+
+    const after = await call("/api/v1/dashboard", { session: user, organizationId });
+    const afterSummary = after.payload.data.summary as { savedRecords: number };
+    expect(afterSummary.savedRecords).toBe(0);
+
+    const search = await call(`/api/v1/search?q=${encodeURIComponent(`trash ${suffix}`)}`, { session: user, organizationId });
+    expect(search.payload.data.total).toBe(0);
+  }, 30_000);
+
+  test("a percent sign in a search is looked for as text", async () => {
+    const user = await register("Percent Admin", `percent-${suffix}@example.com`);
+    const orgs = await call("/api/v1/organizations", { session: user });
+    const organizationId = String((orgs.payload.data as unknown as { id: string }[])[0]!.id);
+
+    await call("/api/v1/saved-records", {
+      method: "POST",
+      session: user,
+      organizationId,
+      idempotencyKey: `percent-item-${suffix}`,
+      body: { recordType: "statistic", title: "Growth was 42% last year" },
+    });
+    await call("/api/v1/saved-records", {
+      method: "POST",
+      session: user,
+      organizationId,
+      idempotencyKey: `percent-plain-${suffix}`,
+      body: { recordType: "note", title: "A plain note" },
+    });
+
+    /**
+     * A percent sign is a wildcard in a search pattern. Treated as one, it
+     * would match every row, and the plain note would come back too.
+     */
+    const literal = await call("/api/v1/search?q=42%25", { session: user, organizationId });
+    expect(literal.payload.data.total).toBe(1);
+
+    const wildcard = await call("/api/v1/search?q=%25", { session: user, organizationId });
+    expect(wildcard.payload.data.total).toBe(1);
+  }, 30_000);
+
+  test("a folder from another workspace is refused", async () => {
+    const user = await register("Scope Admin", `scope-${suffix}@example.com`);
+    const first = await call("/api/v1/organizations", { method: "POST", session: user, body: { name: `Scope A ${suffix}`, slug: `scope-a-${suffix}`, currency: "USD", locale: "en-US", timeZone: "UTC" } });
+    const organizationA = String(first.payload.data.id);
+    createdOrganizationIds.push(organizationA);
+    const second = await call("/api/v1/organizations", { method: "POST", session: user, body: { name: `Scope B ${suffix}`, slug: `scope-b-${suffix}`, currency: "USD", locale: "en-US", timeZone: "UTC" } });
+    const organizationB = String(second.payload.data.id);
+    createdOrganizationIds.push(organizationB);
+
+    const vaults = await call("/api/v1/vaults", { session: user, organizationId: organizationA });
+    const vaultId = String((vaults.payload.data as unknown as { id: string }[])[0]!.id);
+
+    /**
+     * The folder belongs to the first workspace, so the second one cannot
+     * point a doc at it.
+     */
+    const result = await call("/api/v1/notes", { method: "POST", session: user, organizationId: organizationB, idempotencyKey: `scope-note-${suffix}`, body: { title: "Out of place", vaultId } });
+    expect(result.response.status).toBe(404);
+    expect(result.payload.error?.code).toBe("NOT_FOUND");
+  }, 30_000);
+
+  test("a doc can be copied, and the copy is a new doc", async () => {
+    const user = await register("Copy Admin", `copy-${suffix}@example.com`);
+    const orgs = await call("/api/v1/organizations", { session: user });
+    const organizationId = String((orgs.payload.data as unknown as { id: string }[])[0]!.id);
+
+    const created = await call("/api/v1/notes", { method: "POST", session: user, organizationId, idempotencyKey: `copy-note-${suffix}`, body: { title: "Original doc" } });
+    const noteId = String(created.payload.data.id);
+
+    const copied = await call(`/api/v1/notes/${noteId}/duplicate`, { method: "POST", session: user, organizationId, idempotencyKey: `copy-note-${suffix}`, body: {} });
+    expect(copied.response.status).toBe(201);
+    const copyId = String(copied.payload.data.id);
+    expect(copyId).not.toBe(noteId);
+    expect(copied.payload.data.title).toBe("Original doc");
+
+    const original = await call(`/api/v1/notes/${noteId}`, { session: user, organizationId });
+    const copy = await call(`/api/v1/notes/${copyId}`, { session: user, organizationId });
+    expect(copy.payload.data.title).toBe(original.payload.data.title);
+    expect(copy.payload.data.version).toBe(1);
+  }, 30_000);
+
+  test("an account with two-factor authentication gets a challenge, not a failure", async () => {
+    await register("Two Factor Admin", `twofactor-${suffix}@example.com`);
+    /**
+     * The sign-in answer is read as a session. When the account has a second
+     * factor there is no session, so the answer used to be read as though
+     * there was one and signing in failed with a server fault.
+     */
+    const login = await call("/api/v1/auth/login", { method: "POST", body: { email: `twofactor-${suffix}@example.com`, password } });
+    expect(login.response.status).toBe(200);
+    expect(login.payload.data.user).toBeTruthy();
   }, 30_000);
 });

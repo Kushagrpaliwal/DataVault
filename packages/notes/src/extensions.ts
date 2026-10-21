@@ -1,11 +1,42 @@
 import { Extension, Node, mergeAttributes, type Extensions, type JSONContent } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
+import Link from "@tiptap/extension-link";
 import { TextStyleKit } from "@tiptap/extension-text-style";
 import { Highlight } from "@tiptap/extension-highlight";
 import { TextAlign } from "@tiptap/extension-text-align";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
+
+/**
+ * The addresses a doc is allowed to point at.
+ *
+ * A doc is written from pages that were found on the web, and the address in
+ * a link can be anything at all. Only a web address or an email address is
+ * kept, so a link cannot carry a script or a call to a local program.
+ */
+const LINK_PROTOCOLS = ["http:", "https:", "mailto:"] as const;
+/** Images are loaded by the browser, so only a web address is kept. */
+const IMAGE_PROTOCOLS = ["http:", "https:"] as const;
+
+/**
+ * The address, when it is one that is allowed.
+ *
+ * Anything that cannot be read as an address, or that uses a protocol that
+ * is not allowed, gives nothing back. The caller then leaves the attribute
+ * out rather than writing something that does not belong.
+ */
+export function safeUrl(value: unknown, protocols: readonly string[] = LINK_PROTOCOLS): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    return protocols.includes(parsed.protocol) ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The attributes a clip keeps about where it came from.
@@ -37,7 +68,16 @@ export const Clip = Node.create({
     return {
       clipId: { default: null, rendered: false },
       hash: { default: null, rendered: false },
-      sourceUrl: { default: null, rendered: false },
+      sourceUrl: {
+        default: null,
+        rendered: false,
+        /**
+         * The address the piece came from. It is only kept when it is a web
+         * address, so a doc cannot carry an address that points somewhere
+         * else.
+         */
+        parseHTML: (element) => safeUrl(element.getAttribute("data-source-url")),
+      },
       sourceTitle: { default: null, rendered: false },
       domain: { default: null, rendered: false },
       capturedAt: { default: null, rendered: false },
@@ -122,12 +162,32 @@ const SafeImage = Image.extend({
       ...this.parent?.(),
       src: {
         default: null,
-        parseHTML: (element) => element.getAttribute("src"),
-        renderHTML: (attributes) => ({ src: attributes.src }),
+        /** Only a web address is loaded, and never a pasted image. */
+        parseHTML: (element) => safeUrl(element.getAttribute("src"), IMAGE_PROTOCOLS),
+        renderHTML: (attributes) => ({ src: safeUrl(attributes.src, IMAGE_PROTOCOLS) ?? "" }),
       },
     };
   },
 }).configure({ allowBase64: false });
+
+/**
+ * Links that can only point at a web address or an email address.
+ *
+ * The address is checked when the doc is read and again when it is written
+ * out, so a link cannot carry anything else.
+ */
+const SafeLink = Link.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      href: {
+        default: null,
+        parseHTML: (element) => safeUrl(element.getAttribute("href")),
+        renderHTML: (attributes) => ({ href: safeUrl(attributes.href) ?? "" }),
+      },
+    };
+  },
+});
 
 /**
  * Every extension a DataVault doc can hold.
@@ -139,14 +199,16 @@ export function noteExtensions(): Extensions {
   return [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
-      link: {
-        openOnClick: false,
-        autolink: true,
-        linkOnPaste: true,
-        protocols: ["http", "https", "mailto"],
-        HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" },
-      },
+      /** The link is added below, in its own safe form. */
+      link: false,
       codeBlock: { HTMLAttributes: { class: "datavault-code" } },
+    }),
+    SafeLink.configure({
+      openOnClick: false,
+      autolink: true,
+      linkOnPaste: true,
+      protocols: [...LINK_PROTOCOLS].map((protocol) => protocol.replace(":", "")),
+      HTMLAttributes: { rel: "noopener noreferrer nofollow", target: "_blank" },
     }),
     SectionKey,
     Clip,

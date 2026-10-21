@@ -12,6 +12,7 @@ import { Modal } from "../../components/feedback";
 import { QueryState } from "../../components/data-state";
 import { DocEditor } from "./doc-editor";
 import { docToMarkdown } from "@data-vault/notes";
+import { docToHtml } from "@data-vault/notes/html";
 import type { JSONContent } from "@tiptap/core";
 
 const ARRANGE_LABELS: Record<string, string> = {
@@ -33,8 +34,10 @@ export function DocsPage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [organizeOpen, setOrganizeOpen] = useState(false);
   const [organizePreview, setOrganizePreview] = useState<Array<{ title: string; clipIds: string[] }> | null>(null);
+  const [organizePreviewId, setOrganizePreviewId] = useState<string | null>(null);
   const [writeUpOpen, setWriteUpOpen] = useState(false);
   const [writeUpPreview, setWriteUpPreview] = useState<Array<{ heading: string; paragraphs: string[] }> | null>(null);
+  const [writeUpPreviewId, setWriteUpPreviewId] = useState<string | null>(null);
   const [writeUpTitle, setWriteUpTitle] = useState("");
 
   const list = useQuery({
@@ -98,11 +101,12 @@ export function DocsPage() {
   });
 
   const writeUp = useMutation({
-    mutationFn: (apply: boolean) => api.writeUpNote(id!, apply ? { apply: true } : {}),
+    mutationFn: (apply: boolean) => api.writeUpNote(id!, apply ? { apply: true, ...(writeUpPreviewId ? { previewId: writeUpPreviewId } : {}) } : {}),
     onSuccess: async (result) => {
       if (result.preview) {
         setWriteUpPreview(result.sections);
-        setWriteUpTitle(result.title);
+        setWriteUpTitle(result.title ?? "");
+        setWriteUpPreviewId(result.previewId ?? null);
         setWriteUpOpen(true);
         return;
       }
@@ -110,15 +114,18 @@ export function DocsPage() {
       await client.invalidateQueries({ queryKey: ["notes"] });
       setWriteUpOpen(false);
       setWriteUpPreview(null);
+      setWriteUpPreviewId(null);
       notify("The doc was written up");
     },
     onError: (caught) => notify(caught instanceof Error ? caught.message : "The doc could not be written up.", "error"),
   });
 
-  const organize = useMutation({    mutationFn: (apply: boolean) => api.organizeNote(id!, apply ? { apply: true } : {}),
+  const organize = useMutation({
+    mutationFn: (apply: boolean) => api.organizeNote(id!, apply ? { apply: true, ...(organizePreviewId ? { previewId: organizePreviewId } : {}) } : {}),
     onSuccess: async (result) => {
       if (result.preview) {
         setOrganizePreview(result.sections);
+        setOrganizePreviewId(result.previewId ?? null);
         setOrganizeOpen(true);
         return;
       }
@@ -126,6 +133,7 @@ export function DocsPage() {
       await client.invalidateQueries({ queryKey: ["notes"] });
       setOrganizeOpen(false);
       setOrganizePreview(null);
+      setOrganizePreviewId(null);
       notify("The doc was sorted into topics");
     },
     onError: (caught) => notify(caught instanceof Error ? caught.message : "The AI could not sort this doc.", "error"),
@@ -148,9 +156,32 @@ export function DocsPage() {
 
   const isCurrent = current.data?.noteId === id;
 
+  /**
+   * The menu closes when the escape key is pressed and when the pointer
+   * goes somewhere else, so it never sits over the page after it is done.
+   */
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[role='menu']")) return;
+      if (target?.closest("[aria-haspopup='menu']")) return;
+      setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", onPointerDown);
+    };
+  }, [menuOpen]);
+
   const download = (content: JSONContent, format: "md" | "html") => {
     const title = selected?.title ?? "Doc";
-    const body = format === "md" ? docToMarkdown(content) : renderHtml(content);
+    const body = format === "md" ? docToMarkdown(content) : docToHtml(content);
     const blob = new Blob([body], { type: format === "md" ? "text/markdown" : "text/html" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -231,7 +262,7 @@ export function DocsPage() {
                     <MenuItem onClick={() => { print(); setMenuOpen(false); }}><FileText className="size-4" />Print or save as PDF</MenuItem>
                     <MenuItem onClick={() => { void navigator.clipboard.writeText(docToMarkdown(selected?.content ?? { type: "doc" })); notify("The doc was copied as Markdown"); setMenuOpen(false); }}><Copy className="size-4" />Copy as Markdown</MenuItem>
                     <MenuDivider />
-                    <MenuItem onClick={() => { void api.updateNote(id, { title: `${selected?.title ?? "Doc"} (copy)` }).then(async () => { await client.invalidateQueries({ queryKey: ["notes"] }); notify("A copy was made"); }); setMenuOpen(false); }}><Copy className="size-4" />Duplicate</MenuItem>
+                    <MenuItem onClick={() => { void api.duplicateNote(id).then(async (copy) => { await client.invalidateQueries({ queryKey: ["notes"] }); notify("A copy was made"); navigate(`/docs/${copy.id}`); }); setMenuOpen(false); }}><Copy className="size-4" />Duplicate</MenuItem>
                     {selected?.deletedAt ? (
                       <MenuItem onClick={() => { restore.mutate(); setMenuOpen(false); }}><RotateCcw className="size-4" />Restore from Trash</MenuItem>
                     ) : (
@@ -401,26 +432,3 @@ function VersionHistory({ noteId, onRestore }: { noteId: string; onRestore: (rev
   );
 }
 
-/**
- * A very small HTML rendering of a doc, used for the export.
- */
-function renderHtml(doc: JSONContent): string {
-  const escape = (value: string) => value.replace(/[&<>"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character] ?? character);
-  const walk = (node: JSONContent): string => {
-    if (node.type === "text") return escape(node.text ?? "");
-    const children = (node.content ?? []).map(walk).join("");
-    switch (node.type) {
-      case "heading": return `<h${node.attrs?.level ?? 1}>${children}</h${node.attrs?.level ?? 1}>`;
-      case "paragraph": return `<p>${children}</p>`;
-      case "bulletList": return `<ul>${children}</ul>`;
-      case "orderedList": return `<ol>${children}</ol>`;
-      case "listItem": return `<li>${children}</li>`;
-      case "blockquote": return `<blockquote>${children}</blockquote>`;
-      case "codeBlock": return `<pre><code>${children}</code></pre>`;
-      case "horizontalRule": return "<hr />";
-      case "clip": return `<div class="clip">${children}<p><small>From ${escape(String(node.attrs?.sourceTitle ?? ""))} · ${escape(String(node.attrs?.domain ?? ""))}</small></p></div>`;
-      default: return children;
-    }
-  };
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Doc</title></head><body>${(doc.content ?? []).map(walk).join("")}</body></html>`;
-}

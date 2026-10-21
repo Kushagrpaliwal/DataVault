@@ -4,10 +4,37 @@ export const productConfig = {
   name: "DataVault",
   slug: "data-vault",
   description: "Save anything from the web and find it again later.",
-  defaultCurrency: "INR",
-  defaultLocale: "en-IN",
-  defaultTimeZone: "Asia/Kolkata",
+  defaultCurrency: "USD",
+  defaultLocale: "en-US",
+  defaultTimeZone: "UTC",
 } as const;
+
+/**
+ * The workspace defaults a browser can tell us about.
+ *
+ * A new workspace should feel like it belongs to the person who made it, so
+ * the locale, the time zone and the currency come from the browser rather
+ * than from a fixed guess on the server. When there is no browser, or the
+ * browser says nothing useful, the product defaults are used instead.
+ */
+export function browserWorkspaceDefaults(): { currency: string; locale: string; timeZone: string } {
+  const fallback: { currency: string; locale: string; timeZone: string } = { currency: productConfig.defaultCurrency, locale: productConfig.defaultLocale, timeZone: productConfig.defaultTimeZone };
+  if (typeof navigator === "undefined" || typeof Intl === "undefined") return fallback;
+  const locale = typeof navigator.language === "string" && navigator.language.trim() ? navigator.language : fallback.locale;
+  let timeZone = fallback.timeZone;
+  try {
+    timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || fallback.timeZone;
+  } catch {
+    // A browser that cannot resolve its own time zone keeps the default.
+  }
+  let currency = fallback.currency;
+  try {
+    currency = Intl.NumberFormat(locale, { style: "currency" }).resolvedOptions().currency || fallback.currency;
+  } catch {
+    // A locale the runtime cannot price keeps the default currency.
+  }
+  return { currency, locale, timeZone };
+}
 
 const serverEnvironmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
