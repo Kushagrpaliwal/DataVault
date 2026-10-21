@@ -7,6 +7,28 @@
     <meta name="description" content="DataVault — your universal web clipper and data memory." />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>DataVault</title>
+    <script>
+      /**
+       * The theme is put on before the page is drawn.
+       *
+       * The page is painted as soon as the style sheet is ready, so the
+       * choice is read here rather than after the interface has been made.
+       * Otherwise the page is drawn in the light theme for a moment and
+       * then turns over in front of the reader.
+       */
+      (function () {
+        try {
+          var stored = window.localStorage.getItem("dataVaultTheme");
+          var dark = stored === "dark" || (stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+          var colour = document.querySelector('meta[name="theme-color"]');
+          if (colour) colour.setAttribute("content", dark ? "#121110" : "#fffaf0");
+        } catch (error) {
+          /* The theme is a nicety, so a browser that refuses is left alone. */
+        }
+      })();
+    </script>
   </head>
   <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
 </html>

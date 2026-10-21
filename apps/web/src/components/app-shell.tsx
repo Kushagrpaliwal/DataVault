@@ -75,7 +75,7 @@ export function AppShell() {
               end={to === "/"}
               onClick={() => setMobileOpen(false)}
               className={({ isActive }) =>
-                cn("mb-1 flex h-10 items-center gap-3 rounded-xl px-3 text-sm text-strong", isActive ? "bg-soft font-semibold text-black" : "hover:bg-soft")
+                cn("mb-1 flex h-10 items-center gap-3 rounded-xl px-3 text-sm text-strong", isActive ? "bg-soft font-semibold text-ink" : "hover:bg-soft")
               }
             >
               <Icon className="size-[18px]" />
@@ -94,7 +94,7 @@ export function AppShell() {
           >
             <Puzzle className="mt-0.5 size-4 shrink-0" />
             <span>
-              <span className="block font-semibold text-black">Save from any page</span>
+              <span className="block font-semibold text-ink">Save from any page</span>
               <span className="block">Install the browser extension</span>
             </span>
           </a>
@@ -111,7 +111,7 @@ export function AppShell() {
             Search your saved items…
             <kbd className="ml-auto hidden rounded-md border bg-soft px-2 py-0.5 text-[11px] sm:block">⌘ K</kbd>
           </button>
-          <div className="hidden size-9 place-items-center rounded-full bg-[#b8a4ed] text-sm font-semibold sm:grid">
+          <div className="hidden size-9 place-items-center rounded-full bg-[#b8a4ed] text-sm font-semibold text-deep sm:grid">
             {session?.user.name.split(" ").map((word) => word[0]).join("").slice(0, 2)}
           </div>
           <AiCreditBadge />

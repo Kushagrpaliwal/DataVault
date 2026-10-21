@@ -81,10 +81,10 @@ export function SettingsPage() {
               <p className="mt-1 text-sm leading-6 text-muted">Confirming your address unlocks your free AI credits. Everything else works without it.</p>
               <div className="mt-4">
                 {verified ? (
-                  <p className="flex items-center gap-2 text-sm font-semibold text-green-800"><ShieldCheck className="size-4" />Confirmed</p>
+                  <p className="flex items-center gap-2 text-sm font-semibold text-green-800 dark:text-green-200"><ShieldCheck className="size-4" />Confirmed</p>
                 ) : (
                   <>
-                    <p className="text-sm font-semibold text-amber-800">Not confirmed yet</p>
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">Not confirmed yet</p>
                     <Button className="mt-3" size="sm" variant="secondary" disabled={resendVerification.isPending} onClick={() => resendVerification.mutate()}>
                       {resendVerification.isPending ? "Sending…" : "Send the confirmation link"}
                     </Button>
@@ -118,7 +118,7 @@ export function SettingsPage() {
                   ? `${credits.data.remaining} of ${credits.data.allowance} left today. Your allowance refreshes when the day rolls over.`
                   : "Checking your allowance…"}
               </p>
-              {credits.data?.reason ? <p className="mt-2 text-sm font-medium text-amber-800">{credits.data.reason}</p> : null}
+              {credits.data?.reason ? <p className="mt-2 text-sm font-medium text-amber-800 dark:text-amber-200">{credits.data.reason}</p> : null}
             </div>
           </div>
         </section>
@@ -130,7 +130,7 @@ export function SettingsPage() {
         <section className="rounded-3xl bg-[#b8a4ed] p-6">
           <ShieldCheck className="size-7" />
           <h2 className="mt-5 text-lg font-semibold">Only you can see this</h2>
-          <p className="mt-2 text-sm leading-6 text-black/75">Everything you save stays inside this workspace. Nobody else can read your saved items unless you share them.</p>
+          <p className="mt-2 text-sm leading-6 text-ink/75">Everything you save stays inside this workspace. Nobody else can read your saved items unless you share them.</p>
         </section>
         <Button variant="secondary" onClick={async () => { await api.logout(); setSession(null); navigate("/login"); }}><LogOut className="size-4" />Sign out</Button>
       </div>

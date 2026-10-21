@@ -35,7 +35,18 @@ export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLab
 }
 
 export function Badge({ className, tone = "neutral", ...props }: React.HTMLAttributes<HTMLSpanElement> & { tone?: "neutral" | "success" | "warning" | "danger" | "teal" }) {
-  const tones = { neutral: "bg-soft text-strong", success: "bg-green-100 text-green-800", warning: "bg-amber-100 text-amber-800", danger: "bg-red-100 text-red-800", teal: "bg-[#dce9e5] text-deep-text" };
+  /**
+   * The colours are given twice: once for the light theme and once for the
+   * dark one, so that a badge keeps its meaning when the page is turned
+   * over.
+   */
+  const tones = {
+    neutral: "bg-soft text-strong",
+    success: "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200",
+    warning: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200",
+    danger: "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200",
+    teal: "bg-[#dce9e5] text-deep-text dark:bg-[#22443f] dark:text-[#8fd8c9]",
+  };
   return <span className={cn("inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium", tones[tone], className)} {...props} />;
 }
 

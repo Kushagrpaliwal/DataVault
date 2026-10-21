@@ -212,7 +212,7 @@ export function AiPanel({ content, recordId, onApply }: AiPanelProps) {
               Pull out details
             </Button>
           </div>
-          {run.error ? <p className="mt-3 text-sm text-red-700">{run.error instanceof Error ? run.error.message : "That did not work."}</p> : null}
+          {run.error ? <p className="mt-3 text-sm text-red-700 dark:text-red-300">{run.error instanceof Error ? run.error.message : "That did not work."}</p> : null}
         </div>
       </div>
 

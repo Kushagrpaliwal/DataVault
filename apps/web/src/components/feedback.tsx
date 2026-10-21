@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Button, cn } from "@data-vault/ui";
 
 export function ErrorMessage({ message }: { message: string }) {
-  return <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"><AlertCircle className="mt-0.5 size-4 shrink-0" />{message}</div>;
+  return <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-3 text-sm text-red-800 dark:text-red-200"><AlertCircle className="mt-0.5 size-4 shrink-0" />{message}</div>;
 }
 
 interface Toast { id: string; message: string; tone: "success" | "error" }
@@ -16,7 +16,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 3500);
   }, []);
   const value = useMemo(() => ({ notify }), [notify]);
-  return <ToastContext.Provider value={value}>{children}<div aria-live="polite" className="fixed bottom-5 right-5 z-[80] space-y-2">{toasts.map((toast) => <div key={toast.id} className={cn("flex max-w-sm items-center gap-2 rounded-xl border bg-white px-4 py-3 text-sm shadow-lg", toast.tone === "error" ? "border-red-200 text-red-800" : "border-green-200 text-green-800")}>{toast.tone === "success" ? <CheckCircle2 className="size-4" /> : <AlertCircle className="size-4" />}{toast.message}</div>)}</div></ToastContext.Provider>;
+  return <ToastContext.Provider value={value}>{children}<div aria-live="polite" className="fixed bottom-5 right-5 z-[80] space-y-2">{toasts.map((toast) => <div key={toast.id} className={cn("flex max-w-sm items-center gap-2 rounded-xl border bg-surface px-4 py-3 text-sm shadow-lg", toast.tone === "error" ? "border-red-200 dark:border-red-900 text-red-800 dark:text-red-200" : "border-green-200 dark:border-green-900 text-green-800 dark:text-green-200")}>{toast.tone === "success" ? <CheckCircle2 className="size-4" /> : <AlertCircle className="size-4" />}{toast.message}</div>)}</div></ToastContext.Provider>;
 }
 
 export function useToast() { const value = useContext(ToastContext); if (!value) throw new Error("Missing ToastProvider"); return value; }

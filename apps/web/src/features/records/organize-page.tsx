@@ -175,8 +175,8 @@ export function OrganizePage() {
           <h2 className="text-lg font-semibold">Collections</h2>
         </div>
         <p className="mt-1 text-sm leading-6 text-muted">
-          A collection is a group <span className="font-semibold text-black">inside</span>{" "}
-          <span className="font-semibold text-black">{selectedFolder?.name ?? "a folder"}</span>, like a sub-folder. Use one
+          A collection is a group <span className="font-semibold text-ink">inside</span>{" "}
+          <span className="font-semibold text-ink">{selectedFolder?.name ?? "a folder"}</span>, like a sub-folder. Use one
           when a folder holds more than you want to look through. An item can be in more than one collection.
         </p>
         <div className="mt-4 space-y-1">
@@ -263,7 +263,7 @@ export function OrganizePage() {
                     }}
                     title="Remove this tag"
                     aria-label={`Remove the tag ${tag.name}`}
-                    className="text-muted hover:text-red-700"
+                    className="text-muted hover:text-red-700 dark:text-red-300"
                   >
                     <X className="size-3" />
                   </button>
@@ -293,7 +293,7 @@ export function OrganizePage() {
 
     <p className="mt-5 text-sm text-muted">
       Looking for the items themselves? They are all on the{" "}
-      <Link to={selectedFolderId ? `/saved?vault=${selectedFolderId}` : "/saved"} className="font-semibold text-black underline">Saved page</Link>.
+      <Link to={selectedFolderId ? `/saved?vault=${selectedFolderId}` : "/saved"} className="font-semibold text-ink underline">Saved page</Link>.
     </p>
   </>;
 }
@@ -325,7 +325,7 @@ function RowActions({
         disabled={disabled}
         title={disabled ? deleteTitle : "Remove"}
         aria-label="Remove"
-        className={`grid size-7 place-items-center rounded-lg disabled:cursor-not-allowed disabled:opacity-40 ${light ? "text-white/70 hover:bg-white/10 hover:text-white" : "text-muted hover:bg-soft hover:text-red-700"}`}
+        className={`grid size-7 place-items-center rounded-lg disabled:cursor-not-allowed disabled:opacity-40 ${light ? "text-white/70 hover:bg-white/10 hover:text-white" : "text-muted hover:bg-soft hover:text-red-700 dark:text-red-300"}`}
       >
         <Trash2 className="size-3.5" />
       </button>
@@ -358,7 +358,7 @@ function RenameBox({
           if (event.key === "Enter") { event.preventDefault(); onSave(); }
           if (event.key === "Escape") { event.preventDefault(); onCancel(); }
         }}
-        className={`min-w-0 flex-1 rounded-lg border bg-white px-2 py-1 text-sm outline-none ${small ? "text-xs" : ""}`}
+        className={`min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 py-1 text-sm outline-none ${small ? "text-xs" : ""}`}
       />
       <button onClick={onSave} title="Save the name" aria-label="Save the name" className={`grid size-7 shrink-0 place-items-center rounded-lg ${light ? "text-white" : "text-deep-text"}`}>
         <Check className="size-3.5" />

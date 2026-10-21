@@ -192,7 +192,7 @@ export function DocEditor({
 
         {conflict ? (
           <div className="mx-auto mt-4 max-w-[860px] px-4">
-            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 p-4 text-sm text-amber-900 dark:text-amber-100">
               <span className="flex-1">This doc was changed somewhere else. Which version should be kept?</span>
               <Button size="sm" variant="secondary" onClick={() => resolveConflict("mine")}>Keep mine</Button>
               <Button size="sm" variant="secondary" onClick={() => resolveConflict("theirs")}>Load theirs</Button>
@@ -201,7 +201,7 @@ export function DocEditor({
         ) : null}
 
         <div className="mx-auto mt-6 max-w-[860px] px-4 pb-24">
-          <div className="rounded-2xl border border-line bg-white px-10 py-12 shadow-[0_1px_3px_rgba(0,0,0,.04)] md:px-16">
+          <div className="rounded-2xl border border-line bg-surface px-10 py-12 shadow-[0_1px_3px_rgba(0,0,0,.04)] md:px-16">
             <div className="flex items-start gap-3">
               <button
                 title="Change the icon"
@@ -256,9 +256,9 @@ export function DocEditor({
  */
 function SaveBadge({ status, error }: { status: SaveStatus; error: string | null }) {
   if (status === "saving") return <span>Saving…</span>;
-  if (status === "saved") return <span className="text-green-700">Saved</span>;
-  if (status === "offline") return <span className="text-amber-700">Offline, retrying</span>;
-  if (status === "conflict") return <span className="text-amber-700">Changed elsewhere</span>;
-  if (status === "error") return <span className="text-red-700">{error ?? "Could not save"}</span>;
+  if (status === "saved") return <span className="text-green-700 dark:text-green-300">Saved</span>;
+  if (status === "offline") return <span className="text-amber-700 dark:text-amber-300">Offline, retrying</span>;
+  if (status === "conflict") return <span className="text-amber-700 dark:text-amber-300">Changed elsewhere</span>;
+  if (status === "error") return <span className="text-red-700 dark:text-red-300">{error ?? "Could not save"}</span>;
   return <span>All changes saved</span>;
 }

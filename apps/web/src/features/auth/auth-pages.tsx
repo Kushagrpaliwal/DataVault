@@ -92,7 +92,7 @@ export function LoginPage() {
         <div>
           <Label htmlFor="email">Email</Label>
           <Input id="email" autoComplete="email" type="email" {...form.register("email")} />
-          {form.formState.errors.email ? <p className="mt-1 text-xs text-red-700">{form.formState.errors.email.message}</p> : null}
+          {form.formState.errors.email ? <p className="mt-1 text-xs text-red-700 dark:text-red-300">{form.formState.errors.email.message}</p> : null}
         </div>
         <div>
           <div className="flex justify-between">
@@ -105,7 +105,7 @@ export function LoginPage() {
           </div>
         </div>
         <Button className="w-full" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Signing in…" : "Sign in"}</Button>
-        <p className="text-center text-sm text-muted">New to DataVault? <NavLink to="/register" state={location.state} className="font-semibold text-black underline">Create an account</NavLink></p>
+        <p className="text-center text-sm text-muted">New to DataVault? <NavLink to="/register" state={location.state} className="font-semibold text-ink underline">Create an account</NavLink></p>
       </form>
     </AuthFrame>
   );
@@ -150,7 +150,7 @@ export function RegisterPage() {
           <p className="mt-1 text-xs text-muted">10 or more characters, with upper-case, lower-case, and a number.</p>
         </div>
         <Button className="w-full" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Creating…" : "Create account"}</Button>
-        <p className="text-center text-sm text-muted">Already registered? <NavLink to="/login" state={location.state} className="font-semibold text-black underline">Sign in</NavLink></p>
+        <p className="text-center text-sm text-muted">Already registered? <NavLink to="/login" state={location.state} className="font-semibold text-ink underline">Sign in</NavLink></p>
         <p className="rounded-xl bg-soft p-3 text-xs leading-5 text-muted">
           We will email you a confirmation link. You can use DataVault straight away, but you need to confirm your address before AI credits unlock.
         </p>

@@ -61,7 +61,7 @@ export function DocOutline({ editor }: { editor: Editor | null }) {
                 <li key={entry.id}>
                   <button
                     onClick={() => jump(entry)}
-                    className="block w-full truncate py-1 text-left text-sm text-strong hover:text-black"
+                    className="block w-full truncate py-1 text-left text-sm text-strong hover:text-ink"
                     style={{ paddingLeft: `${(entry.level - 1) * 12 + 12}px` }}
                     title={entry.text}
                   >

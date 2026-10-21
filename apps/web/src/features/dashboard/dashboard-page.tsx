@@ -228,10 +228,10 @@ function ItemCard({ record }: { record: SavedRecord }) {
               <button
                 type="button"
                 onClick={copySnippet}
-                className="flex items-center gap-1 transition-colors hover:text-black"
+                className="flex items-center gap-1 transition-colors hover:text-ink"
                 title="Copy saved text"
               >
-                {copied ? <Check className="size-3 text-green-600" /> : <Copy className="size-3" />}
+                {copied ? <Check className="size-3 text-green-600 dark:text-green-400" /> : <Copy className="size-3" />}
                 {copied ? "Copied" : "Copy"}
               </button>
             ) : null}
@@ -240,7 +240,7 @@ function ItemCard({ record }: { record: SavedRecord }) {
 
             <Link
               to={`/saved/${record.id}`}
-              className="flex shrink-0 items-center gap-1 font-medium hover:text-black"
+              className="flex shrink-0 items-center gap-1 font-medium hover:text-ink"
             >
               Details
               <ExternalLink className="size-3" />

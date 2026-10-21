@@ -224,8 +224,8 @@ export function DocsPage() {
           </div>
 
           <div className="mt-3 flex items-center justify-between text-xs">
-            <button onClick={() => setShowTrash(false)} className={cn("rounded-full px-2 py-1 font-medium", !showTrash ? "bg-soft text-black" : "text-muted")}>Docs</button>
-            <button onClick={() => setShowTrash(true)} className={cn("rounded-full px-2 py-1 font-medium", showTrash ? "bg-soft text-black" : "text-muted")}>Trash</button>
+            <button onClick={() => setShowTrash(false)} className={cn("rounded-full px-2 py-1 font-medium", !showTrash ? "bg-soft text-ink" : "text-muted")}>Docs</button>
+            <button onClick={() => setShowTrash(true)} className={cn("rounded-full px-2 py-1 font-medium", showTrash ? "bg-soft text-ink" : "text-muted")}>Trash</button>
           </div>
 
           <div className="mt-3 flex-1 space-y-1 overflow-y-auto">
@@ -258,7 +258,7 @@ export function DocsPage() {
                   <MoreHorizontal className="size-4" />Menu
                 </Button>
                 {menuOpen ? (
-                  <div role="menu" className="absolute right-0 top-full z-40 mt-1 w-64 rounded-2xl border border-line bg-white p-1.5 shadow-xl">
+                  <div role="menu" className="absolute right-0 top-full z-40 mt-1 w-64 rounded-2xl border border-line bg-surface p-1.5 shadow-xl">
                     <MenuHeading>Arrange new clips by</MenuHeading>
                     {Object.entries(ARRANGE_LABELS).map(([value, label]) => (
                       <MenuItem key={value} active={selected?.arrangeMode === value} onClick={() => {
@@ -415,7 +415,7 @@ function DocListItem({ item, active, isCurrent, onOpen, onMakeCurrent }: { item:
         title={isCurrent ? "This is the doc the extension adds to" : "Use as the doc the extension adds to"}
         aria-label={isCurrent ? `${item.title} is the current doc` : `Make ${item.title} the current doc`}
         aria-pressed={isCurrent}
-        className={cn("mr-1 mt-2 grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-white", isCurrent ? "text-deep-text" : "opacity-0 group-hover:opacity-100")}
+        className={cn("mr-1 mt-2 grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-soft", isCurrent ? "text-deep-text" : "opacity-0 group-hover:opacity-100")}
       >
         <Star className={cn("size-3.5", isCurrent && "fill-current")} />
       </button>
@@ -433,7 +433,7 @@ function MenuDivider() {
 
 function MenuItem({ children, onClick, active, danger }: { children: React.ReactNode; onClick: () => void; active?: boolean; danger?: boolean }) {
   return (
-    <button role="menuitem" onClick={onClick} className={cn("flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-soft", active && "bg-soft", danger && "text-red-700")}>
+    <button role="menuitem" onClick={onClick} className={cn("flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-soft", active && "bg-soft", danger && "text-red-700 dark:text-red-300")}>
       {children}
     </button>
   );

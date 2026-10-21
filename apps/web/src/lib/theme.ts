@@ -29,6 +29,12 @@ export function applyTheme(theme: Theme): void {
   const dark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", dark);
   document.documentElement.style.colorScheme = dark ? "dark" : "light";
+  /**
+   * The bar of the browser takes the colour of the page, so it is changed
+   * with it. The page reads the choice before it is drawn, so this is only
+   * needed when the choice is changed while the page is open.
+   */
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#121110" : "#fffaf0");
 }
 
 /**

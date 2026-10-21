@@ -123,7 +123,7 @@ export function RecordDetailPage() {
 
   return (
     <>
-      <button className="mb-5 flex items-center gap-2 text-sm text-muted hover:text-black" onClick={() => navigate(-1)}>
+      <button className="mb-5 flex items-center gap-2 text-sm text-muted hover:text-ink" onClick={() => navigate(-1)}>
         <ArrowLeft className="size-4" />
         Back to saved items
       </button>
@@ -141,7 +141,7 @@ export function RecordDetailPage() {
                     <div className="space-y-3">
                       <Input value={title} onChange={(event) => setTitle(event.target.value)} />
                       <textarea
-                        className="w-full rounded-xl border bg-white p-3 text-sm"
+                        className="w-full rounded-xl border border-line bg-surface p-3 text-sm"
                         rows={3}
                         value={description}
                         onChange={(event) => setDescription(event.target.value)}
@@ -179,7 +179,7 @@ export function RecordDetailPage() {
                     {query.data.archivedAt ? <RotateCcw className="size-4" /> : <Archive className="size-4" />}
                     {query.data.archivedAt ? "Restore" : "Archive"}
                   </Button>}
-                  {!query.data.deletedAt ? <Button size="sm" variant="ghost" className="text-red-700" onClick={deleteCapture} disabled={remove.isPending}><Trash2 className="size-4" />Trash</Button> : null}
+                  {!query.data.deletedAt ? <Button size="sm" variant="ghost" className="text-red-700 dark:text-red-300" onClick={deleteCapture} disabled={remove.isPending}><Trash2 className="size-4" />Trash</Button> : null}
                 </div>
               </div>
               <dl className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -358,7 +358,7 @@ function OrganizePanel({ record, onSaved }: { record: Detail; onSaved: () => Pro
           id="organize-folder"
           value={vaultId}
           onChange={(event) => setVaultId(event.target.value)}
-          className="mt-2 h-11 w-full rounded-xl border border-line bg-white px-3 text-sm"
+          className="mt-2 h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm"
         >
           {vaults.data?.map((vault) => <option key={vault.id} value={vault.id}>{vault.name}</option>)}
         </select>
@@ -388,7 +388,7 @@ function OrganizePanel({ record, onSaved }: { record: Detail; onSaved: () => Pro
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
             This folder has no collections yet. One is made in{" "}
-            <Link to="/organize" className="font-semibold text-black underline">Organize</Link>.
+            <Link to="/organize" className="font-semibold text-ink underline">Organize</Link>.
           </p>
         )}
         <p className="mt-1 text-xs leading-5 text-muted">A collection groups items inside the folder, like a sub-folder.</p>
@@ -463,7 +463,7 @@ function AddToDocDialog({
 
   return (
     <Modal open={open} title="Add to a doc" onClose={onClose}>
-      {error ? <div className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+      {error ? <div className="mb-3 rounded-xl bg-red-50 dark:bg-red-950/40 p-3 text-sm text-red-700 dark:text-red-300">{error}</div> : null}
       {!notes.length ? (
         <p className="text-sm text-muted">You have no docs yet. Create one on the Docs page first.</p>
       ) : (
@@ -508,9 +508,9 @@ function AttachmentPreview({ attachment }: { attachment: Attachment }) {
   }, [query.data]);
 
   return <div className="overflow-hidden rounded-xl bg-soft p-3 text-sm">
-    {url ? <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={attachment.fileName} className="mb-3 max-h-72 w-full rounded-lg border bg-white object-contain" /></a> : null}
+    {url ? <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={attachment.fileName} className="mb-3 max-h-72 w-full rounded-lg border border-line bg-white object-contain" /></a> : null}
     <div className="flex items-center justify-between gap-3"><span className="truncate font-medium">{attachment.fileName}</span><span className="shrink-0 text-xs text-muted">{formatBytes(attachment.byteSize)}</span></div>
-    {query.isError ? <p className="mt-1 text-xs text-red-700">Screenshot preview could not be loaded.</p> : null}
+    {query.isError ? <p className="mt-1 text-xs text-red-700 dark:text-red-300">Screenshot preview could not be loaded.</p> : null}
   </div>;
 }
 

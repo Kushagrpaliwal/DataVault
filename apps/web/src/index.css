@@ -22,6 +22,8 @@
   --deep: #1a3a3a;
   --deep-text: #1a3a3a;
   --focus: #1a3a3a;
+  --link: #1a5fb4;
+  --danger: #b3261e;
 }
 
 .dark {
@@ -37,6 +39,8 @@
   --deep: #1c3d39;
   --deep-text: #8fd8c9;
   --focus: #7fd4c4;
+  --link: #8ab4f8;
+  --danger: #f2b8b5;
 }
 
 @theme inline {
@@ -78,7 +82,7 @@
   .datavault-prose pre { background: var(--soft); border-radius: 12px; padding: 1em; overflow-x: auto; font-size: .85rem; }
   .datavault-prose code { background: var(--soft); border-radius: 5px; padding: .1em .35em; font-size: .9em; }
   .datavault-prose pre code { background: none; padding: 0; }
-  .datavault-prose a { color: #1a5fb4; text-decoration: underline; }
+  .datavault-prose a { color: var(--link); text-decoration: underline; }
   .datavault-prose hr { border: none; border-top: 1px solid var(--line); margin: 1.5em 0; }
   .datavault-prose table { border-collapse: collapse; width: 100%; font-size: .95em; }
   .datavault-prose th, .datavault-prose td { border: 1px solid var(--line); padding: .45em .7em; text-align: left; vertical-align: top; }
@@ -117,7 +121,7 @@
     color: var(--muted);
   }
   .datavault-prose .datavault-clip-source { display: inline-flex; align-items: center; gap: .35em; min-width: 0; }
-  .datavault-prose .datavault-clip-source a { display: inline-flex; align-items: center; gap: .3em; color: #1a5fb4; text-decoration: underline; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .datavault-prose .datavault-clip-source a { display: inline-flex; align-items: center; gap: .3em; color: var(--link); text-decoration: underline; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .datavault-prose .datavault-clip-domain { color: var(--muted); }
   .datavault-prose .datavault-clip-remove {
     margin-left: auto;
@@ -128,7 +132,7 @@
     border-radius: .4em;
     color: var(--muted);
   }
-  .datavault-prose .datavault-clip-remove:hover { background: var(--soft); color: #b3261e; }
+  .datavault-prose .datavault-clip-remove:hover { background: var(--soft); color: var(--danger); }
   /**
    * A piece whose source is already named by the heading above it.
    *

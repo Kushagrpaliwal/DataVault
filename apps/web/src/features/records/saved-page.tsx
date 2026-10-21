@@ -468,7 +468,7 @@ function FilterRail({
                   onClick={() => onRemoveView(String(view.id))}
                   title="Remove this view"
                   aria-label={`Remove the view ${String(view.name ?? "")}`}
-                  className="grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-soft hover:text-red-700"
+                  className="grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-soft hover:text-red-700 dark:text-red-300"
                 >
                   <X className="size-3.5" />
                 </button>
@@ -505,7 +505,7 @@ function FilterRail({
           Every saved item lives in one folder. Pick the folder you want to look at, or save new items straight into it.
         </p>
         <p className="mt-2 border-t border-line px-2 pt-3 text-xs text-muted">
-          Manage folders, collections, and tags in <Link to="/organize" className="font-semibold text-black underline">Organize</Link>.
+          Manage folders, collections, and tags in <Link to="/organize" className="font-semibold text-ink underline">Organize</Link>.
         </p>
       </section>
 
@@ -703,7 +703,7 @@ function ManualSaveModal({
           <Label htmlFor="manual-tags">Tags <span className="font-normal text-muted">(separate with commas)</span></Label>
           <Input id="manual-tags" value={tags} onChange={(event) => setTags(event.target.value)} placeholder="research, urgent" />
         </div>
-        {save.error ? <p className="text-sm text-red-700">{save.error.message}</p> : null}
+        {save.error ? <p className="text-sm text-red-700 dark:text-red-300">{save.error.message}</p> : null}
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
           <Button disabled={save.isPending || (!title.trim() && !text.trim() && !url.trim())}>

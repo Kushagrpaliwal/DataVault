@@ -109,7 +109,7 @@ export function DocToolbar({ editor, inTable = false }: ToolbarProps) {
       <div className="relative">
         <ToolButton label="Text colour" active={showColours} onClick={() => setShowColours((open) => !open)}><Palette className="size-4" /></ToolButton>
         {showColours ? (
-          <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-2xl border border-line bg-white p-3 shadow-lg">
+          <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-2xl border border-line bg-surface p-3 shadow-lg">
             <p className="text-xs font-semibold uppercase tracking-[.12em] text-muted">Text</p>
             <div className="mt-2 grid grid-cols-8 gap-1">
               {TEXT_COLOURS.map((colour) => (
@@ -159,7 +159,7 @@ function ToolButton({ label, onClick, active, disabled, children }: { label: str
       aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
-      className={cn("grid size-8 place-items-center rounded-lg text-strong transition-colors hover:bg-soft disabled:pointer-events-none disabled:opacity-35", active && "bg-soft text-black")}
+      className={cn("grid size-8 place-items-center rounded-lg text-strong transition-colors hover:bg-soft disabled:pointer-events-none disabled:opacity-35", active && "bg-soft text-ink")}
     >
       {children}
     </button>
