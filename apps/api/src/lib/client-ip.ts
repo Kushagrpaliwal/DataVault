@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { and, eq, gt } from "drizzle-orm";
+import { jwtVerify } from "jose";
+import { getDatabase, sessions } from "@data-vault/database";
 import type { ServerEnvironment } from "@data-vault/config";
 
 /**
@@ -33,39 +36,65 @@ export function clientIp(request: Request, env: ServerEnvironment): string {
  * everybody else out.
  *
  * When the address cannot be resolved, the budget follows the signed-in
- * account instead. The account is identified by a hash of the credential the
- * request carries, so a caller cannot pick somebody else's bucket by
- * claiming to be them.
+ * account instead. The account is only known when the credential has been
+ * checked, so a caller cannot mint a fresh budget by adding a made-up
+ * cookie or a made-up token to the request. A request with no credential
+ * that checks out shares one budget with everybody else.
  */
-export function clientKey(request: Request, env: ServerEnvironment): string {
+export async function clientKey(request: Request, env: ServerEnvironment): Promise<string> {
   const ip = clientIp(request, env);
   if (ip !== "local") return ip;
   const bearer = request.headers.get("authorization");
   if (bearer?.startsWith("Bearer ")) {
-    const subject = bearerSubject(bearer.slice(7));
+    const subject = await verifiedBearerSubject(bearer.slice(7), env);
     if (subject) return `account:${fingerprint(subject)}`;
   }
-  const cookie = request.headers.get("cookie");
-  if (cookie) return `account:${fingerprint(cookie)}`;
+  const session = await confirmedSessionToken(request);
+  if (session) return `account:${fingerprint(session)}`;
   return "shared";
 }
 
 /**
- * The subject of an access token, without checking its signature.
+ * The subject of an access token, once the token has been checked.
  *
- * The value is only used to pick a rate-limit bucket, and it is hashed
- * before it is used, so a forged token cannot aim the traffic at another
- * account's bucket. The real check happens when the token is used for access.
+ * The signature is verified and the claims are read from the token that was
+ * signed, so a made-up token never reaches the rate limiter.
  */
-function bearerSubject(token: string): string | undefined {
-  const parts = token.split(".");
-  if (parts.length !== 3) return undefined;
+async function verifiedBearerSubject(token: string, env: ServerEnvironment): Promise<string | undefined> {
   try {
-    const payload = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8")) as { sub?: unknown };
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(env.JWT_SECRET), { issuer: env.API_URL, audience: "data-vault-extension" });
     return typeof payload.sub === "string" && payload.sub ? payload.sub : undefined;
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The token of the session a request carries, once the session is confirmed.
+ *
+ * The cookie holds the token and a signature. The token is looked up in the
+ * table of sessions, so a cookie that was made up finds nothing and the
+ * request falls back to the shared budget.
+ */
+async function confirmedSessionToken(request: Request): Promise<string | undefined> {
+  const header = request.headers.get("cookie");
+  if (!header) return undefined;
+  for (const part of header.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 0) continue;
+    const name = part.slice(0, separator).trim();
+    if (!name.endsWith(".session_token")) continue;
+    const value = decodeURIComponent(part.slice(separator + 1).trim());
+    const token = value.split(".")[0];
+    if (!token) continue;
+    const [row] = await getDatabase()
+      .select({ token: sessions.token })
+      .from(sessions)
+      .where(and(eq(sessions.token, token), gt(sessions.expiresAt, new Date())))
+      .limit(1);
+    if (row) return row.token;
+  }
+  return undefined;
 }
 
 function fingerprint(value: string): string {

@@ -19,6 +19,14 @@ export function normalizeError(error: unknown, requestId: string) {
     return { status: 404, body: { success: false as const, error: { code: "NOT_FOUND", message: "That endpoint does not exist.", requestId } } };
   }
   /**
+   * A body that cannot be read is a bad request, not a server fault. The
+   * body is read before the request reaches the route, so a broken body
+   * would otherwise be reported as a fault of the server.
+   */
+  if (error instanceof Error && ((error as { code?: string }).code === "PARSE" || (error instanceof SyntaxError && /json/i.test(error.message)))) {
+    return { status: 400, body: { success: false as const, error: { code: "VALIDATION_ERROR", message: "The request body could not be read.", requestId } } };
+  }
+  /**
    * A URL that could not be parsed is a bad request, not a server fault. Some
    * validators throw a raw TypeError instead of reporting a validation
    * problem, and that must not be reported as a 500.

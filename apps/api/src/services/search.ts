@@ -5,12 +5,32 @@ import { likePattern } from "../lib/like";
 
 const monthNames = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 
-function monthRange(query: string) {
-  const lower = query.toLowerCase();
-  const month = monthNames.findIndex((name) => lower.includes(name));
-  if (month < 0) return null;
-  const yearMatch = /\b(20\d{2})\b/.exec(query);
-  const year = yearMatch?.[1] ? Number(yearMatch[1]) : new Date().getFullYear();
+/**
+ * The month a query names, when it names one and nothing else.
+ *
+ * A query used to be read for the name of a month anywhere inside it, so
+ * "maybe" brought in everything from May. A month is a date filter only
+ * when the query is a month, or a month and a year.
+ */
+export function monthRange(query: string) {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  const monthOf = (word: string) => monthNames.indexOf(word);
+  let month = -1;
+  let year: number | undefined;
+  if (words.length === 1) {
+    month = monthOf(words[0]!);
+    year = new Date().getFullYear();
+  } else if (words.length === 2) {
+    const [first, second] = words as [string, string];
+    const named = monthOf(first) >= 0 ? first : monthOf(second) >= 0 ? second : undefined;
+    const dated = /\b(20\d{2})\b/.exec(first)?.[1] ?? /\b(20\d{2})\b/.exec(second)?.[1];
+    if (named && dated) {
+      month = monthOf(named);
+      year = Number(dated);
+    }
+  }
+  if (month < 0 || !year) return null;
   return { from: new Date(Date.UTC(year, month, 1)), to: new Date(Date.UTC(year, month + 1, 1)) };
 }
 

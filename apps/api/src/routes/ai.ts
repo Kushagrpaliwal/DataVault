@@ -18,18 +18,14 @@ export function createAiRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
   return new Elysia({ name: "ai-routes" })
     /** The current allowance, and why the AI features are unavailable if they are. */
     .get("/api/v1/ai/credits", async ({ request }) => {
-      const actor = await getActor(request, auth, env);
-      const organizationId = request.headers.get("x-organization-id");
-      if (!organizationId) throw new AppError(400, "ORGANIZATION_REQUIRED", "Select a workspace to continue.");
-      const status = await readCreditStatus(env, { userId: actor.userId, organizationId });
+      const context = await getTenantContext(request, auth, env);
+      const status = await readCreditStatus(env, { userId: context.userId, organizationId: context.organizationId });
       return success(status);
     })
     /** Recent credit movements, so the user can see where their allowance went. */
     .get("/api/v1/ai/activity", async ({ request }) => {
-      const actor = await getActor(request, auth, env);
-      const organizationId = request.headers.get("x-organization-id");
-      if (!organizationId) throw new AppError(400, "ORGANIZATION_REQUIRED", "Select a workspace to continue.");
-      return success(await listCreditActivity({ userId: actor.userId, organizationId }));
+      const context = await getTenantContext(request, auth, env);
+      return success(await listCreditActivity({ userId: context.userId, organizationId: context.organizationId }));
     })
     /** Record the agreement to send content to the model provider. */
     .post("/api/v1/ai/consent", async ({ body, request }) => {

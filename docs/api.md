@@ -7,7 +7,7 @@ Base path: `/api/v1`. JSON responses use one envelope:
 ```
 
 ```json
-{ "success": false, "error": { "code": "PAYMENT_NOT_FOUND", "message": "Payment could not be found.", "requestId": "..." } }
+{ "success": false, "error": { "code": "NOTE_NOT_FOUND", "message": "That doc could not be found.", "requestId": "..." } }
 ```
 
 OpenAPI UI/spec is available at `/api/v1/openapi` in the running service. Production errors never expose stack traces.
@@ -78,6 +78,21 @@ The content of a doc is checked against the editor's own schema before it is sto
 
 The heading names the source of the pieces under it, so the link is written once, at the heading, and the pieces themselves are shown as plain text. A piece that is not under a heading of its own source keeps its own link.
 
+## AI
+
+The AI features need a workspace, a confirmed email address and the agreement to send content to the model provider. The allowance belongs to the person, so it is the same in every workspace.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/ai/credits` | The allowance left today, and why the features are unavailable if they are. |
+| `GET` | `/ai/activity` | The recent movements of the allowance. |
+| `POST` | `/ai/consent` | Record the agreement to send content to the model provider. |
+| `POST` | `/ai/summarize` | Summarise a saved item or a piece of text. The body is `{ recordId?, text? }`. |
+| `POST` | `/ai/classify` | Suggest a type and some tags. |
+| `POST` | `/ai/extract` | Pull the fields out of a piece of text. |
+
+A request that has been made is not made again: send an `Idempotency-Key`, and a retry is charged once. A key that another account has already used is refused.
+
 ## Extension authorization
 
 - `POST /extension/auth/start`
@@ -88,4 +103,6 @@ The heading names the source of the pieces under it, so the link is written once
 - `GET /extension/sessions`
 - `POST /extension/sessions/:id/revoke`
 
-List/search routes use backend pagination (`page`, `limit`, maximum 100). Search covers the title, the description, the text that was captured, the website it came from and the title of the page. A `%` or an `_` in the search is looked for as text rather than as a wildcard.
+List/search routes use backend pagination (`page`, `limit`, maximum 100). Search covers the title, the description, the text that was captured, the website it came from and the title of the page. A `%` or an `_` in the search is looked for as text rather than as a wildcard. A month is a date filter only when the query is a month, or a month and a year, so a word that contains the name of a month is still just a word.
+
+A request body is at most eight megabytes. The length is taken from the `Content-Length` header, and a body that arrives in chunks is refused rather than taken on trust.

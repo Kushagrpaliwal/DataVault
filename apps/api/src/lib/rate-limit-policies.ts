@@ -66,7 +66,8 @@ export async function enforceRateLimit(
   policy: Policy,
   scope?: string,
 ): Promise<LimitOutcome> {
-  const key = scope ? `${policy.name}:${scope}:${clientKey(request, env)}` : `${policy.name}:${clientKey(request, env)}`;
+  const caller = await clientKey(request, env);
+  const key = scope ? `${policy.name}:${scope}:${caller}` : `${policy.name}:${caller}`;
   return consume(policy, key);
 }
 

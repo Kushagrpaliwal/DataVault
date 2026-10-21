@@ -56,6 +56,8 @@ Two layers, because they protect different things.
 
 `X-Forwarded-For` is only believed when `TRUSTED_PROXY_HOPS` is greater than zero. Without a trusted proxy in front, a client could otherwise send any address it liked and walk straight past every limit.
 
+When the address cannot be resolved, the budget follows the signed-in account instead. The account is only known when the credential has been checked: a session cookie is looked up in the table of sessions, and an access token is checked against its signature. A request with no credential that checks out shares one budget with everybody else, so a made-up cookie or a made-up token cannot mint a fresh budget on every call. The budget on the address being targeted, such as the address in a password reset, is counted on its own and is not affected by this.
+
 | Policy | Limit | Window |
 | --- | --- | --- |
 | `signup` | 5 | 1 hour |

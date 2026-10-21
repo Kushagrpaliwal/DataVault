@@ -4,15 +4,18 @@
 
 Copy `.env.example` to `.env`. Required values are `DATABASE_URL`, `SESSION_SECRET`, `JWT_SECRET`, `API_URL`, `WEB_URL`, `ALLOWED_ORIGINS`, and `EXTENSION_REDIRECT_URL`. Never commit `.env`; it is ignored.
 
-The bootstrap script connects through `DATABASE_ADMIN_URL` only to create a missing local database. Normal API traffic uses `DATABASE_URL`.
+`DATABASE_URL` is the application: a role of its own, in the database the product works in. `DATABASE_ADMIN_URL` is the same database as the administrative role, and it is the only one that may create and change the tables. A missing database is created through the maintenance database.
 
 ## Workflow
 
 ```bash
 bun install
 bun run db:migrate
+bun run db:create-role
 bun run dev
 ```
+
+`db:migrate` runs the migrations as the administrative role and then gives the application role its grants, so a fresh checkout is ready to run. `db:create-role` is only needed on its own after the role or its grants are changed by hand.
 
 Run clients individually with `dev:web`, `dev:api`, or `dev:extension`. WXT hot-reload may require reloading the unpacked extension after manifest/background changes.
 
@@ -32,7 +35,7 @@ bun run build
 
 For the browser smoke check, keep the API and web app running, set `SMOKE_EMAIL` and `SMOKE_PASSWORD` to a real account, and execute `bun run smoke:web`. It signs in through the UI and verifies the Overview, Saved, Organize, and Settings pages, plus the legacy route redirects, using headless Chrome.
 
-Business tests use the actual Elysia application and PostgreSQL schema. Test-created organizations use unique slugs and remain useful for inspecting audit/tenancy behavior. A dedicated `TEST_DATABASE_URL` is included for CI isolation when the runner provisions and migrates that database.
+Business tests use the actual Elysia application and PostgreSQL schema, and they run as the application role, so the row-level security rules are part of every test. The test database is a database of its own, named by `TEST_DATABASE_URL`; `bun run db:migrate-test` brings it up to date and `bun run db:recreate-test` gives it a clean start. Test-created organizations use unique slugs and remain useful for inspecting audit/tenancy behavior.
 
 ## Adding features
 

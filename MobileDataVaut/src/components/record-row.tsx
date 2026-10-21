@@ -31,12 +31,5 @@ export function formatDate(value: string | null) {
   if (!value) return 'No date'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'No date'
-  return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short' }).format(date)
-}
-
-export function formatMoney(value: string | null | undefined, currency = 'INR') {
-  if (!value) return '--'
-  const amount = Number(value)
-  if (!Number.isFinite(amount)) return `${currency} ${value}`
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 2 }).format(amount)
+  return new Intl.DateTimeFormat(undefined, { day: '2-digit', month: 'short' }).format(date)
 }

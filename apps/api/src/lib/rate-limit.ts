@@ -44,7 +44,13 @@ export async function consumeRateLimit({ key, limit, windowSeconds }: BucketOpti
     returning hits::int as hits, reset_at
   `);
 
-  const row = (rows as unknown as { rows?: { hits: number; reset_at: string }[] }).rows?.[0];
+  /**
+   * The row that came back from the statement.
+   *
+   * The count is the number of requests in the window, so it is what says
+   * whether the request is allowed.
+   */
+  const row = rows[0];
   const count = Number(row?.hits ?? 1);
   const expires = row?.reset_at ? new Date(row.reset_at) : resetAt;
   return {

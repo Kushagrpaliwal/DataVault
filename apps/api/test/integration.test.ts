@@ -1,9 +1,10 @@
 import "./setup";
-import { afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { and, eq, inArray } from "drizzle-orm";
 import { accounts, getDatabase, organizationMembers, organizations, roles, userRoles, users } from "@data-vault/database";
 import { app } from "../src";
 import { issuePasswordSetupToken } from "../src/auth/password-setup";
+import { clearRateLimits } from "./support";
 
 const origin = process.env.WEB_URL ?? "http://localhost:5173";
 const suffix = crypto.randomUUID().slice(0, 8);
@@ -34,13 +35,13 @@ async function register(name: string, email: string): Promise<BrowserSession> {
   return { cookie: response.headers.getSetCookie()[0]!.split(";")[0]!, csrf: String(payload.data.csrfToken), userId };
 }
 
-beforeAll(async () => {
+beforeEach(async () => {
   /**
    * The rate limits are counted in the database, and they are meant to hold
    * back a person who signs up over and over. A test run signs up more than
-   * once on purpose, so the counters are cleared before the run starts.
+   * once on purpose, so the counters are cleared before each test.
    */
-  await getDatabase().execute(sql`delete from rate_limit_buckets`);
+  await clearRateLimits();
 });
 
 afterEach(async () => {
@@ -133,6 +134,32 @@ describe("DataVault API integration", () => {
     const revoked = await call("/api/v1/me", { bearer: accessToken, organizationId: orgA });
     expect(revoked.response.status).toBe(401);
   }, 30_000);
+
+  test("a body that is too large is refused, and a body in chunks is refused too", async () => {
+    const body = JSON.stringify({ email: "someone@example.com", password: "Aa1Bb2Cc3Dd4" });
+
+    /**
+     * The length is read from the header, so a body that says it is too
+     * large is turned away before it is read.
+     */
+    const tooLarge = await app.handle(new Request("http://localhost:3000/api/v1/auth/login", {
+      method: "POST",
+      headers: { origin, "content-type": "application/json", "content-length": String(9 * 1024 * 1024) },
+      body,
+    }));
+    expect(tooLarge.status).toBe(413);
+
+    /**
+     * A body that arrives in chunks has no length to check, so it is
+     * turned away as well.
+     */
+    const chunked = await app.handle(new Request("http://localhost:3000/api/v1/auth/login", {
+      method: "POST",
+      headers: { origin, "content-type": "application/json", "transfer-encoding": "chunked" },
+      body,
+    }));
+    expect(chunked.status).toBe(411);
+  });
 
   test("the sign-in methods endpoint reports the available methods and no Google", async () => {
     const methods = await call("/api/v1/auth/methods");

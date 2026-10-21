@@ -7,7 +7,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "db:generate": "bun ../../scripts/drizzle-generate.ts generate --config drizzle.config.ts",
-    "db:migrate": "bun scripts/bootstrap.ts && drizzle-kit migrate --config drizzle.config.ts",
+    "db:migrate": "bun scripts/bootstrap.ts && drizzle-kit migrate --config drizzle.config.ts && bun scripts/create-app-role.ts",
+    "db:create-role": "bun scripts/create-app-role.ts",
+    "db:migrate-test": "bun scripts/migrate-test.ts && bun scripts/create-app-role.ts",
     "db:bootstrap": "bun scripts/bootstrap-permissions.ts",
     "db:remove-demo": "bun scripts/remove-demo-data.ts",
     "db:remove-test-data": "bun scripts/remove-test-data.ts",

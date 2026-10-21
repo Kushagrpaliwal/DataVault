@@ -65,16 +65,25 @@ export function createApp() {
        * A request body has a size limit.
        *
        * The length is taken from the header the browser sends, which is
-       * there for every ordinary request. The fields themselves carry their
-       * own limits as well, so a piece of a page cannot be larger than a doc
-       * is allowed to be.
+       * there for every ordinary request. A body that arrives in chunks
+       * has no length to check, so it is refused rather than taken on
+       * trust. The fields themselves carry their own limits as well, so a
+       * piece of a page cannot be larger than a doc is allowed to be.
        */
       const contentType = request.headers.get("content-type") ?? "";
       const hasBody = request.method !== "GET" && request.method !== "HEAD";
       if (hasBody && !contentType.startsWith("multipart/form-data")) {
-        const declaredLength = Number(request.headers.get("content-length") ?? 0);
-        if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BYTES) {
-          throw new AppError(413, "REQUEST_TOO_LARGE", "That request is too large.");
+        const declaredLength = request.headers.get("content-length");
+        if (declaredLength !== null) {
+          const length = Number(declaredLength);
+          if (!Number.isFinite(length) || length < 0) {
+            throw new AppError(400, "INVALID_CONTENT_LENGTH", "That request could not be read.");
+          }
+          if (length > MAX_REQUEST_BYTES) {
+            throw new AppError(413, "REQUEST_TOO_LARGE", "That request is too large.");
+          }
+        } else if (request.headers.get("transfer-encoding")?.toLowerCase().includes("chunked")) {
+          throw new AppError(411, "LENGTH_REQUIRED", "Send the request with a Content-Length header.");
         }
       }
       const path = new URL(request.url).pathname;
@@ -134,7 +143,15 @@ export function createApp() {
 export const app = createApp();
 
 if (import.meta.main) {
-  app.listen(Number(process.env.API_PORT ?? 3000));
+  /**
+   * The server refuses a body that is too large, so the limit is set on the
+   * server as well. A request that arrives in chunks is turned away before
+   * it is read, because there is no length to check.
+   */
+  app.listen({
+    port: Number(process.env.API_PORT ?? 3000),
+    maxRequestBodySize: MAX_REQUEST_BYTES,
+  });
   console.log(`DataVault API listening on http://localhost:${app.server?.port ?? 3000}`);
 }
 

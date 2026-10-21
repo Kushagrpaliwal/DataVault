@@ -53,7 +53,7 @@ export function CaptureScreen({ onSaved }: { onSaved: () => void }) {
         <SectionTitle eyebrow="CAPTURE" title="Put it somewhere safe" />
         <view className="capture-intro"><text className="capture-intro__title">A small note now saves a big search later.</text><text className="capture-intro__body">This manual capture uses the same saved-record system as the browser extension.</text></view>
         <view className="form-card">
-          <Field label="What is this?"><TextInput value={title} onChange={setTitle} placeholder="e.g. Payment confirmation from Acme" /></Field>
+          <Field label="What is this?"><TextInput value={title} onChange={setTitle} placeholder="e.g. A note from the workshop" /></Field>
           <Field label="Memory"><TextArea value={text} onChange={setText} placeholder="Paste the useful text, context, or next step..." /></Field>
           <Field label="Type"><scroll-view className="type-scroll" scroll-orientation="horizontal"><TypeChip label="Article" value="article" active={recordType === 'article'} onPress={setRecordType} /><TypeChip label="Quote" value="quote" active={recordType === 'quote'} onPress={setRecordType} /><TypeChip label="Statistic" value="statistic" active={recordType === 'statistic'} onPress={setRecordType} /><TypeChip label="Note" value="note" active={recordType === 'note'} onPress={setRecordType} /><TypeChip label="Link" value="bookmark" active={recordType === 'bookmark'} onPress={setRecordType} /></scroll-view></Field>
           {error ? <text className="form-error">{error}</text> : null}

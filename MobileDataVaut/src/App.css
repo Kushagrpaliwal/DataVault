@@ -227,7 +227,6 @@ body {
 .record-row__topline,
 .detail-card__top,
 .record-row__meta,
-.finance-row,
 .workspace-row,
 .profile-card,
 .auth-links,
@@ -243,7 +242,6 @@ body {
 .record-row__topline,
 .detail-card__top,
 .record-row__meta,
-.finance-row,
 .workspace-row,
 .profile-card,
 .auth-links,
@@ -261,7 +259,6 @@ body {
 .hero-card__eyebrow,
 .auth-hero__eyebrow,
 .capture-tip__label,
-.finance-band__label,
 .settings-card__label {
   color: var(--muted);
   font-size: 10px;
@@ -490,8 +487,7 @@ body {
   line-height: 13px;
 }
 
-.record-list,
-.finance-list {
+.record-list {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -508,13 +504,11 @@ body {
   border-bottom: 1px solid var(--line);
 }
 
-.record-row:last-child,
-.finance-row:last-child {
+.record-row:last-child {
   border-bottom: 0;
 }
 
-.record-row__mark,
-.finance-row__mark {
+.record-row__mark {
   width: 38px;
   height: 38px;
   align-items: center;
@@ -532,18 +526,12 @@ body {
   background: var(--yellow);
 }
 
-.record-row__mark--receipt,
-.record-row__mark--payment {
-  background: var(--peach);
-}
-
 .record-row__mark--bookmark,
 .record-row__mark--link {
   background: var(--lavender);
 }
 
 .record-row__content,
-.finance-row__content,
 .workspace-row__content {
   min-width: 0;
   flex: 1;
@@ -557,7 +545,6 @@ body {
 }
 
 .record-row__title,
-.finance-row__title,
 .workspace-row__title {
   overflow: hidden;
   color: var(--ink);
@@ -574,8 +561,7 @@ body {
 }
 
 .record-row__snippet,
-.workspace-row__body,
-.finance-row__body {
+.workspace-row__body {
   overflow: hidden;
   color: var(--muted);
   font-size: 11px;
@@ -838,83 +824,6 @@ body {
 .capture-tip {
   border-color: var(--ink);
   background: var(--lavender);
-}
-
-.finance-band {
-  min-height: 124px;
-  padding: 18px;
-  align-items: center;
-  justify-content: space-between;
-  display: flex;
-  border: 2px solid var(--ink);
-  border-radius: 20px;
-  background: var(--pink);
-  box-shadow: 4px 4px 0 var(--ink);
-}
-
-.finance-band__label {
-  color: var(--ink);
-}
-
-.finance-band__value {
-  display: block;
-  margin: 8px 0 4px;
-  font-size: 32px;
-  font-weight: 900;
-}
-
-.finance-band__body {
-  color: rgba(23, 21, 27, 0.7);
-  font-size: 11px;
-}
-
-.finance-band__mark {
-  width: 58px;
-  height: 58px;
-  align-items: center;
-  justify-content: center;
-  display: flex;
-  border: 2px solid var(--ink);
-  border-radius: 50%;
-  background: var(--paper);
-  font-size: 17px;
-  font-weight: 900;
-  transform: rotate(9deg);
-}
-
-.finance-row {
-  min-height: 73px;
-  padding: 12px;
-  gap: 10px;
-  border-bottom: 1px solid var(--line);
-}
-
-.finance-row__mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  font-size: 14px;
-}
-
-.finance-row__mark--incoming {
-  background: #c9eee5;
-}
-
-.finance-row__mark--outgoing {
-  background: var(--peach);
-}
-
-.finance-row__mark--invoice {
-  background: var(--lavender);
-  font-size: 9px;
-}
-
-.finance-row__amount {
-  max-width: 100px;
-  color: var(--ink);
-  font-size: 11px;
-  font-weight: 850;
-  text-align: right;
 }
 
 .profile-card {

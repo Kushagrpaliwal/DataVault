@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { and, eq, inArray } from "drizzle-orm";
-import { aiConsents, aiCreditPeriods, getDatabase, organizations, organizationMembers, users } from "@data-vault/database";
+import { aiConsents, aiCreditPeriods, getDatabase, organizations, organizationMembers, users, withAccount, withUser } from "@data-vault/database";
 import { getServerEnvironment } from "@data-vault/config";
 import { recordConsent, reserveCredit } from "../src/services/ai-credits";
 import { pacificDayStart } from "../src/lib/pacific";
@@ -23,6 +23,8 @@ const environment = getServerEnvironment({
 
 const createdUserIds: string[] = [];
 const createdOrganizationIds: string[] = [];
+/** The person and the workspace each row of the credit tables belongs to. */
+const createdScopes: { userId: string; organizationId: string }[] = [];
 
 async function makeUser(): Promise<string> {
   const db = getDatabase();
@@ -54,21 +56,34 @@ async function makeOrganization(userId: string): Promise<string> {
   if (!organization) throw new Error("Organization insert failed");
   await db.insert(organizationMembers).values({ organizationId: organization.id, userId, status: "active" });
   createdOrganizationIds.push(organization.id);
+  createdScopes.push({ userId, organizationId: organization.id });
   return organization.id;
 }
 
 afterEach(async () => {
   const db = getDatabase();
+  /**
+   * The credit tables follow the person, so the rows are removed with the
+   * person in place. Without it the rule on the table hides them, and the
+   * test data would be left behind.
+   */
+  for (const scope of createdScopes) {
+    await withUser(scope.userId, scope.organizationId, async (tx) => {
+      await tx.delete(aiCreditPeriods).where(eq(aiCreditPeriods.userId, scope.userId));
+    });
+    await withAccount(scope.userId, async (tx) => {
+      await tx.delete(aiConsents).where(eq(aiConsents.userId, scope.userId));
+    });
+  }
   if (createdOrganizationIds.length) {
     await db.delete(organizations).where(inArray(organizations.id, createdOrganizationIds));
   }
   if (createdUserIds.length) {
-    await db.delete(aiCreditPeriods).where(inArray(aiCreditPeriods.userId, createdUserIds));
-    await db.delete(aiConsents).where(inArray(aiConsents.userId, createdUserIds));
     await db.delete(users).where(inArray(users.id, createdUserIds));
   }
   createdUserIds.length = 0;
   createdOrganizationIds.length = 0;
+  createdScopes.length = 0;
 });
 
 describe("the AI credit allowance", () => {
@@ -81,11 +96,10 @@ describe("the AI credit allowance", () => {
     await reserveCredit(environment, { userId, organizationId: first }, "summarize", "test-model", `${userId}:first`);
     await reserveCredit(environment, { userId, organizationId: second }, "summarize", "test-model", `${userId}:second`);
 
-    const db = getDatabase();
-    const [period] = await db.select().from(aiCreditPeriods).where(and(
+    const [period] = await withUser(userId, first, (tx) => tx.select().from(aiCreditPeriods).where(and(
       eq(aiCreditPeriods.userId, userId),
       eq(aiCreditPeriods.periodStart, periodStart),
-    )).limit(1);
+    )).limit(1));
     /**
      * One row for the person, and both requests counted in it. A separate
      * workspace is not a separate allowance.

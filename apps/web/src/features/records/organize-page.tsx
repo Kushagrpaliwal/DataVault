@@ -206,7 +206,7 @@ export function OrganizePage() {
         ) : null}
         <div className="mt-4 border-t border-[#eee8da] pt-4">
           <label className="mb-1.5 block text-sm font-medium text-[#3a3a3a]" htmlFor="new-collection">New collection</label>
-          <Input id="new-collection" value={collectionName} onChange={(event) => setCollectionName(event.target.value)} placeholder="e.g. Invoices" />
+          <Input id="new-collection" value={collectionName} onChange={(event) => setCollectionName(event.target.value)} placeholder="e.g. Reading list" />
           <Button
             className="mt-2 w-full"
             size="sm"

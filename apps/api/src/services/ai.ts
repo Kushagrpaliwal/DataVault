@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { aiResponseCache, getDatabase, savedRecords } from "@data-vault/database";
+import { aiResponseCache, getDatabase, savedRecords, withTenant } from "@data-vault/database";
 import type { ServerEnvironment } from "@data-vault/config";
 import { AppError } from "../lib/errors";
 import { cacheKeyFor, generateJson, type GeminiGenerateResult } from "./gemini";
@@ -177,14 +177,16 @@ async function writeCached(contentHash: string, feature: AiFeature, model: strin
  * Load the text of a saved item for the AI to work on.
  *
  * The lookup is scoped to the caller's workspace, so a request can never
- * reach content the caller could not already read.
+ * reach content the caller could not already read. The rule on the table
+ * enforces that as well, so the query has to say which workspace it is
+ * working in.
  */
 export async function loadItemText(context: AiCreditContext, recordId: string): Promise<{ title: string; text: string }> {
-  const [record] = await getDatabase()
+  const [record] = await withTenant(context.organizationId, (tx) => tx
     .select({ id: savedRecords.id, title: savedRecords.title, originalText: savedRecords.originalText, organizationId: savedRecords.organizationId })
     .from(savedRecords)
     .where(and(eq(savedRecords.id, recordId), eq(savedRecords.organizationId, context.organizationId)))
-    .limit(1);
+    .limit(1));
   if (!record) throw new AppError(404, "ITEM_NOT_FOUND", "That saved item could not be found.");
   return { title: record.title, text: record.originalText ?? record.title };
 }

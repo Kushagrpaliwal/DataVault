@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import {
-  aiConsents, aiCreditLedger, aiCreditPeriods, aiGlobalCounters, aiUsageEvents, getDatabase, users,
-  type DatabaseTransaction, withUser,
+  aiConsents, aiCreditLedger, aiCreditPeriods, aiGlobalCounters, aiUsageEvents, getDatabase, setClaimKey, users,
+  type DatabaseTransaction, withAccount, withUser,
 } from "@data-vault/database";
 import type { ServerEnvironment } from "@data-vault/config";
 import { AppError } from "../lib/errors";
@@ -120,11 +120,16 @@ export async function readCreditStatus(env: ServerEnvironment, context: CreditCo
     .from(users)
     .where(eq(users.id, context.userId))
     .limit(1);
-  const [consent] = await db
+  /**
+   * The agreement belongs to the person, not to the workspace, so it is read
+   * with the person set. Without the person the rule on the table hides the
+   * row, and the AI features would look unavailable to everybody.
+   */
+  const [consent] = await withAccount(context.userId, (tx) => tx
     .select({ acceptedAt: aiConsents.acceptedAt })
     .from(aiConsents)
     .where(and(eq(aiConsents.userId, context.userId), eq(aiConsents.provider, "gemini")))
-    .limit(1);
+    .limit(1));
 
   const { base, effective } = await effectiveAllowance(env, periodStart);
   const used = await usedCredits(context.userId, context.organizationId, periodStart);
@@ -188,7 +193,6 @@ export async function reserveCredit(
   requestId: string,
   options: ReserveOptions = {},
 ): Promise<CreditReservation> {
-  const db = getDatabase();
   const periodStart = pacificDayStart();
 
   /**
@@ -196,14 +200,20 @@ export async function reserveCredit(
    *
    * The key is remembered as the client sent it, so a key that turns up in
    * another account is caught here rather than being treated as a new
-   * request.
+   * request. The ledger follows the person, so the key is named for the
+   * length of the transaction and the rule on the table lets that one row
+   * through, whoever owns it.
    */
   if (options.idempotencyKey) {
-    const seen = await db
-      .select({ userId: aiCreditLedger.userId, organizationId: aiCreditLedger.organizationId, feature: aiCreditLedger.reason })
-      .from(aiCreditLedger)
-      .where(eq(aiCreditLedger.idempotencyKey, options.idempotencyKey))
-      .limit(1);
+    const key = options.idempotencyKey;
+    const seen = await withUser(context.userId, context.organizationId, async (tx) => {
+      await setClaimKey(tx, key);
+      return tx
+        .select({ userId: aiCreditLedger.userId, organizationId: aiCreditLedger.organizationId, feature: aiCreditLedger.reason })
+        .from(aiCreditLedger)
+        .where(eq(aiCreditLedger.idempotencyKey, key))
+        .limit(1);
+    });
     const owner = seen[0];
     if (owner) {
       if (owner.userId !== context.userId) {
@@ -215,11 +225,11 @@ export async function reserveCredit(
     }
   }
 
-  const existing = await db
+  const existing = await withUser(context.userId, context.organizationId, (tx) => tx
     .select({ id: aiCreditLedger.id })
     .from(aiCreditLedger)
     .where(eq(aiCreditLedger.requestId, requestId))
-    .limit(1);
+    .limit(1));
   if (existing.length) {
     /**
      * The same request, charged already. The caller must serve the answer
@@ -281,7 +291,7 @@ export async function reserveCredit(
 
 /** Record the token usage of a request that succeeded. */
 export async function recordUsage(reservation: CreditReservation, input: { inputTokens: number; outputTokens: number; cached?: boolean }): Promise<void> {
-  await getDatabase().insert(aiUsageEvents).values({
+  await withUser(reservation.userId, reservation.organizationId, (tx) => tx.insert(aiUsageEvents).values({
     organizationId: reservation.organizationId,
     userId: reservation.userId,
     feature: reservation.feature,
@@ -290,7 +300,7 @@ export async function recordUsage(reservation: CreditReservation, input: { input
     outputTokens: input.outputTokens,
     cached: input.cached ? 1 : 0,
     requestId: reservation.requestId,
-  });
+  }));
 }
 
 /** Give a credit back when the request never produced a usable answer. */
@@ -327,19 +337,24 @@ export async function refundCredit(reservation: CreditReservation, reason: strin
 
 /** Record that the user agreed to send content to the model provider. */
 export async function recordConsent(userId: string): Promise<void> {
-  const db = getDatabase();
-  const [existing] = await db
-    .select({ userId: aiConsents.userId })
-    .from(aiConsents)
-    .where(and(eq(aiConsents.userId, userId), eq(aiConsents.provider, "gemini")))
-    .limit(1);
-  if (existing) return;
-  await db.insert(aiConsents).values({ userId, provider: "gemini" });
+  /**
+   * The agreement belongs to the person, so it is written with the person
+   * set and nothing else.
+   */
+  await withAccount(userId, async (tx) => {
+    const [existing] = await tx
+      .select({ userId: aiConsents.userId })
+      .from(aiConsents)
+      .where(and(eq(aiConsents.userId, userId), eq(aiConsents.provider, "gemini")))
+      .limit(1);
+    if (existing) return;
+    await tx.insert(aiConsents).values({ userId, provider: "gemini" });
+  });
 }
 
 /** Recent credit movements, for the usage panel. */
 export async function listCreditActivity(context: CreditContext, limit = 20): Promise<{ id: string; kind: string; credits: number; reason: string | null; createdAt: string }[]> {
-  const rows = await getDatabase()
+  const rows = await withUser(context.userId, context.organizationId, (tx) => tx
     .select({
       id: aiCreditLedger.id,
       kind: aiCreditLedger.kind,
@@ -353,6 +368,6 @@ export async function listCreditActivity(context: CreditContext, limit = 20): Pr
       eq(aiCreditLedger.userId, context.userId),
     ))
     .orderBy(desc(aiCreditLedger.createdAt))
-    .limit(limit);
+    .limit(limit));
   return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
 }

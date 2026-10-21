@@ -1,5 +1,5 @@
-import { and, eq, lt } from "drizzle-orm";
-import { getDatabase, noteAiPreviews, noteRevisions, notes, withTenant } from "@data-vault/database";
+import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import { getDatabase, noteAiPreviews, noteRevisions, notes, organizations, withTenant } from "@data-vault/database";
 import { docToPlainText } from "@data-vault/notes";
 import type { JSONContent } from "@tiptap/core";
 import { z } from "zod";
@@ -146,12 +146,24 @@ async function savePreview(
 }
 
 /**
- * Read back an answer the user has agreed to.
+ * Write an answer into a doc, and mark the answer as used, in one step.
  *
- * The doc must still be at the version the answer was made from, so an
- * answer is never written over work that happened in the meantime.
+ * The whole thing happens in a single transaction, and every write carries
+ * the condition that makes it safe. The doc is only written while it is
+ * still at the version the answer was made from, and the answer is only
+ * marked as used while it has not been used yet. When either condition
+ * fails, the transaction is rolled back and nothing is written, so two
+ * people applying the same answer at the same time cannot lose each
+ * other's work, and the same answer cannot be applied twice.
  */
-async function loadPreview(context: TenantContext, noteId: string, previewId: string, feature: "organize" | "write-up") {
+async function applyAnswer<T>(
+  context: TenantContext,
+  noteId: string,
+  previewId: string,
+  feature: "organize" | "write-up",
+  reason: "ai-organize" | "ai-write-up",
+  build: (payload: Record<string, unknown>, note: typeof notes.$inferSelect) => { content: JSONContent; result: T },
+): Promise<T> {
   return withTenant(context.organizationId, async (tx) => {
     const [preview] = await tx.select().from(noteAiPreviews).where(and(
       eq(noteAiPreviews.id, previewId),
@@ -163,7 +175,60 @@ async function loadPreview(context: TenantContext, noteId: string, previewId: st
     if (!preview) throw new AppError(404, "PREVIEW_NOT_FOUND", "That suggestion is no longer available. Please ask for it again.");
     if (preview.appliedAt) throw new AppError(409, "PREVIEW_ALREADY_APPLIED", "That suggestion has already been applied.");
     if (preview.expiresAt.getTime() <= Date.now()) throw new AppError(410, "PREVIEW_EXPIRED", "That suggestion has expired. Please ask for it again.");
-    return preview;
+
+    const [note] = await tx.select().from(notes).where(and(
+      eq(notes.organizationId, context.organizationId),
+      eq(notes.id, noteId),
+    )).limit(1);
+    if (!note) throw new AppError(404, "NOTE_NOT_FOUND", "That doc could not be found.");
+
+    const built = build(preview.payload, note);
+
+    /**
+     * The doc is only written when it is still the version the answer was
+     * made from. A doc that changed in the meantime keeps its own content.
+     *
+     * The write comes before the earlier version is kept, so that two
+     * people applying the same answer at the same time cannot both try to
+     * keep the same version. The second one is turned away here.
+     */
+    const [updated] = await tx.update(notes).set({
+      content: built.content as Record<string, unknown>,
+      contentText: docToPlainText(built.content),
+      version: sql`${notes.version} + 1`,
+      updatedAt: new Date(),
+      updatedBy: context.userId,
+    }).where(and(
+      eq(notes.organizationId, context.organizationId),
+      eq(notes.id, noteId),
+      eq(notes.version, preview.baseVersion),
+    )).returning({ id: notes.id });
+    if (!updated) throw new AppError(409, "NOTE_VERSION_CONFLICT", "This doc was changed since the suggestion was made. Please ask for it again.");
+
+    /**
+     * The earlier version is kept, so the change can be undone. A version
+     * that is already kept is left as it is.
+     */
+    await tx.insert(noteRevisions).values({
+      organizationId: context.organizationId,
+      noteId: note.id,
+      version: note.version,
+      title: note.title,
+      content: note.content as Record<string, unknown>,
+      reason,
+      createdBy: context.userId,
+    }).onConflictDoNothing();
+
+    /**
+     * The answer is only marked as used while it has not been used yet.
+     */
+    const [applied] = await tx.update(noteAiPreviews)
+      .set({ appliedAt: new Date() })
+      .where(and(eq(noteAiPreviews.id, preview.id), isNull(noteAiPreviews.appliedAt)))
+      .returning({ id: noteAiPreviews.id });
+    if (!applied) throw new AppError(409, "PREVIEW_ALREADY_APPLIED", "That suggestion has already been applied.");
+
+    return built.result;
   });
 }
 
@@ -182,6 +247,19 @@ export async function organizeNote(
   id: string,
   input?: { apply?: boolean; previewId?: string | undefined },
 ) {
+  /** Applying an answer that was already made. */
+  if (input?.apply) {
+    if (!input.previewId) throw new AppError(400, "PREVIEW_REQUIRED", "Ask for the suggestion again before applying it.");
+    const sections = await applyAnswer(context, id, input.previewId, "organize", "ai-organize", (payload, note) => {
+      const stored = organizeSchema.safeParse(payload);
+      if (!stored.success) throw new AppError(502, "AI_INVALID_RESPONSE", "The suggestion could not be read. Please ask again.");
+      const kept = stored.data.sections.filter((section) => section.title && section.clipIds.length > 0);
+      return { content: rebuildWithSections(note.content as JSONContent, kept), result: kept };
+    });
+    const status = await readCreditStatus(env, { userId: context.userId, organizationId: context.organizationId });
+    return { preview: false, sections, remaining: status.remaining };
+  }
+
   const note = await withTenant(context.organizationId, async (tx) => {
     const [row] = await tx.select().from(notes).where(and(eq(notes.organizationId, context.organizationId), eq(notes.id, id))).limit(1);
     if (!row) throw new AppError(404, "NOTE_NOT_FOUND", "That doc could not be found.");
@@ -189,25 +267,6 @@ export async function organizeNote(
   });
 
   const clips = collectClips(note.content as JSONContent);
-
-  /** Applying an answer that was already made. */
-  if (input?.apply) {
-    if (!input.previewId) throw new AppError(400, "PREVIEW_REQUIRED", "Ask for the suggestion again before applying it.");
-    const preview = await loadPreview(context, id, input.previewId, "organize");
-    if (preview.baseVersion !== note.version) {
-      throw new AppError(409, "NOTE_VERSION_CONFLICT", "This doc was changed since the suggestion was made. Please ask for it again.");
-    }
-    const stored = organizeSchema.safeParse(preview.payload);
-    if (!stored.success) throw new AppError(502, "AI_INVALID_RESPONSE", "The suggestion could not be read. Please ask again.");
-    const sections = stored.data.sections.filter((section) => section.title && section.clipIds.length > 0);
-    const rebuilt = rebuildWithSections(note.content as JSONContent, sections);
-    await writeAnswer(context, note, rebuilt, "ai-organize");
-    await withTenant(context.organizationId, async (tx) => {
-      await tx.update(noteAiPreviews).set({ appliedAt: new Date() }).where(eq(noteAiPreviews.id, preview.id));
-    });
-    const status = await readCreditStatus(env, { userId: context.userId, organizationId: context.organizationId });
-    return { preview: false, sections, remaining: status.remaining };
-  }
 
   if (clips.length < 2) {
     throw new AppError(400, "NOTHING_TO_ORGANIZE", "There are not enough pieces in this doc to sort it yet.");
@@ -284,30 +343,6 @@ function collectText(doc: JSONContent): string {
 }
 
 /**
- * Write an answer into a doc and keep the earlier version.
- */
-async function writeAnswer(context: TenantContext, note: { id: string; version: number; title: string; content: Record<string, unknown> }, rebuilt: JSONContent, reason: "ai-organize" | "ai-write-up") {
-  await withTenant(context.organizationId, async (tx) => {
-    await tx.insert(noteRevisions).values({
-      organizationId: context.organizationId,
-      noteId: note.id,
-      version: note.version,
-      title: note.title,
-      content: note.content as Record<string, unknown>,
-      reason,
-      createdBy: context.userId,
-    });
-    await tx.update(notes).set({
-      content: rebuilt as Record<string, unknown>,
-      contentText: docToPlainText(rebuilt),
-      version: note.version + 1,
-      updatedAt: new Date(),
-      updatedBy: context.userId,
-    }).where(and(eq(notes.organizationId, context.organizationId), eq(notes.id, note.id)));
-  });
-}
-
-/**
  * Turn the pieces in a doc into writing.
  *
  * The pieces are turned into sentences that follow each other, and the
@@ -322,33 +357,27 @@ export async function writeUpNote(
   id: string,
   input?: { apply?: boolean; previewId?: string | undefined },
 ) {
+  /** Applying an answer that was already made. */
+  if (input?.apply) {
+    if (!input.previewId) throw new AppError(400, "PREVIEW_REQUIRED", "Ask for the suggestion again before applying it.");
+    const applied = await applyAnswer(context, id, input.previewId, "write-up", "ai-write-up", (payload, note) => {
+      const stored = writeUpSchema.safeParse(payload);
+      if (!stored.success) throw new AppError(502, "AI_INVALID_RESPONSE", "The suggestion could not be read. Please ask again.");
+      const sections = stored.data.sections
+        .map((section) => ({ heading: section.heading.trim(), paragraphs: section.paragraphs.map((line) => line.trim()).filter(Boolean) }))
+        .filter((section) => section.paragraphs.length > 0);
+      if (!sections.length) throw new AppError(502, "AI_EMPTY_RESPONSE", "There was nothing to apply. Please ask again.");
+      return { content: proseToDoc(sections), result: { title: stored.data.title.trim() || note.title, sections } };
+    });
+    const status = await readCreditStatus(env, { userId: context.userId, organizationId: context.organizationId });
+    return { preview: false, title: applied.title, sections: applied.sections, remaining: status.remaining };
+  }
+
   const note = await withTenant(context.organizationId, async (tx) => {
     const [row] = await tx.select().from(notes).where(and(eq(notes.organizationId, context.organizationId), eq(notes.id, id))).limit(1);
     if (!row) throw new AppError(404, "NOTE_NOT_FOUND", "That doc could not be found.");
     return row;
   });
-
-  if (input?.apply) {
-    if (!input.previewId) throw new AppError(400, "PREVIEW_REQUIRED", "Ask for the suggestion again before applying it.");
-    const preview = await loadPreview(context, id, input.previewId, "write-up");
-    if (preview.baseVersion !== note.version) {
-      throw new AppError(409, "NOTE_VERSION_CONFLICT", "This doc was changed since the suggestion was made. Please ask for it again.");
-    }
-    const stored = writeUpSchema.safeParse(preview.payload);
-    if (!stored.success) throw new AppError(502, "AI_INVALID_RESPONSE", "The suggestion could not be read. Please ask again.");
-    const sections = stored.data.sections
-      .map((section) => ({ heading: section.heading.trim(), paragraphs: section.paragraphs.map((line) => line.trim()).filter(Boolean) }))
-      .filter((section) => section.paragraphs.length > 0);
-    if (!sections.length) throw new AppError(502, "AI_EMPTY_RESPONSE", "There was nothing to apply. Please ask again.");
-    const title = stored.data.title.trim() || note.title;
-    const rebuilt = proseToDoc(sections);
-    await writeAnswer(context, note, rebuilt, "ai-write-up");
-    await withTenant(context.organizationId, async (tx) => {
-      await tx.update(noteAiPreviews).set({ appliedAt: new Date() }).where(eq(noteAiPreviews.id, preview.id));
-    });
-    const status = await readCreditStatus(env, { userId: context.userId, organizationId: context.organizationId });
-    return { preview: false, title, sections, remaining: status.remaining };
-  }
 
   const text = collectText(note.content as JSONContent);
   if (text.replace(/\s+/g, "").length < 40) {
@@ -430,7 +459,15 @@ function proseToDoc(sections: Array<{ heading: string; paragraphs: string[] }>):
  *
  * They are only waiting to be applied, so once they are too old they are of
  * no use to anybody.
+ *
+ * The answers belong to a workspace, so the clean-up goes through each
+ * workspace in turn. A query that did not say which workspace it was
+ * working in would be refused by the rule on the table, which is exactly
+ * what that rule is for.
  */
 export async function pruneNoteAiPreviews(): Promise<void> {
-  await getDatabase().delete(noteAiPreviews).where(lt(noteAiPreviews.expiresAt, new Date()));
+  const workspaces = await getDatabase().select({ id: organizations.id }).from(organizations);
+  for (const workspace of workspaces) {
+    await withTenant(workspace.id, (tx) => tx.delete(noteAiPreviews).where(lt(noteAiPreviews.expiresAt, new Date())));
+  }
 }
