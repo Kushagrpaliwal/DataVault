@@ -97,6 +97,10 @@ The extension works in the workspace its sign-in was authorised for. The access 
 
 The extension's **Where things go** setting chooses the folder new items go into. A folder belongs to one workspace, so it is only used while the extension is still in that workspace.
 
+A collection is a group inside a folder, and the extension can put an item into one as well. The collections of the chosen folder are offered underneath it, and they are only offered when the folder has some. The collection that is chosen is remembered with the folder it belongs to, so it is only used while that folder is the one that is chosen. A collection that has been removed on the website is not used, because the server would refuse the save.
+
+The item being reviewed in the panel starts with the folder and the collection that are set, and either can be changed for that item alone. The **Saved** tab can be narrowed to a folder, and to a collection inside that folder.
+
 ## Free AI credits in the extension
 
 The extension asks the same API the website uses, so the two never show a different allowance.

@@ -47,6 +47,7 @@ A saved item always sits in one folder. Collections group items inside a folder,
 | `PATCH` | `/tags/:id` | Rename a tag, or change its colour. |
 | `DELETE` | `/tags/:id` | Remove a tag. The items that had it are kept. |
 | `PUT` | `/saved-records/:id/organization` | Move an item into a folder, put it in collections, and mark it with tags. The body is `{ vaultId?, collectionIds?, tagNames?, reviewStatus?, privacyLevel? }`. A tag that does not exist yet is made. Moving an item to another folder takes off the collections of the old folder. |
+| `POST` | `/captures` | Save a clip. The body may name the folder (`vaultId`) and the collections inside it (`collectionIds`). A collection of another folder is refused. |
 
 Critical create requests require an `Idempotency-Key` header (8–200 characters). Reusing a key with the same payload returns the original result; reusing it with another payload returns a conflict.
 
