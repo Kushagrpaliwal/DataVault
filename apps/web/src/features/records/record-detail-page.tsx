@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, ArrowLeft, ExternalLink, FileText, RotateCcw, Save, Trash2 } from "lucide-react";
@@ -28,6 +28,28 @@ type Attachment = {
   createdAt: string;
 };
 
+/**
+ * The rules the snapshot is shown under.
+ *
+ * A snapshot is a page as it was, and a page can ask for anything: a
+ * picture from another site, a style sheet, a script. The rule says that
+ * the page in the frame may not reach out to anybody, so it cannot report
+ * that it was opened, and the only pictures it may show are the ones that
+ * were saved with it.
+ */
+const SNAPSHOT_POLICY = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">`;
+
+/**
+ * The snapshot, with the rule at the front of it.
+ *
+ * The rule has to come before anything else in the page, and a rule
+ * before the doctype would put the page into the old way of laying out,
+ * so the doctype is taken away with it.
+ */
+function snapshotWithPolicy(snapshot: string): string {
+  return `${SNAPSHOT_POLICY}${snapshot.replace(/^\s*<!doctype[^>]*>/i, "")}`;
+}
+
 export function RecordDetailPage() {
   const { id = "" } = useParams();
   const { api, organization } = useAuth();
@@ -44,6 +66,7 @@ export function RecordDetailPage() {
   const [snapshot, setSnapshot] = useState<string | null>(null);
   const [snapshotOpen, setSnapshotOpen] = useState(false);
   const [snapshotBusy, setSnapshotBusy] = useState(false);
+  const snapshotDocument = useMemo(() => (snapshot ? snapshotWithPolicy(snapshot) : ""), [snapshot]);
 
   const showSnapshot = async () => {
     setSnapshotBusy(true);
@@ -303,7 +326,7 @@ export function RecordDetailPage() {
           title="The page as it was"
           sandbox=""
           className="h-[60vh] w-full rounded-xl border border-line bg-white"
-          srcDoc={snapshot ?? ""}
+          srcDoc={snapshotDocument}
         />
       </Modal>
     </>

@@ -64,7 +64,16 @@ export default defineConfig({
     version: "0.1.0",
     permissions: browser === "firefox" ? ["contextMenus", "storage", "identity", "activeTab", "scripting", "alarms"] : ["contextMenus", "storage", "identity", "sidePanel", "activeTab", "scripting", "alarms"],
     host_permissions: [`${apiOrigin}/*`],
-    ...(browser === "firefox" ? { browser_specific_settings: { gecko: { id: "datavault@data-vault.app", data_collection_permissions: { required: ["none"] } } } } : {}),
+    /**
+     * Firefox asks the person to agree before an extension may collect
+     * anything.
+     *
+     * The extension reads the text of the page that is open, so that it can
+     * be saved, and it remembers which pages it was used on. Those are the
+     * two kinds of data it collects, and they are named here so that the
+     * question Firefox asks says what is really going on.
+     */
+    ...(browser === "firefox" ? { browser_specific_settings: { gecko: { id: "datavault@data-vault.app", data_collection_permissions: { required: ["websiteContent", "browsingActivity"] } } } } : {}),
     action: { default_title: "DataVault" },
     /**
      * The keyboard shortcuts.

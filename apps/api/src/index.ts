@@ -1,7 +1,7 @@
 import { cors } from "@elysiajs/cors";
 import { openapi } from "@elysiajs/openapi";
 import { Elysia } from "elysia";
-import { getServerEnvironment } from "@data-vault/config";
+import { getServerEnvironment, type ServerEnvironment } from "@data-vault/config";
 import { createAuth } from "./auth/better-auth";
 import { normalizeError } from "./lib/errors";
 import { AppError } from "./lib/errors";
@@ -19,6 +19,7 @@ import { createRecordRoutes } from "./routes/records";
 import { createVaultRoutes } from "./routes/vaults";
 import { isTrustedWebOrigin } from "./auth/origins";
 import { ensurePermissionCatalog } from "./services/organizations";
+import { pruneExpiredRows } from "./services/cleanup";
 
 /**
  * The largest request body the API accepts.
@@ -29,8 +30,8 @@ import { ensurePermissionCatalog } from "./services/organizations";
  */
 const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
 
-export function createApp() {
-  const env = getServerEnvironment();
+export function createApp(environment?: ServerEnvironment) {
+  const env = environment ?? getServerEnvironment();
   /**
    * Without a proxy in front of the API, every request looks like it came
    * from the same place. The rate limits then fall back to the signed-in
@@ -155,6 +156,23 @@ if (import.meta.main) {
     maxRequestBodySize: MAX_REQUEST_BYTES,
   });
   console.log(`DataVault API listening on http://localhost:${app.server?.port ?? 3000}`);
+
+  /**
+   * The rows that expire are cleaned up every six hours.
+   *
+   * The answers that are waiting to be applied, the request keys and the
+   * rate-limit buckets are all of no use once their time has passed, and
+   * they would otherwise grow for ever.
+   */
+  setInterval(() => {
+    void pruneExpiredRows().catch((error: unknown) => {
+      console.warn(JSON.stringify({
+        level: "warn",
+        event: "cleanup_failed",
+        message: error instanceof Error ? error.message : String(error),
+      }));
+    });
+  }, 6 * 60 * 60 * 1000);
 }
 
 export type App = typeof app;
