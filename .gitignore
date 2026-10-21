@@ -1,0 +1,25 @@
+node_modules/
+dist/
+.output/
+.wxt/
+coverage/
+playwright-report/
+test-results/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+Thumbs.db
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Sparkling mobile tooling scratch space
+MobileDataVaut/.temp-templates/
+MobileDataVaut/.sparkling/
+MobileDataVaut/android/app/src/main/assets/
+MobileDataVaut/ios/SparklingGo/SparklingGo/Resources/Assets/
+
+# Local agent/tooling state
+.agents/.cache/

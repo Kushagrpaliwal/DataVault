@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "attachments_record_hash_unique" ON "attachments" USING btree ("organization_id","saved_record_id","sha256");

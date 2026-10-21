@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM"],
+    "types": ["chrome", "bun"],
+    "baseUrl": ".",
+    "paths": {
+      "wxt": ["node_modules/wxt/dist/index.d.mts"],
+      "wxt/*": ["node_modules/wxt/dist/*"]
+    }
+  },
+  "include": ["entrypoints", "components", "features", "lib", "test", "wxt.config.ts", "vite-env.d.ts", "../../.wxt/wxt.d.ts"]
+}

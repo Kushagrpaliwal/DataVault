@@ -1,0 +1,27 @@
+{
+  "name": "@data-vault/notes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./extensions": "./src/extensions.ts",
+    "./arrange": "./src/arrange.ts",
+    "./text": "./src/text.ts",
+    "./html": "./src/html.ts"
+  },
+  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@tiptap/core": "3.32.0",
+    "@tiptap/extension-highlight": "3.32.0",
+    "@tiptap/extension-image": "3.32.0",
+    "@tiptap/extension-list": "3.32.0",
+    "@tiptap/extension-table": "3.32.0",
+    "@tiptap/extension-text-align": "3.32.0",
+    "@tiptap/extension-text-style": "3.32.0",
+    "@tiptap/html": "3.32.0",
+    "@tiptap/pm": "3.32.0",
+    "@tiptap/starter-kit": "3.32.0",
+    "happy-dom": "^21.0.3"
+  }
+}

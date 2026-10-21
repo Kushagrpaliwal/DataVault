@@ -1,0 +1,1 @@
+ALTER TABLE "extension_sessions" ADD COLUMN "user_agent" text;

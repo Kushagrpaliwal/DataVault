@@ -1,0 +1,25 @@
+{
+  "name": "@data-vault/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts", "./schema": "./src/schema/index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "db:migrate": "bun scripts/bootstrap.ts && drizzle-kit migrate --config drizzle.config.ts",
+    "db:bootstrap": "bun scripts/bootstrap-permissions.ts",
+    "db:remove-demo": "bun scripts/remove-demo-data.ts",
+    "db:remove-test-data": "bun scripts/remove-test-data.ts",
+    "db:check": "drizzle-kit check --config drizzle.config.ts"
+  },
+  "dependencies": {
+    "@data-vault/config": "workspace:*",
+    "@data-vault/schemas": "workspace:*",
+    "better-auth": "^1.7.3",
+    "decimal.js": "^10.6.0",
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": { "drizzle-kit": "^0.31.10" }
+}

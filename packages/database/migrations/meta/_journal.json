@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1788718712663,
+      "tag": "0000_handy_clea",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788719746215,
+      "tag": "0001_round_vertigo",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788761120760,
+      "tag": "0002_petite_blade",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788767000000,
+      "tag": "0003_evidence_vault",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792486510426,
+      "tag": "0004_powerful_dexter_bennett",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792488550746,
+      "tag": "0005_massive_master_chief",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792516376633,
+      "tag": "0006_clammy_lila_cheney",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: data_vault
+      POSTGRES_USER: data_vault_app
+      POSTGRES_PASSWORD: data_vault_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - data_vault_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U data_vault_app -d data_vault"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["redis"]
+    ports:
+      - "6379:6379"
+
+volumes:
+  data_vault_postgres:

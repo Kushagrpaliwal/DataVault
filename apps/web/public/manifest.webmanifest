@@ -1,0 +1,15 @@
+{
+  "name": "DataVault",
+  "short_name": "DataVault",
+  "description": "Private evidence-first vault for saved web content, documents, and records.",
+  "start_url": "/vault",
+  "display": "standalone",
+  "background_color": "#fffaf0",
+  "theme_color": "#1a3a3a",
+  "icons": [{ "src": "/data-vault-clay.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }],
+  "share_target": {
+    "action": "/vault",
+    "method": "GET",
+    "params": { "title": "share-title", "text": "share-text", "url": "share-url" }
+  }
+}

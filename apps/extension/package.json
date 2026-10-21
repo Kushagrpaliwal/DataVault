@@ -1,0 +1,38 @@
+{
+  "name": "@data-vault/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt ../.. --config apps/extension/wxt.config.ts --browser chrome",
+    "build": "wxt build ../.. --config apps/extension/wxt.config.ts --browser chrome",
+    "build:edge": "wxt build ../.. --config apps/extension/wxt.config.ts --browser edge",
+    "zip": "wxt zip ../.. --config apps/extension/wxt.config.ts --browser chrome",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "wxt prepare ../.. --config apps/extension/wxt.config.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@data-vault/api-client": "workspace:*",
+    "@data-vault/capture-parser": "workspace:*",
+    "@data-vault/config": "workspace:*",
+    "@data-vault/notes": "workspace:*",
+    "@data-vault/types": "workspace:*",
+    "@data-vault/ui": "workspace:*",
+    "@tiptap/core": "3.32.0",
+    "date-fns": "^4.4.0",
+    "lucide-react": "^0.577.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "@types/chrome": "^0.1.38",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@wxt-dev/module-react": "^1.2.0",
+    "tailwindcss": "^4.2.1",
+    "typescript": "^5.9.3",
+    "wxt": "^0.20.20"
+  }
+}
