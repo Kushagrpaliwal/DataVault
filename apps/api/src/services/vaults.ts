@@ -183,9 +183,20 @@ export async function deleteTag(context: TenantContext, request: Request, id: st
 
 export async function listCollections(context: TenantContext, vaultId?: string): Promise<VaultCollection[]> {
   return withTenant(context.organizationId, async (tx) => {
+    /**
+     * The count is the number of items that are still there.
+     *
+     * An item that is in the trash is not in the collection any more, so it
+     * is left out of the number. Otherwise a collection could say it held
+     * ten items while none of them could be found.
+     */
     const rows = await tx.select({
-      id: vaultCollections.id, vaultId: vaultCollections.vaultId, name: vaultCollections.name, color: vaultCollections.color, itemCount: count(savedRecordCollections.savedRecordId),
-    }).from(vaultCollections).leftJoin(savedRecordCollections, eq(savedRecordCollections.collectionId, vaultCollections.id)).where(and(eq(vaultCollections.organizationId, context.organizationId), ...(vaultId ? [eq(vaultCollections.vaultId, vaultId)] : []))).groupBy(vaultCollections.id).orderBy(vaultCollections.name);
+      id: vaultCollections.id, vaultId: vaultCollections.vaultId, name: vaultCollections.name, color: vaultCollections.color, itemCount: count(savedRecords.id),
+    }).from(vaultCollections)
+      .leftJoin(savedRecordCollections, and(eq(savedRecordCollections.collectionId, vaultCollections.id), eq(savedRecordCollections.organizationId, context.organizationId)))
+      .leftJoin(savedRecords, and(eq(savedRecords.id, savedRecordCollections.savedRecordId), isNull(savedRecords.deletedAt)))
+      .where(and(eq(vaultCollections.organizationId, context.organizationId), ...(vaultId ? [eq(vaultCollections.vaultId, vaultId)] : [])))
+      .groupBy(vaultCollections.id).orderBy(vaultCollections.name);
     return rows.map((row) => ({ ...row, itemCount: Number(row.itemCount) }));
   });
 }
@@ -201,9 +212,22 @@ export async function createCollection(context: TenantContext, request: Request,
   });
 }
 
-export async function listTags(context: TenantContext): Promise<VaultTag[]> {
+/**
+ * The tags of the workspace.
+ *
+ * A tag is a label that works across every folder, so it can be used on an
+ * item without thinking about where that item lives. When a folder is given,
+ * only the tags that are actually used in that folder are returned, so the
+ * list of tags is different for each folder and is not the same everywhere.
+ */
+export async function listTags(context: TenantContext, vaultId?: string): Promise<VaultTag[]> {
   return withTenant(context.organizationId, async (tx) => {
-    const rows = await tx.select({ id: tags.id, name: tags.name, color: tags.color, itemCount: count(savedRecordTags.savedRecordId) }).from(tags).leftJoin(savedRecordTags, eq(savedRecordTags.tagId, tags.id)).where(eq(tags.organizationId, context.organizationId)).groupBy(tags.id).orderBy(tags.name);
+    const rows = await tx.select({ id: tags.id, name: tags.name, color: tags.color, itemCount: count(savedRecords.id) })
+      .from(tags)
+      .leftJoin(savedRecordTags, and(eq(savedRecordTags.tagId, tags.id), eq(savedRecordTags.organizationId, context.organizationId)))
+      .leftJoin(savedRecords, and(eq(savedRecords.id, savedRecordTags.savedRecordId), isNull(savedRecords.deletedAt)))
+      .where(and(eq(tags.organizationId, context.organizationId), ...(vaultId ? [eq(savedRecords.vaultId, vaultId)] : [])))
+      .groupBy(tags.id).orderBy(tags.name);
     return rows.map((row) => ({ ...row, itemCount: Number(row.itemCount) }));
   });
 }

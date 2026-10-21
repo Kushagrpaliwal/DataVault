@@ -1,9 +1,11 @@
 import { browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
+import { DataVaultApiError } from "@data-vault/api-client";
 import { WEB_URL, withOrganization } from "../lib/api";
 import { signInExtension } from "../lib/auth";
 import { addClipToCurrentDoc, addClipToDoc, broadcastNoteUpdate as broadcastNoteChanged, makeCurrentDoc, refreshCurrentDoc, removeClipFromDoc, startNewDoc } from "../lib/docs";
-import { enqueuePendingCapture, getAuth, getDefaultVaultId, getPendingCaptures, getPreferences, removePendingCapture, subscribeStorage, updatePendingCapture, type CaptureQuality, type ExtensionPreferences, type PageDetails, type PendingCapture, type PendingDocClip } from "../lib/storage";
+import { folderForNewItems } from "../lib/folders";
+import { enqueuePendingCapture, getAuth, getPendingCaptures, getPreferences, removePendingCapture, subscribeStorage, updatePendingCapture, type CaptureQuality, type ExtensionPreferences, type PageDetails, type PendingCapture, type PendingDocClip } from "../lib/storage";
 import { recordExtensionError } from "../lib/errors";
 import { openReviewPanel, openReviewWindow as openReviewPanelWindow } from "../lib/panel";
 import { readPageContent } from "../lib/page-content";
@@ -317,6 +319,25 @@ function capturePayload(pending: PendingCapture, vaultId?: string) {
   };
 }
 
+/**
+ * Save a capture into the folder that has been chosen.
+ *
+ * A folder that has been removed on the website would be refused by the
+ * server, so the save is tried again without one. The server then puts the
+ * item in the default folder, and nothing is lost.
+ */
+async function saveCapture(pending: PendingCapture) {
+  const vaultId = await folderForNewItems();
+  try {
+    return await withOrganization((api) => api.createCapture(capturePayload(pending, vaultId), pending.idempotencyKey));
+  } catch (error) {
+    if (vaultId && error instanceof DataVaultApiError && error.code === "INVALID_VAULT") {
+      return withOrganization((api) => api.createCapture(capturePayload(pending, undefined), pending.idempotencyKey));
+    }
+    throw error;
+  }
+}
+
 async function retryQueuedCaptures() {
   const auth = await getAuth();
   if (!auth) return;
@@ -329,8 +350,7 @@ async function retryQueuedCaptures() {
         await removePendingCapture(pending.idempotencyKey);
         continue;
       }
-      const vaultId = await getDefaultVaultId();
-      const result = await withOrganization((api) => api.createCapture(capturePayload(pending, vaultId), pending.idempotencyKey));
+      const result = await saveCapture(pending);
       const record = result.record as Record<string, unknown> | undefined;
       if (!record?.id) throw new Error("DataVault did not return the saved capture.");
       await removePendingCapture(pending.idempotencyKey);
@@ -452,9 +472,8 @@ function captureFromContextMenu(tab: chrome.tabs.Tab, selectedText = "") {
 
 async function quickSaveSelection(tab: chrome.tabs.Tab, selectedText: string, page?: PageDetails) {
   const pending = await pendingFromTab(tab, selectedText, page);
-  const vaultId = await getDefaultVaultId();
   try {
-    const result = await withOrganization((api) => api.createCapture(capturePayload(pending, vaultId), pending.idempotencyKey));
+    const result = await saveCapture(pending);
     const record = result.record as Record<string, unknown> | undefined;
     if (!record?.id) throw new Error("DataVault did not return the saved item.");
     await announceSavedCapture({

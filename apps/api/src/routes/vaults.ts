@@ -20,7 +20,17 @@ export function createVaultRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
     .post("/api/v1/collections", async ({ body, request, set }) => { await requireCsrf(request, auth, env); set.status = 201; return success(await createCollection(await getTenantContext(request, auth, env, "captures.update"), request, collectionCreateSchema.parse(body))); })
     .patch("/api/v1/collections/:id", async ({ body, params, request }) => { await requireCsrf(request, auth, env); return success(await updateCollection(await getTenantContext(request, auth, env, "captures.update"), request, uuidSchema.parse(params.id), collectionPatchSchema.parse(body))); })
     .delete("/api/v1/collections/:id", async ({ params, request }) => { await requireCsrf(request, auth, env); return success(await deleteCollection(await getTenantContext(request, auth, env, "captures.update"), request, uuidSchema.parse(params.id))); })
-    .get("/api/v1/tags", async ({ request }) => success(await listTags(await getTenantContext(request, auth, env, "captures.read"))))
+    .get("/api/v1/tags", async ({ request, query }) => {
+      /**
+       * The folder is optional.
+       *
+       * With it, only the tags that are used in that folder are sent back, so
+       * the list of tags is different for each folder. Without it, every tag
+       * of the workspace is sent back.
+       */
+      const vaultId = typeof query.vaultId === "string" && query.vaultId ? uuidSchema.parse(query.vaultId) : undefined;
+      return success(await listTags(await getTenantContext(request, auth, env, "captures.read"), vaultId));
+    })
     .post("/api/v1/tags", async ({ body, request, set }) => { await requireCsrf(request, auth, env); set.status = 201; return success(await createTag(await getTenantContext(request, auth, env, "captures.update"), request, tagCreateSchema.parse(body))); })
     .patch("/api/v1/tags/:id", async ({ body, params, request }) => { await requireCsrf(request, auth, env); return success(await updateTag(await getTenantContext(request, auth, env, "captures.update"), request, uuidSchema.parse(params.id), tagPatchSchema.parse(body))); })
     .delete("/api/v1/tags/:id", async ({ params, request }) => { await requireCsrf(request, auth, env); return success(await deleteTag(await getTenantContext(request, auth, env, "captures.update"), request, uuidSchema.parse(params.id))); })

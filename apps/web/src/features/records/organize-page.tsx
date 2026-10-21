@@ -111,7 +111,10 @@ export function OrganizePage() {
           <FolderOpen className="size-5" />
           <h2 className="text-lg font-semibold">Folders</h2>
         </div>
-        <p className="mt-1 text-sm leading-6 text-muted">A folder is a top-level space for your saved items.</p>
+        <p className="mt-1 text-sm leading-6 text-muted">
+          A folder is where your saved items live. Every item is in one folder, and the browser extension saves into
+          the folder you pick there.
+        </p>
         <div className="mt-4 space-y-1">
           {vaults.data?.map((folder) => (
             <div key={folder.id} className={`flex items-center gap-1 rounded-xl px-2 py-1.5 ${selectedFolderId === folder.id ? "bg-deep text-white" : "hover:bg-soft"}`}>
@@ -172,7 +175,9 @@ export function OrganizePage() {
           <h2 className="text-lg font-semibold">Collections</h2>
         </div>
         <p className="mt-1 text-sm leading-6 text-muted">
-          Collections group items inside <span className="font-semibold text-black">{selectedFolder?.name ?? "a folder"}</span>.
+          A collection is a group <span className="font-semibold text-black">inside</span>{" "}
+          <span className="font-semibold text-black">{selectedFolder?.name ?? "a folder"}</span>, like a sub-folder. Use one
+          when a folder holds more than you want to look through. An item can be in more than one collection.
         </p>
         <div className="mt-4 space-y-1">
           {collections.data?.map((collection) => (
@@ -187,7 +192,13 @@ export function OrganizePage() {
               ) : (
                 <>
                   <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: collection.color }} />
-                  <span className="min-w-0 flex-1 truncate text-sm">{collection.name}</span>
+                  <Link
+                    to={`/saved?vault=${collection.vaultId}&collection=${collection.id}`}
+                    className="min-w-0 flex-1 truncate text-sm hover:underline"
+                    title="See the items in this collection"
+                  >
+                    {collection.name}
+                  </Link>
                   <span className="text-xs text-muted">{collection.itemCount ?? 0}</span>
                   <RowActions
                     onRename={() => startRename("collection", collection.id, collection.name)}
@@ -224,7 +235,10 @@ export function OrganizePage() {
           <Tag className="size-5" />
           <h2 className="text-lg font-semibold">Tags</h2>
         </div>
-        <p className="mt-1 text-sm leading-6 text-muted">Tags work across every folder, so one item can have many.</p>
+        <p className="mt-1 text-sm leading-6 text-muted">
+          A tag is a label that works across every folder, so one item can have several. Use tags to find things by
+          topic instead of by where they are kept.
+        </p>
         <div className="mt-4 flex flex-wrap gap-1.5">
           {tags.data?.map((tag) => (
             <div key={tag.id} className="flex items-center gap-1 rounded-full bg-soft px-2.5 py-1 text-xs">

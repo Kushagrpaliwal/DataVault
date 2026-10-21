@@ -141,6 +141,24 @@ export function DocsPage() {
 
   const notes = list.data ?? [];
   const selected = note.data as Note | undefined;
+  const firstNoteId = notes[0]?.id;
+
+  /**
+   * The doc that is open when the page is entered without one.
+   *
+   * The page used to show "Your docs live here" even when there were docs
+   * waiting, which looked as though nothing had been saved. The doc the
+   * browser extension adds to is opened first, because that is the one being
+   * worked on, and the newest doc is opened when there is no current one.
+   */
+  useEffect(() => {
+    if (id) return;
+    if (showTrash) return;
+    if (current.isLoading || list.isLoading) return;
+    const target = current.data?.noteId ?? firstNoteId;
+    if (!target) return;
+    navigate(`/docs/${target}`, { replace: true });
+  }, [id, showTrash, current.isLoading, current.data?.noteId, list.isLoading, firstNoteId, navigate]);
 
   /**
    * The doc is refetched every so often, so a clip added from the extension
@@ -296,6 +314,16 @@ export function DocsPage() {
               />
             ) : null}
           </>
+        ) : current.isLoading || list.isLoading ? (
+          /**
+           * The doc is being opened.
+           *
+           * The empty message is not shown while this is happening, because
+           * it would flash up on the way to a doc that is really there.
+           */
+          <div className="grid min-h-[60vh] place-items-center">
+            <p className="text-sm text-muted">Opening your doc…</p>
+          </div>
         ) : (
           <div className="grid min-h-[60vh] place-items-center">
             <div className="max-w-md text-center">

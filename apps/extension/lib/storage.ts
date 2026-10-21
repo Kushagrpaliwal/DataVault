@@ -120,20 +120,6 @@ export async function effectiveWorkspaceId(): Promise<string | undefined> {
   return auth?.organizationId;
 }
 
-/**
- * The folder new items go into.
- *
- * A folder belongs to one workspace. When the extension is in a different
- * workspace, the folder is left alone rather than sending a folder that
- * belongs somewhere else, which the server would refuse.
- */
-export async function getDefaultVaultId() {
-  const preferences = await getPreferences();
-  if (!preferences.defaultVaultId) return undefined;
-  const workspace = await effectiveWorkspaceId();
-  if (preferences.defaultVaultOrganizationId !== workspace) return undefined;
-  return preferences.defaultVaultId;
-}
 function normalizePending(value: Partial<PendingCapture>): PendingCapture {
   return {
     ...value,

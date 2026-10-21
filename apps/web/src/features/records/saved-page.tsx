@@ -58,7 +58,15 @@ export function SavedPage() {
    */
   const activeVaultId = vaultId;
   const collections = useQuery({ queryKey: ["collections", activeVaultId], queryFn: () => api.listCollections(activeVaultId), enabled: Boolean(organization && activeVaultId) });
-  const tags = useQuery({ queryKey: ["tags", organization?.id], queryFn: () => api.listTags(), enabled: Boolean(organization) });
+  /**
+   * The tags of the folder that is open.
+   *
+   * A tag is a label that works across every folder, but the list on screen
+   * only holds the tags that are used in this folder. Otherwise every folder
+   * showed the same tags, which made it look as though the folders were not
+   * being filtered at all.
+   */
+  const tags = useQuery({ queryKey: ["tags", organization?.id, activeVaultId], queryFn: () => api.listTags(activeVaultId || undefined), enabled: Boolean(organization) });
 
   const query = useQuery({
     queryKey: ["records", organization?.id, page, debounced, recordType, archived, trash, sort, direction, activeVaultId, collectionId, tag],
@@ -106,9 +114,17 @@ export function SavedPage() {
     setParams(next, { replace: true });
     setPage(1);
   };
+  /**
+   * The filters are taken off, but the folder stays.
+   *
+   * The folder is the place that is being looked at rather than a filter on
+   * top of it, so clearing the filters leaves the folder open.
+   */
   const clearFilters = () => {
     setSearch("");
-    setParams(new URLSearchParams(), { replace: true });
+    const next = new URLSearchParams(params);
+    for (const key of ["type", "collection", "tag", "archived", "trash"]) next.delete(key);
+    setParams(next, { replace: true });
     setPage(1);
   };
   const toggleSort = (nextSort: string) => {
@@ -185,8 +201,25 @@ export function SavedPage() {
     URL.revokeObjectURL(link.href);
   };
 
-  const activeFilterCount = [recordType, vaultId, collectionId, tag, archived ? "1" : "", trash ? "1" : ""].filter(Boolean).length;
+  const activeFilterCount = [recordType, collectionId, tag, archived ? "1" : "", trash ? "1" : ""].filter(Boolean).length;
   const hasItems = Boolean(query.data?.items.length);
+  /**
+   * The folder that is open, when nothing else is narrowing the list.
+   *
+   * An empty folder says so, instead of pretending the filters hid
+   * something. Before, every empty folder said "Nothing matches", which
+   * looked like the folder was broken.
+   */
+  const activeFolder = vaults.data?.find((vault) => vault.id === activeVaultId);
+  const onlyFolderIsOpen = Boolean(activeFolder) && !recordType && !collectionId && !tag && !archived && !trash && !debounced;
+  /**
+   * A collection that is open on its own.
+   *
+   * It says so, because an empty collection is not a filter that hid
+   * something. Nothing has been put in it yet.
+   */
+  const activeCollection = collections.data?.find((collection) => collection.id === collectionId);
+  const onlyCollectionIsOpen = Boolean(activeCollection) && !recordType && !tag && !archived && !trash && !debounced;
 
   return <>
     <PageHeader
@@ -210,7 +243,21 @@ export function SavedPage() {
           onRemoveView={(id) => removeView.mutate(id)}
           vaults={vaults.data ?? []}
           activeVaultId={activeVaultId}
-          onVault={(id) => { const next = new URLSearchParams(params); if (id) next.set("vault", id); else next.delete("vault"); next.delete("collection"); setParams(next, { replace: true }); setPage(1); }}
+          onVault={(id) => {
+            const next = new URLSearchParams(params);
+            if (id) next.set("vault", id); else next.delete("vault");
+            /**
+             * The collection and the tag belong to the folder that was open.
+             *
+             * They are taken off when the folder changes, because a
+             * collection from one folder does not exist in another, and the
+             * list of tags is different for each folder.
+             */
+            next.delete("collection");
+            next.delete("tag");
+            setParams(next, { replace: true });
+            setPage(1);
+          }}
           collections={collections.data ?? []}
           activeCollectionId={collectionId}
           onCollection={(id) => updateFilter("collection", id)}
@@ -243,14 +290,26 @@ export function SavedPage() {
         {activeFilterCount > 0 ? (
           <div className="flex flex-wrap items-center gap-2 border-b border-line bg-hover px-4 py-3 text-sm">
             <span className="text-muted">{activeFilterCount} {activeFilterCount === 1 ? "filter" : "filters"} applied</span>
-            <button className="font-semibold underline" onClick={clearFilters}>Clear all</button>
+            <button className="font-semibold underline" onClick={clearFilters}>Clear filters</button>
           </div>
         ) : null}
 
         <QueryState loading={query.isLoading} error={query.error} onRetry={() => query.refetch()} />
 
         {!query.isLoading && !query.error && !hasItems ? (
-          activeFilterCount > 0 || debounced ? (
+          onlyFolderIsOpen ? (
+            <EmptyState
+              title="This folder is empty"
+              description={`Nothing has been saved into “${activeFolder?.name}” yet. Save something and it lands in this folder, the same folder the browser extension uses.`}
+              action={<Button onClick={() => setManualOpen(true)}><Link2 className="size-4" />Save something into this folder</Button>}
+            />
+          ) : onlyCollectionIsOpen ? (
+            <EmptyState
+              title="This collection is empty"
+              description={`Nothing has been put in “${activeCollection?.name}” yet. A collection is a group inside a folder, like a sub-folder. Open an item and use the Organization panel to put it in here.`}
+              action={<Button variant="secondary" onClick={clearFilters}>Show the whole folder</Button>}
+            />
+          ) : activeFilterCount > 0 || debounced ? (
             <EmptyState
               title="Nothing matches"
               description="No saved items match your filters. Try a different search, or clear the filters to see everything."
@@ -359,12 +418,15 @@ export function SavedPage() {
     <ManualSaveModal
       open={manualOpen}
       onClose={() => setManualOpen(false)}
-      vaultId={activeVaultId}
-      collections={collections.data ?? []}
+      vaults={vaults.data ?? []}
+      initialVaultId={activeVaultId}
       onSaved={async () => {
         setManualOpen(false);
         notify("Saved");
         await client.invalidateQueries({ queryKey: ["records"] });
+        await client.invalidateQueries({ queryKey: ["vaults"] });
+        await client.invalidateQueries({ queryKey: ["tags"] });
+        await client.invalidateQueries({ queryKey: ["collections"] });
       }}
     />
   </>;
@@ -439,6 +501,9 @@ function FilterRail({
           </button>
         ))}
         {vaults.length === 0 ? <p className="px-3 py-2 text-sm text-muted">No folders yet.</p> : null}
+        <p className="px-3 pb-1 pt-2 text-xs leading-5 text-muted">
+          Every saved item lives in one folder. Pick the folder you want to look at, or save new items straight into it.
+        </p>
         <p className="mt-2 border-t border-line px-2 pt-3 text-xs text-muted">
           Manage folders, collections, and tags in <Link to="/organize" className="font-semibold text-black underline">Organize</Link>.
         </p>
@@ -460,7 +525,20 @@ function FilterRail({
             <span className="ml-auto text-xs text-muted">{collection.itemCount}</span>
           </button>
         ))}
-        {collections.length === 0 ? <p className="px-3 py-2 text-sm text-muted">No collections in this folder.</p> : null}
+        {collections.length === 0 ? (
+          <p className="px-3 py-2 text-sm leading-6 text-muted">
+            {activeVaultId
+              ? "No collections in this folder yet."
+              : "Pick a folder to see the collections inside it."}
+          </p>
+        ) : collections.every((collection) => !collection.itemCount) ? (
+          <p className="px-3 py-2 text-sm leading-6 text-muted">
+            These collections are empty. Open an item and use the Organization panel to put it in one.
+          </p>
+        ) : null}
+        <p className="px-3 pb-1 pt-2 text-xs leading-5 text-muted">
+          A collection is a group inside a folder, like a sub-folder. An item can be in more than one.
+        </p>
       </section>
 
       <section className="panel p-3">
@@ -473,13 +551,25 @@ function FilterRail({
             <button
               key={tag.id}
               onClick={() => onTag(tag.name)}
+              title={`${tag.itemCount ?? 0} ${tag.itemCount === 1 ? "item" : "items"} with this tag`}
               className={`rounded-full px-2 py-1 text-xs ${activeTag === tag.name ? "bg-deep text-white" : "bg-soft"}`}
             >
               #{tag.name}
             </button>
           ))}
         </div>
-        {tags.length === 0 ? <p className="px-3 py-2 text-sm text-muted">No tags yet.</p> : null}
+        {tags.length === 0 ? (
+          <p className="px-3 py-2 text-sm leading-6 text-muted">
+            {activeVaultId ? "No tags are used in this folder yet." : "No tags yet."}
+          </p>
+        ) : (
+          <p className="px-3 py-2 text-sm leading-6 text-muted">
+            {activeVaultId ? "The tags used in this folder." : "Every tag in the workspace."}
+          </p>
+        )}
+        <p className="px-3 pb-1 pt-2 text-xs leading-5 text-muted">
+          A tag is a label that works across every folder, so one item can have several.
+        </p>
       </section>
     </div>
   );
@@ -488,14 +578,18 @@ function FilterRail({
 /**
  * The escape hatch for people without the extension: paste a link or a note by
  * hand and it lands in the same list as everything else.
+ *
+ * The folder is chosen here, not taken from the page. Before, the item always
+ * went into the folder that was open on the page, and into the default folder
+ * when no folder was open, so there was no way to choose.
  */
 function ManualSaveModal({
-  open, onClose, vaultId, collections, onSaved,
+  open, onClose, vaults, initialVaultId, onSaved,
 }: {
   open: boolean;
   onClose: () => void;
-  vaultId: string;
-  collections: { id: string; name: string }[];
+  vaults: { id: string; name: string; isDefault?: boolean }[];
+  initialVaultId: string;
   onSaved: () => void | Promise<void>;
 }) {
   const { api } = useAuth();
@@ -503,14 +597,37 @@ function ManualSaveModal({
   const [text, setText] = useState("");
   const [url, setUrl] = useState("");
   const [recordType, setRecordType] = useState<string>("note");
+  const [vaultId, setVaultId] = useState("");
   const [collectionId, setCollectionId] = useState("");
   const [tags, setTags] = useState("");
+
+  /**
+   * The folder the item goes into.
+   *
+   * The folder that was open on the page is used when there is one. Otherwise
+   * the default folder is used, which is where the server puts anything that
+   * has not been given a folder.
+   */
+  const defaultFolderId = initialVaultId || vaults.find((vault) => vault.isDefault)?.id || vaults[0]?.id || "";
 
   useEffect(() => {
     if (!open) {
       setTitle(""); setText(""); setUrl(""); setRecordType("note"); setCollectionId(""); setTags("");
+      return;
     }
-  }, [open]);
+    setVaultId(defaultFolderId);
+    setCollectionId("");
+  }, [open, defaultFolderId]);
+
+  /**
+   * The collections belong to the folder that is chosen, so they are read
+   * again whenever the folder changes.
+   */
+  const collections = useQuery({
+    queryKey: ["collections", vaultId],
+    queryFn: () => api.listCollections(vaultId),
+    enabled: open && Boolean(vaultId),
+  });
 
   const save = useMutation({
     mutationFn: async () => {
@@ -563,12 +680,24 @@ function ManualSaveModal({
             </select>
           </div>
           <div>
-            <Label htmlFor="manual-collection">Collection</Label>
-            <select id="manual-collection" className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm" value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
-              <option value="">None</option>
-              {collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
+            <Label htmlFor="manual-folder">Folder</Label>
+            <select
+              id="manual-folder"
+              className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm"
+              value={vaultId}
+              onChange={(event) => { setVaultId(event.target.value); setCollectionId(""); }}
+            >
+              {vaults.length ? vaults.map((vault) => <option key={vault.id} value={vault.id}>{vault.name}</option>) : <option value="">The default folder</option>}
             </select>
+            <p className="mt-1 text-xs leading-5 text-muted">The folder this item is saved into. It is the same folder you see on the left.</p>
           </div>
+        </div>
+        <div>
+          <Label htmlFor="manual-collection">Collection <span className="font-normal text-muted">(optional)</span></Label>
+          <select id="manual-collection" className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm" value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
+            <option value="">None</option>
+            {(collections.data ?? []).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
+          </select>
         </div>
         <div>
           <Label htmlFor="manual-tags">Tags <span className="font-normal text-muted">(separate with commas)</span></Label>

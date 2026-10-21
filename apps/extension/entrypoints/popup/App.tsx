@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { browser } from "wxt/browser";
-import { ExternalLink, FileText, Highlighter, LogOut, Plus, ScanText } from "lucide-react";
+import { ExternalLink, FileText, FolderOpen, Highlighter, LogOut, Plus, ScanText } from "lucide-react";
 import { Button } from "@data-vault/ui";
 import type { AuthSession } from "@data-vault/types";
 import { ExtensionHeader } from "../../components/header";
@@ -13,6 +13,7 @@ import { getAuth, getPreferences, setPreferences, subscribeStorage, type PageDet
 import { signOutExtension } from "../../lib/auth";
 import { WEB_URL, withOrganization } from "../../lib/api";
 import { refreshCurrentDoc, renameDoc, startNewDoc } from "../../lib/docs";
+import { currentFolderId, listFolders, rememberFolder, type FolderOption } from "../../lib/folders";
 import { openReviewPanel, openReviewWindow } from "../../lib/panel";
 
 /**
@@ -30,6 +31,15 @@ export function PopupApp() {
   const [busy, setBusy] = useState<"page" | "selection" | null>(null);
   const [currentDoc, setCurrentDoc] = useState<{ id: string; title: string; clipCount: number } | null>(null);
   const [errors, setErrors] = useState<RecordedError[]>([]);
+  /**
+   * The folder new items go into.
+   *
+   * It is chosen here, the same way the current doc is, so that a quick save
+   * lands in the folder the person is working in rather than always in the
+   * first one.
+   */
+  const [folders, setFolders] = useState<FolderOption[]>([]);
+  const [folderId, setFolderId] = useState("");
 
   const load = async () => {
     const auth = await getAuth();
@@ -41,6 +51,9 @@ export function PopupApp() {
       setSession(await withOrganization((api) => api.getMe()));
       const current = await refreshCurrentDoc();
       setCurrentDoc(current?.noteId ? { id: current.noteId, title: current.title ?? "Untitled doc", clipCount: current.clipCount ?? 0 } : null);
+      const listed = await listFolders();
+      setFolders(listed);
+      setFolderId(await currentFolderId(listed));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not reach DataVault.");
     }
@@ -150,6 +163,17 @@ export function PopupApp() {
     await setPreferences({ ...preferences, quickSaveSelectedText: next });
   };
 
+  /**
+   * Choose the folder new items go into.
+   *
+   * It is remembered, so the next quick save goes into the same folder
+   * without asking again.
+   */
+  const chooseFolder = async (next: string) => {
+    setFolderId(next);
+    await rememberFolder(next);
+  };
+
   const signOut = async () => {
     setSigningOut(true);
     setError("");
@@ -236,6 +260,29 @@ export function PopupApp() {
 
           <section className="space-y-2 p-4">
             <p className="text-xs font-semibold uppercase tracking-[.13em] text-[#6a6a6a]">Save as a separate item</p>
+            <div className="rounded-2xl border border-[#e5dfd1] bg-white p-3">
+              <label htmlFor="popup-folder" className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.13em] text-[#6a6a6a]">
+                <FolderOpen className="size-3.5" />
+                Save into
+              </label>
+              <select
+                id="popup-folder"
+                className="mt-2 h-11 w-full rounded-xl border border-[#ded8ca] bg-white px-3 text-sm"
+                value={folderId}
+                onChange={(event) => void chooseFolder(event.target.value)}
+              >
+                {folders.length
+                  ? folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>
+                      {folder.name}{typeof folder.itemCount === "number" ? ` (${folder.itemCount})` : ""}
+                    </option>
+                  ))
+                  : <option value="">The default folder</option>}
+              </select>
+              <p className="mt-1 text-xs leading-5 text-[#6a6a6a]">
+                The folder new items go into. It is the same folder you have on the website, and it is remembered for next time.
+              </p>
+            </div>
             <Button className="w-full justify-start" onClick={() => void savePage()} disabled={busy !== null}>
               <ScanText className="size-4" />
               {busy === "page" ? "Capturing…" : "Save this page"}

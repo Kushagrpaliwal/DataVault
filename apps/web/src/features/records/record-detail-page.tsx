@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, ArrowLeft, ExternalLink, FileText, RotateCcw, Save, Trash2 } from "lucide-react";
 import { Badge, Button, Input, RecordTypeIcon, recordTypeLabel } from "@data-vault/ui";
@@ -253,7 +253,9 @@ export function RecordDetailPage() {
 
             <section className="panel p-6">
               <h2 className="text-lg font-semibold">Organization</h2>
-              <p className="mt-1 text-sm leading-6 text-muted">Put this item in a folder, and mark it so you can find it again.</p>
+              <p className="mt-1 text-sm leading-6 text-muted">
+                Put this item in a folder, group it with a collection, and mark it with tags so you can find it again.
+              </p>
               <OrganizePanel record={query.data} onSaved={async () => {
                 await client.invalidateQueries({ queryKey: ["record", organization?.id, id] });
                 await client.invalidateQueries({ queryKey: ["records"] });
@@ -358,6 +360,9 @@ function OrganizePanel({ record, onSaved }: { record: Detail; onSaved: () => Pro
         >
           {vaults.data?.map((vault) => <option key={vault.id} value={vault.id}>{vault.name}</option>)}
         </select>
+        <p className="mt-1 text-xs leading-5 text-muted">
+          The folder this item lives in. Every item is in one folder, and the browser extension can save into any of them.
+        </p>
       </div>
 
       <div>
@@ -379,8 +384,12 @@ function OrganizePanel({ record, onSaved }: { record: Detail; onSaved: () => Pro
             ))}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-muted">This folder has no collections. They are made in Organize.</p>
+          <p className="mt-2 text-sm leading-6 text-muted">
+            This folder has no collections yet. One is made in{" "}
+            <Link to="/organize" className="font-semibold text-black underline">Organize</Link>.
+          </p>
         )}
+        <p className="mt-1 text-xs leading-5 text-muted">A collection groups items inside the folder, like a sub-folder.</p>
       </div>
 
       <div>
@@ -392,7 +401,10 @@ function OrganizePanel({ record, onSaved }: { record: Detail; onSaved: () => Pro
           onChange={(event) => setTagText(event.target.value)}
           placeholder="research, to read"
         />
-        <p className="mt-1 text-xs text-muted">Separate the tags with commas. A tag that does not exist yet is made now.</p>
+        <p className="mt-1 text-xs leading-5 text-muted">
+          Separate the tags with commas. A tag is a label that works across every folder, so one item can have several.
+          A tag that does not exist yet is made now.
+        </p>
       </div>
 
       <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>

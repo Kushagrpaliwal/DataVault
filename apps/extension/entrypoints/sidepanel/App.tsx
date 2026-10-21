@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { defaultCaptureExtractor } from "@data-vault/capture-parser";
-import type { AuthSession, AiSummaryResult, ParsedCapture, SavedRecord, Vault } from "@data-vault/types";
+import type { AuthSession, AiSummaryResult, ParsedCapture, SavedRecord } from "@data-vault/types";
 import {
-  Camera, CheckCircle2, ExternalLink, FileText, Library, ScanText, Search, Settings, UserRound, Wand2,
+  Camera, CheckCircle2, ExternalLink, FileText, FolderOpen, Library, ScanText, Search, Settings, UserRound, Wand2,
 } from "lucide-react";
 import {
   Badge, Button, Input, Label, PRIMARY_RECORD_TYPES, recordTypeLabel,
@@ -18,8 +18,9 @@ import { clearExtensionErrors, readExtensionErrors, type RecordedError } from ".
 import { recordAiConsent, summariseItem, useAiCredits } from "../../lib/ai";
 import { signOutExtension } from "../../lib/auth";
 import { WEB_URL, withOrganization } from "../../lib/api";
+import { currentFolderId, listFolders, rememberFolder, type FolderOption } from "../../lib/folders";
 import {
-  effectiveWorkspaceId, getAuth, getPreferences, getReviewCapture, getRetryCaptures, clearRetryCaptures, setPendingCapture, setPreferences,
+  getAuth, getPreferences, getReviewCapture, getRetryCaptures, clearRetryCaptures, setPendingCapture, setPreferences,
   subscribeStorage, type ExtensionPreferences, type PageCaptureMode, type PendingCapture,
 } from "../../lib/storage";
 
@@ -93,7 +94,7 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
   const [pending, setPending] = useState<PendingCapture>();
   const [parsed, setParsed] = useState<ParsedCapture>({ confidence: {} });
   const [folderId, setFolderId] = useState("");
-  const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
+  const [folders, setFolders] = useState<FolderOption[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState<SavedCapture>();
@@ -106,6 +107,14 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
    * away whatever the user had already typed.
    */
   const readKey = useRef<string | null>(null);
+  /**
+   * The folder the user picked for this item.
+   *
+   * The panel re-reads itself every few minutes when the sign-in is renewed.
+   * The folder that was picked here is kept, so it is not thrown away while
+   * the item is being looked at.
+   */
+  const folderChosen = useRef(false);
 
   const load = async () => {
     const value = await getReviewCapture();
@@ -113,6 +122,11 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
     const key = value?.idempotencyKey ?? null;
     if (value && !value.savedRecord && readKey.current !== key) {
       readKey.current = key;
+      /**
+       * A new item starts with the folder that is set, so the folder picked
+       * for the last item is not carried over to the next one.
+       */
+      folderChosen.current = false;
       setParsed(await defaultCaptureExtractor.extract({
         text: value.selectedText,
         pageTitle: value.pageTitle,
@@ -123,16 +137,13 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
     if (!value) readKey.current = null;
     setWaiting(await getRetryCaptures());
     try {
-      const [preferences, listed] = await Promise.all([
-        getPreferences(),
-        withOrganization((api) => api.listVaults()),
-      ]);
-      setFolders(listed.map((folder) => ({ id: folder.id, name: folder.name })));
+      const listed = await listFolders();
+      setFolders(listed);
       /**
        * The folder the settings point at is only used when it belongs to
        * the workspace the panel is in.
        */
-      setFolderId(preferences.defaultVaultId && listed.some((folder) => folder.id === preferences.defaultVaultId) ? preferences.defaultVaultId : "");
+      if (!folderChosen.current) setFolderId(await currentFolderId(listed));
     } catch { /* The folder list is optional. */ }
   };
 
@@ -167,14 +178,13 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
       let current = pending;
       let record = current.savedRecord;
       if (!record) {
-        const preferences = await getPreferences();
         const cleanTitle = parsed.title?.trim() || current.pageTitle || current.selectedText.slice(0, 60);
         const result = await withOrganization((api) => api.createCapture({
           selectedText: current.selectedText, originalText: current.selectedText,
           source: { url: current.pageUrl, title: cleanTitle, domain: current.domain }, capturedAt: current.capturedAt,
           captureQuality: current.captureQuality,
           parsedData: { ...parsed, title: cleanTitle }, recordType: parsed.recordType ?? "other", confirmDuplicate: true,
-          captureKind: current.contentKind === "page-text" ? "page-text" : current.contentKind === "page-info" ? "page" : "selection", tagNames: [], vaultId: folderId || preferences.defaultVaultId,
+          captureKind: current.contentKind === "page-text" ? "page-text" : current.contentKind === "page-info" ? "page" : "selection", tagNames: [], vaultId: folderId || undefined,
         }, current.idempotencyKey));
         const resultRecord = result.record as Record<string, unknown> | undefined;
         if (!resultRecord?.id) throw new Error("DataVault did not return the saved item.");
@@ -261,12 +271,19 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
             id="capture-folder"
             className="h-11 w-full rounded-xl border border-[#ded8ca] bg-white px-3 text-sm"
             value={folderId}
-            onChange={(event) => setFolderId(event.target.value)}
+            onChange={(event) => { folderChosen.current = true; setFolderId(event.target.value); }}
           >
-            <option value="">The folder set in the settings</option>
-            {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+            {folders.length
+              ? folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.name}{typeof folder.itemCount === "number" ? ` (${folder.itemCount})` : ""}
+                </option>
+              ))
+              : <option value="">The default folder</option>}
           </select>
-          <p className="mt-1 text-xs leading-5 text-[#6a6a6a]">A folder holds your saved items, the same folders the website has.</p>
+          <p className="mt-1 text-xs leading-5 text-[#6a6a6a]">
+            A folder holds your saved items, the same folders the website has. The folder chosen here is used for this item.
+          </p>
         </div>
 
         <details open className="rounded-xl bg-[#f5f0e0] p-3">
@@ -364,11 +381,23 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
   const [term, setTerm] = useState("");
   const [debounced, setDebounced] = useState("");
   const [error, setError] = useState("");
+  /**
+   * The folder being looked at.
+   *
+   * Every item is in one folder, so the list can be narrowed to a single
+   * folder. It is the same folder the items were saved into.
+   */
+  const [folders, setFolders] = useState<FolderOption[]>([]);
+  const [folderId, setFolderId] = useState("");
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebounced(term.trim()), 250);
     return () => window.clearTimeout(timer);
   }, [term]);
+
+  useEffect(() => {
+    void listFolders().then(setFolders).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     setRecords(undefined);
@@ -378,10 +407,10 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
      * The panel used to hide anything saved on the website, which made the
      * list look empty even when there was plenty to read.
      */
-    void withOrganization((api) => api.listSavedRecords({ q: debounced || undefined, limit: 30 }))
+    void withOrganization((api) => api.listSavedRecords({ q: debounced || undefined, limit: 30, vaultId: folderId || undefined }))
       .then((data) => setRecords(data.items))
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your saved items."));
-  }, [refreshKey, debounced]);
+  }, [refreshKey, debounced, folderId]);
 
   const remove = async (record: SavedRecord) => {
     if (!window.confirm(`Move “${record.title}” to Trash? You can restore it later from the DataVault website.`)) return;
@@ -398,11 +427,32 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
 
   return (
     <>
-      <div className="p-4">
+      <div className="space-y-3 p-4">
         <div className="relative">
           <Search className="absolute left-3 top-3 size-4 text-[#6a6a6a]" />
           <Input className="pl-9" value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Search your saved items…" />
         </div>
+        {folders.length ? (
+          <div>
+            <label htmlFor="saved-folder" className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.13em] text-[#6a6a6a]">
+              <FolderOpen className="size-3.5" />
+              Folder
+            </label>
+            <select
+              id="saved-folder"
+              className="mt-2 h-11 w-full rounded-xl border border-[#ded8ca] bg-white px-3 text-sm"
+              value={folderId}
+              onChange={(event) => setFolderId(event.target.value)}
+            >
+              <option value="">All folders</option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.name}{typeof folder.itemCount === "number" ? ` (${folder.itemCount})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
       </div>
       {error ? <p className="mx-4 mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
       <RecordList
@@ -518,7 +568,7 @@ function QuickDetail({ record, onBack, onDeleted }: { record: SavedRecord; onBac
 function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
   const [session, setSession] = useState<AuthSession>();
   const [workspaceId, setWorkspaceId] = useState<string | undefined>();
-  const [vaultOptions, setVaultOptions] = useState<Vault[]>([]);
+  const [vaultOptions, setVaultOptions] = useState<FolderOption[]>([]);
   const [preferences, setPreferenceState] = useState<ExtensionPreferences>({ quickSaveSelectedText: false, pageCaptureMode: "visible" });
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [errors, setErrors] = useState<RecordedError[]>([]);
@@ -558,7 +608,7 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
   }, []);
 
   useEffect(() => {
-    void Promise.all([withOrganization((api) => api.getMe()), withOrganization((api) => api.listVaults())])
+    void Promise.all([withOrganization((api) => api.getMe()), listFolders()])
       .then(([me, loadedVaults]) => { setSession(me); setVaultOptions(loadedVaults); })
       .catch(() => { /* The account card stays blank until the API responds. */ });
     void getAuth().then((auth) => setWorkspaceId(auth?.organizationId));
@@ -569,7 +619,7 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
    * sign-in changes.
    */
   useEffect(() => {
-    void withOrganization((api) => api.listVaults()).then(setVaultOptions).catch(() => undefined);
+    void listFolders().then(setVaultOptions).catch(() => undefined);
   }, [workspaceId]);
 
   const updatePreferences = (updates: Partial<ExtensionPreferences>) => {
@@ -586,13 +636,22 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
    * the server.
    */
   const changeFolder = (vaultId: string) => {
-    void effectiveWorkspaceId().then((workspace) => {
-      updatePreferences({
-        defaultVaultId: vaultId || undefined,
-        defaultVaultOrganizationId: vaultId ? workspace : undefined,
-      });
-    });
+    void rememberFolder(vaultId || undefined);
   };
+
+  /**
+   * The folder new items go into, as it is on screen.
+   *
+   * The folder that was chosen is used when it still belongs to the workspace
+   * the extension is in. Otherwise the default folder of the workspace is
+   * used, which is where the server puts anything that has not been given a
+   * folder.
+   */
+  const folderValue = preferences.defaultVaultId
+    && preferences.defaultVaultOrganizationId === workspaceId
+    && vaultOptions.some((folder) => folder.id === preferences.defaultVaultId)
+    ? preferences.defaultVaultId
+    : (vaultOptions.find((folder) => folder.isDefault)?.id ?? vaultOptions[0]?.id ?? "");
 
   const captureModes: ReadonlyArray<[PageCaptureMode, string, string]> = [
     ["visible", "Page image and details", "Saves a picture of the page plus its title and link."],
@@ -698,12 +757,20 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
           <span className="block font-medium">Save new items to</span>
           <select
             className="mt-2 h-11 w-full rounded-xl border border-[#ded8ca] bg-[#fffdf8] px-3 text-sm"
-            value={preferences.defaultVaultId ?? ""}
+            value={folderValue}
             onChange={(event) => changeFolder(event.target.value)}
           >
-            <option value="">Default folder</option>
-            {vaultOptions.map((vault) => <option key={vault.id} value={vault.id}>{vault.name}</option>)}
+            {vaultOptions.length
+              ? vaultOptions.map((vault) => (
+                <option key={vault.id} value={vault.id}>
+                  {vault.name}{typeof vault.itemCount === "number" ? ` (${vault.itemCount})` : ""}
+                </option>
+              ))
+              : <option value="">The default folder</option>}
           </select>
+          <span className="mt-1 block text-xs leading-5 text-[#6a6a6a]">
+            The folder new items go into. It is the same folder you have on the website, and you can change it here at any time.
+          </span>
         </label>
 
         <label className="mt-4 flex cursor-pointer items-start justify-between gap-3">

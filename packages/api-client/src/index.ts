@@ -155,7 +155,13 @@ export class DataVaultApiClient {
   createCollection = (body: Record<string, unknown>) => this.request<VaultCollection>("/api/v1/collections", { method: "POST", body: JSON.stringify(body) });
   updateCollection = (id: string, body: Record<string, unknown>) => this.request<VaultCollection>(`/api/v1/collections/${id}`, { method: "PATCH", body: JSON.stringify(body) });
   deleteCollection = (id: string) => this.request<{ id: string }>(`/api/v1/collections/${id}`, { method: "DELETE" });
-  listTags = () => this.request<VaultTag[]>("/api/v1/tags");
+  /**
+   * The tags of the workspace.
+   *
+   * When a folder is given, only the tags that are used inside that folder
+   * are sent back. Without it, every tag of the workspace is sent back.
+   */
+  listTags = (vaultId?: string) => this.request<VaultTag[]>("/api/v1/tags", {}, { vaultId });
   createTag = (body: Record<string, unknown>) => this.request<VaultTag>("/api/v1/tags", { method: "POST", body: JSON.stringify(body) });
   updateTag = (id: string, body: Record<string, unknown>) => this.request<VaultTag>(`/api/v1/tags/${id}`, { method: "PATCH", body: JSON.stringify(body) });
   deleteTag = (id: string) => this.request<{ id: string }>(`/api/v1/tags/${id}`, { method: "DELETE" });
