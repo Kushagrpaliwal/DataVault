@@ -17,7 +17,6 @@
   "dependencies": {
     "@data-vault/api-client": "workspace:*",
     "@data-vault/capture-parser": "workspace:*",
-    "@data-vault/config": "workspace:*",
     "@data-vault/notes": "workspace:*",
     "@data-vault/types": "workspace:*",
     "@data-vault/ui": "workspace:*",
