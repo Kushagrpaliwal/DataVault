@@ -18,6 +18,11 @@ import { Modal, useToast } from "../../components/feedback";
 import { PageHeader } from "../../components/page";
 import { FolderTree, flattenFolders, folderTree } from "./folder-tree";
 import { SaveViewModal } from "./save-view-modal";
+import { downloadCsv, toCsv } from "../../lib/csv";
+
+const CSV_HEADER = ["Title", "Text", "Source", "Saved at", "Type"];
+const csvRow = (record: SavedRecord) => [record.title, record.originalText ?? "", record.sourceDomain ?? "", record.capturedAt ?? record.createdAt, recordTypeLabel(record.recordType)];
+
 
 /**
  * The single place where every saved item lives.
@@ -255,13 +260,7 @@ export function SavedPage() {
       const result = await api.listSavedRecords({ page: exportPage, limit: 100, q: debounced || undefined, recordType: recordType || undefined, archived, trash, sort, direction, vaultId: activeVaultId || undefined, tag: tag || undefined });
       records.push(...result.items);
     }
-    const rows = records.map((record) => [record.title, record.originalText ?? "", record.sourceDomain ?? "", record.capturedAt ?? record.createdAt, recordTypeLabel(record.recordType)].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","));
-    const blob = new Blob([["Title,Text,Source,Saved at,Type", ...rows].join("\n")], { type: "text/csv" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `datavault-saved-${format(new Date(), "yyyy-MM-dd")}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    downloadCsv(`datavault-saved-${format(new Date(), "yyyy-MM-dd")}.csv`, toCsv(CSV_HEADER, records.map(csvRow)));
   };
 
   useEffect(() => {
@@ -343,13 +342,7 @@ export function SavedPage() {
   const handleBulkExportCsv = () => {
     const selectedRecords = (query.data?.items ?? []).filter((r) => selectedIds.has(r.id));
     if (!selectedRecords.length) return;
-    const rows = selectedRecords.map((record) => [record.title, record.originalText ?? "", record.sourceDomain ?? "", record.capturedAt ?? record.createdAt, recordTypeLabel(record.recordType)].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","));
-    const blob = new Blob([["Title,Text,Source,Saved at,Type", ...rows].join("\n")], { type: "text/csv" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `datavault-selected-${format(new Date(), "yyyy-MM-dd")}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    downloadCsv(`datavault-selected-${format(new Date(), "yyyy-MM-dd")}.csv`, toCsv(CSV_HEADER, selectedRecords.map(csvRow)));
   };
 
   const activeFilterCount = [recordType, tag, archived ? "1" : "", trash ? "1" : ""].filter(Boolean).length;

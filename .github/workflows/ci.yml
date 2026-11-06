@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
   workflow_dispatch:
 
@@ -12,6 +12,7 @@ concurrency:
 
 env:
   NODE_ENV: test
+  ALLOW_LOCAL_BUILD: "true"
   API_PORT: "3000"
   API_URL: http://localhost:3000
   WEB_URL: http://localhost:5173
@@ -25,7 +26,6 @@ env:
   DATABASE_URL: postgresql://data_vault_app:data-vault-app@localhost:5432/data_vault_test
   DATABASE_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/data_vault_test
   TEST_DATABASE_URL: postgresql://data_vault_app:data-vault-app@localhost:5432/data_vault_test
-  DB_AUTO_CREATE: "true"
   SESSION_SECRET: ci-session-secret-that-is-at-least-32-characters-long
   JWT_SECRET: ci-jwt-secret-that-is-at-least-32-characters-long
   ALLOWED_ORIGINS: http://localhost:5173
@@ -96,3 +96,6 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      - name: Audit dependencies (production-relevant)
+        run: bun audit --audit-level=critical

@@ -33,7 +33,7 @@ bun run test
 bun run build
 ```
 
-For the browser smoke check, keep the API and web app running, set `SMOKE_EMAIL` and `SMOKE_PASSWORD` to a real account, and execute `bun run smoke:web`. It signs in through the UI and verifies the Overview, Saved, Organize, and Settings pages, plus the legacy route redirects, using headless Chrome.
+For the browser smoke check, keep the API and web app running, set `SMOKE_EMAIL` and `SMOKE_PASSWORD` to a real account, and execute `bun run smoke:web`. It signs in through the UI and verifies the Overview, Saved, Docs, and Settings pages, plus the legacy route redirects, using headless Chrome.
 
 Business tests use the actual Elysia application and PostgreSQL schema, and they run as the application role, so the row-level security rules are part of every test. The test database is a database of its own, named by `TEST_DATABASE_URL`; `bun run db:migrate-test` brings it up to date and `bun run db:recreate-test` gives it a clean start. Test-created organizations use unique slugs and remain useful for inspecting audit/tenancy behavior.
 

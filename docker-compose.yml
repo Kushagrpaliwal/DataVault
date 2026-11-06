@@ -3,14 +3,14 @@ services:
     image: postgres:17-alpine
     environment:
       POSTGRES_DB: data_vault
-      POSTGRES_USER: data_vault_app
-      POSTGRES_PASSWORD: data_vault_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: data_vault_dev # admin role; "bun run db:migrate" creates the data_vault_app role
     ports:
       - "5432:5432"
     volumes:
       - data_vault_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U data_vault_app -d data_vault"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d data_vault"]
       interval: 5s
       timeout: 5s
       retries: 10

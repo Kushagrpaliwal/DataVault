@@ -23,3 +23,13 @@ MobileDataVaut/ios/SparklingGo/SparklingGo/Resources/Assets/
 
 # Local agent/tooling state
 .agents/.cache/
+
+# Local agent/tooling state
+skills-lock.json
+.agents/
+
+# Release signing and secrets
+keystore.properties
+*.jks
+*.keystore
+deploy/.env.production

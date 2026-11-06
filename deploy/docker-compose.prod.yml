@@ -1,0 +1,61 @@
+# Production stack: Postgres, API, web (Caddy, TLS). Copy deploy/.env.production.example
+# to deploy/.env.production, fill it in, then:
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.production up -d --build
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: data_vault
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?set POSTGRES_ADMIN_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d data_vault"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build: { context: .., dockerfile: apps/api/Dockerfile, target: build }
+    working_dir: /app
+    command: ["bun", "run", "db:migrate"]
+    environment:
+      DATABASE_ADMIN_URL: postgresql://postgres:${POSTGRES_ADMIN_PASSWORD}@postgres:5432/data_vault
+      DATABASE_URL: postgresql://data_vault_app:${DATABASE_APP_PASSWORD:?set DATABASE_APP_PASSWORD}@postgres:5432/data_vault
+      DATABASE_APP_PASSWORD: ${DATABASE_APP_PASSWORD}
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      API_PORT: "3000"
+      TRUSTED_PROXY_HOPS: "1"
+      DATABASE_URL: postgresql://data_vault_app:${DATABASE_APP_PASSWORD}@postgres:5432/data_vault
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: https://${DOMAIN}
+        VITE_WEB_URL: https://${DOMAIN}
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - caddy_data:/data
+    depends_on: [api]
+
+volumes:
+  postgres:
+  caddy_data:

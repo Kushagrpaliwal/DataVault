@@ -2,19 +2,18 @@
 
 DataVault is a production-oriented, multi-tenant web-clipping memory system. A React web application and a Chrome/Edge extension use the same Bun + Elysia REST API and the same PostgreSQL database, so saved items, edits, searches, and session revocations are immediately consistent across both clients.
 
-The web app has five destinations:
+The web app has four destinations:
 
 | Page | What it is for |
 | --- | --- |
 | **Overview** | How much you have saved, where it came from, and how to get started. |
-| **Saved** | Everything you have saved, with folders, collections, and tags as filters. |
+| **Saved** | Everything you have saved, with nested folders and tags as filters. |
 | **Docs** | Long-form notes, written like a document and fed by the browser. |
-| **Organize** | Creating and managing folders, collections, and tags. |
-| **Settings** | Your account, sign-in methods, and connected browsers. |
+| **Settings** | Your account, sign-in methods, AI keys, and connected browsers. |
 
 ## Stack
 
-- Web: React 19, TypeScript, Vite, React Router, Tailwind CSS, shadcn-style shared primitives, TanStack Query/Table, React Hook Form, Zod, Recharts, date-fns, Lucide, Tiptap v3
+- Web: React 19, TypeScript, Vite, React Router, Tailwind CSS, shadcn-style shared primitives, TanStack Query, React Hook Form, Zod, date-fns, Lucide, Tiptap v3
 - Extension: WXT, React, Manifest V3, background service worker, popup, Chrome side panel, context menus, keyboard commands, extension storage
 - API: Bun, Elysia, Better Auth, Zod, Drizzle ORM, PostgreSQL
 - AI: Gemini (`gemini-3.1-flash-lite` on the free tier), called only from the server
@@ -53,7 +52,7 @@ packages/
   api-client/   shared authenticated REST client
   capture-parser/
   config/
-  database/     Drizzle schema, migrations, seed
+  database/     Drizzle schema and migrations
   notes/        shared doc schema, arranger, and Markdown export
   schemas/      shared Zod schemas and constants
   types/
@@ -147,5 +146,7 @@ The same four run on every push, in `.github/workflows/ci.yml`, against a Postgr
 The integration suite covers auth, organization isolation, RBAC, captures, extension authorization and revocation, sign-in renewal races, docs, idempotency, validation, tenant-scoped search, the credit allowance, and the checks that keep one workspace from reaching into another. It runs against its own database, taken from `TEST_DATABASE_URL`, so it never touches the data a person is working in.
 
 With the API and web development servers running, set `SMOKE_EMAIL` and `SMOKE_PASSWORD` to a real account, then run `bun run smoke:web`. It signs in, opens every page, shares a page into the app, checks that every folder is shown, and copies a doc. `bun run make-smoke-account` makes an account to use.
+
+Going live: [deployment](docs/deployment.md) and [security](docs/security.md).
 
 More detail: [architecture](docs/architecture.md), [database](docs/database.md), [authentication](docs/auth.md), [AI credits](docs/ai.md), [API](docs/api.md), [extension](docs/extension.md), and [development](docs/development.md).

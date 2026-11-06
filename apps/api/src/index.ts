@@ -59,7 +59,18 @@ export function createApp(environment?: ServerEnvironment) {
       exposeHeaders: ["X-Request-Id"],
     }))
     .use(env.NODE_ENV === "production" ? new Elysia() : openapi({ path: "/api/v1/openapi", documentation: { info: { title: "DataVault API", version: "1.0.0" } } }))
-    .onStart(() => ensurePermissionCatalog())
+    .onStart(async () => {
+      /**
+       * The row-level security rules only apply to an ordinary role. A
+       * superuser (or a role that bypasses the rules) would read every
+       * workspace, so production will not run as one.
+       */
+      if (env.NODE_ENV === "production") {
+        const rows = await getDatabase().execute(sql`select (rolsuper or rolbypassrls) as bypass from pg_roles where rolname = current_user`) as unknown as { bypass: boolean }[];
+        if (rows[0]?.bypass) throw new Error("DATABASE_URL connects as a role that bypasses row-level security. Run `bun run db:create-role` and connect as the data_vault_app role.");
+      }
+      await ensurePermissionCatalog();
+    })
     .onBeforeHandle(async ({ request, set }) => {
       set.headers["x-request-id"] = request.headers.get("x-request-id") ?? crypto.randomUUID();
       set.headers["x-content-type-options"] = "nosniff";

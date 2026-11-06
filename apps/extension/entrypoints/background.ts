@@ -908,7 +908,9 @@ export default defineBackground(() => {
     }
   });
 
-  browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  browser.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+    // Only the extension's own pages and scripts may give it orders.
+    if (sender.id !== browser.runtime.id) return undefined;
     if (!message || typeof message !== "object") return undefined;
     const payload = message as { action?: string; record?: { title?: string; sourceDomain?: string }; sourceTabId?: number; page?: PageDetails };
 

@@ -12,6 +12,19 @@ const reactRoot = resolve(extensionRoot, "node_modules/react");
 const reactDomRoot = resolve(extensionRoot, "node_modules/react-dom");
 const apiOrigin = new URL(process.env.VITE_API_URL ?? "http://localhost:3000").origin;
 
+/** A release build must point at the real server, never at localhost. */
+if (process.argv.some((argument) => argument === "build" || argument === "zip") && process.env.ALLOW_LOCAL_BUILD !== "true") {
+  for (const name of ["VITE_API_URL", "VITE_WEB_URL"]) {
+    const value = process.env[name] ?? "";
+    let ok = false;
+    try {
+      const url = new URL(value);
+      ok = url.protocol === "https:" && !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    } catch { /* not a URL */ }
+    if (!ok) throw new Error(`${name} must be an https address that is not localhost for a release build (got "${value}"). Set ALLOW_LOCAL_BUILD=true to build against localhost on purpose.`);
+  }
+}
+
 export default defineConfig({
   srcDir: extensionRoot,
   publicDir: resolve(extensionRoot, "public"),
