@@ -294,4 +294,115 @@ describe("the AI, on a selection", () => {
     expect(result.response.status).toBe(502);
     expect(result.payload.error?.code).toBe("AI_INVALID_RESPONSE");
   });
+
+  test("a credit is given back when the answer cannot be read", async () => {
+    const session = await register("Refund Admin", `selection-refund-${suffix}@example.com`);
+    const organizationId = await workspace(session);
+    const noteId = await makeDoc(session, organizationId);
+    /**
+     * The free path needs the address to be confirmed and the agreement to
+     * be recorded, or it refuses the request before it is made.
+     */
+    await getDatabase().update(users).set({ emailVerified: true }).where(inArray(users.id, [session.userId]));
+    await call("/api/v1/ai/consent", { method: "POST", session, body: { accepted: true } });
+
+    /**
+     * The answer is JSON, but it is not the shape that was asked for, so it
+     * cannot be read.
+     */
+    globalThis.fetch = mockFetch({ candidates: [{ content: { parts: [{ text: JSON.stringify({ blocks: "not a list" }) }] } }] });
+
+    const before = await call("/api/v1/ai/credits", { session, organizationId });
+    const remainingBefore = (before.payload.data as { remaining: number }).remaining;
+
+    const result = await call(`/api/v1/notes/${noteId}/ai/selection`, {
+      method: "POST",
+      session,
+      organizationId,
+      body: { action: "arrange", selection, context: { mode: "selection" } },
+    });
+    expect(result.response.status).toBe(502);
+
+    const after = await call("/api/v1/ai/credits", { session, organizationId });
+    const remainingAfter = (after.payload.data as { remaining: number }).remaining;
+
+    /**
+     * The credit was taken and then given back, so the person has the same
+     * number of them as before.
+     */
+    expect(remainingAfter).toBe(remainingBefore);
+
+    const ledger = await withUser(session.userId, organizationId, (tx) => tx.execute(sql`select kind, count(*)::int as count from ai_credit_ledger group by kind`));
+    const kinds = (ledger as unknown as { kind: string; count: number }[]).map((row) => row.kind).sort();
+    expect(kinds).toContain("refund");
+  });
+
+  test("a key that cannot be read does not fall back to the free credits", async () => {
+    const session = await register("Broken Admin", `selection-broken-${suffix}@example.com`);
+    const organizationId = await workspace(session);
+    const noteId = await makeDoc(session, organizationId);
+    await connectOwnKey(session, organizationId, "openai-compatible");
+
+    /**
+     * The row is changed so that the address is another one. The key is tied
+     * to the host it was given for, so it does not open, and the request has
+     * to fail rather than quietly answer from the shared key.
+     */
+    await withUser(session.userId, organizationId, (tx) => tx.execute(sql`update ai_connections set base_url = 'https://attacker.example.com/v1' where user_id = ${session.userId}`));
+
+    let called = false;
+    globalThis.fetch = (async () => {
+      called = true;
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(blocks) } }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+
+    const result = await call(`/api/v1/notes/${noteId}/ai/selection`, {
+      method: "POST",
+      session,
+      organizationId,
+      body: { action: "arrange", selection, context: { mode: "selection" } },
+    });
+    expect(result.response.status).toBe(409);
+    expect(result.payload.error?.code).toBe("AI_KEY_UNREADABLE");
+    /**
+     * The provider was never asked, so nothing was sent to it and no credit
+     * was spent.
+     */
+    expect(called).toBe(false);
+  });
+
+  test("a selection of no words is written from the instruction alone", async () => {
+    const session = await register("Blank Admin", `selection-blank-${suffix}@example.com`);
+    const organizationId = await workspace(session);
+    const noteId = await makeDoc(session, organizationId);
+    await connectOwnKey(session, organizationId, "openai-compatible");
+
+    globalThis.fetch = mockFetch({ choices: [{ message: { content: JSON.stringify(blocks) } }] });
+
+    const result = await call(`/api/v1/notes/${noteId}/ai/selection`, {
+      method: "POST",
+      session,
+      organizationId,
+      body: { action: "custom", instruction: "Write about the tides.", selection: { markdown: "", clips: [] }, context: { mode: "selection" } },
+    });
+    expect(result.response.status).toBe(200);
+    const answer = (result.payload.data as { blocks: { type: string }[] }).blocks;
+    expect(answer.map((block) => block.type)).toEqual(["heading", "paragraph", "bullets"]);
+  });
+
+  test("a selection of no words and no instruction is refused", async () => {
+    const session = await register("Nothing Admin", `selection-nothing-${suffix}@example.com`);
+    const organizationId = await workspace(session);
+    const noteId = await makeDoc(session, organizationId);
+    await connectOwnKey(session, organizationId, "openai-compatible");
+
+    const result = await call(`/api/v1/notes/${noteId}/ai/selection`, {
+      method: "POST",
+      session,
+      organizationId,
+      body: { action: "arrange", selection: { markdown: "", clips: [] }, context: { mode: "selection" } },
+    });
+    expect(result.response.status).toBe(400);
+    expect(result.payload.error?.code).toBe("NOTHING_TO_WORK_WITH");
+  });
 });

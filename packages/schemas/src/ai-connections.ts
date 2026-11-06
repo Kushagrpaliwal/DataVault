@@ -18,7 +18,7 @@ export const aiProviderKindSchema = z.enum(["openai-compatible", "anthropic", "g
  * network, can still be used.
  */
 export const aiProviderPresetSchema = z.enum([
-  "openai", "openrouter", "groq", "deepseek", "mistral", "together", "ollama", "lmstudio", "custom", "anthropic", "gemini",
+  "openai", "openrouter", "xai", "groq", "deepseek", "mistral", "together", "ollama", "lmstudio", "custom", "anthropic", "gemini",
 ]);
 
 export type AiProviderKind = z.infer<typeof aiProviderKindSchema>;
@@ -44,6 +44,7 @@ export interface AiProviderPresetDetails {
 export const AI_PROVIDER_PRESETS: readonly AiProviderPresetDetails[] = [
   { preset: "openai", label: "OpenAI", kind: "openai-compatible", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", local: false, needsKey: true, note: "ChatGPT and the OpenAI API." },
   { preset: "openrouter", label: "OpenRouter", kind: "openai-compatible", baseUrl: "https://openrouter.ai/api/v1", model: "openai/gpt-4o-mini", local: false, needsKey: true, note: "One key for many models." },
+  { preset: "xai", label: "xAI (Grok)", kind: "openai-compatible", baseUrl: "https://api.x.ai/v1", model: "grok-2-latest", local: false, needsKey: true, note: "Grok models from xAI." },
   { preset: "groq", label: "Groq", kind: "openai-compatible", baseUrl: "https://api.groq.com/openai/v1", model: "llama-3.3-70b-versatile", local: false, needsKey: true, note: "Very fast, on open models." },
   { preset: "deepseek", label: "DeepSeek", kind: "openai-compatible", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat", local: false, needsKey: true, note: "Cheap and steady." },
   { preset: "mistral", label: "Mistral", kind: "openai-compatible", baseUrl: "https://api.mistral.ai/v1", model: "mistral-large-latest", local: false, needsKey: true, note: "European models, and a free tier." },
@@ -51,7 +52,7 @@ export const AI_PROVIDER_PRESETS: readonly AiProviderPresetDetails[] = [
   { preset: "ollama", label: "Ollama", kind: "openai-compatible", baseUrl: "http://localhost:11434/v1", model: "llama3.2", local: true, needsKey: false, note: "A model on your own machine." },
   { preset: "lmstudio", label: "LM Studio", kind: "openai-compatible", baseUrl: "http://localhost:1234/v1", model: "local-model", local: true, needsKey: false, note: "A model on your own machine." },
   { preset: "anthropic", label: "Anthropic", kind: "anthropic", baseUrl: "https://api.anthropic.com", model: "claude-3-5-haiku-latest", local: false, needsKey: true, note: "The Claude models." },
-  { preset: "gemini", label: "Google Gemini", kind: "gemini", baseUrl: "https://generativelanguage.googleapis.com", model: "gemini-2.5-flash", local: false, needsKey: true, note: "Your own Google AI Studio key." },
+  { preset: "gemini", label: "Google Gemini", kind: "gemini", baseUrl: "https://generativelanguage.googleapis.com", model: "gemini-3.8-flash", local: false, needsKey: true, note: "Your own Google AI Studio key." },
   { preset: "custom", label: "Custom", kind: "openai-compatible", baseUrl: "", model: "", local: false, needsKey: true, note: "Any service that speaks the OpenAI language." },
 ];
 
@@ -60,6 +61,48 @@ export const AI_PROVIDER_PRESETS: readonly AiProviderPresetDetails[] = [
  */
 export function aiProviderPreset(preset: AiProviderPreset): AiProviderPresetDetails {
   return AI_PROVIDER_PRESETS.find((entry) => entry.preset === preset) ?? AI_PROVIDER_PRESETS[AI_PROVIDER_PRESETS.length - 1]!;
+}
+
+/**
+ * Automatically identify the AI provider based on API key prefix or signature.
+ */
+export function detectProviderFromKey(rawKey: string): (AiProviderPresetDetails & { providerName: string }) | null {
+  const key = rawKey.trim();
+  if (!key) return null;
+
+  if (key.startsWith("sk-or-v1-") || key.startsWith("sk-or-")) {
+    const details = aiProviderPreset("openrouter");
+    return { ...details, providerName: "OpenRouter" };
+  }
+  if (key.startsWith("xai-")) {
+    const details = aiProviderPreset("xai");
+    return { ...details, providerName: "xAI (Grok)" };
+  }
+  if (key.startsWith("gsk_")) {
+    const details = aiProviderPreset("groq");
+    return { ...details, providerName: "Groq" };
+  }
+  if (key.startsWith("sk-ant-")) {
+    const details = aiProviderPreset("anthropic");
+    return { ...details, providerName: "Anthropic" };
+  }
+  if (key.startsWith("AIzaSy")) {
+    const details = aiProviderPreset("gemini");
+    return { ...details, providerName: "Google Gemini" };
+  }
+  if (key.startsWith("sk-proj-")) {
+    const details = aiProviderPreset("openai");
+    return { ...details, providerName: "OpenAI" };
+  }
+  if (/^sk-[0-9a-f]{32}$/i.test(key)) {
+    const details = aiProviderPreset("deepseek");
+    return { ...details, providerName: "DeepSeek" };
+  }
+  if (key.startsWith("sk-")) {
+    const details = aiProviderPreset("openai");
+    return { ...details, providerName: "OpenAI" };
+  }
+  return null;
 }
 
 export const aiConnectionCreateSchema = z.object({

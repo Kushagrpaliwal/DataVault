@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Lock, Sparkles, Wand2 } from "lucide-react";
+import { Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@data-vault/ui";
 import { DataVaultApiError } from "@data-vault/api-client";
 import type { AiClassificationResult, AiExtractionResult, AiSummaryResult } from "@data-vault/types";
@@ -23,41 +23,27 @@ export function useAiCredits() {
 export function AiCreditBadge() {
   const credits = useAiCredits();
   if (!credits.data?.available) return null;
-  /**
-   * A provider of their own answers instead of the shared one, so the
-   * words about credits do not apply to them.
-   */
   if (credits.data.ownConnection) {
     return (
-      <span
+      <Link
+        to="/settings"
         title={`Using your own key · ${credits.data.ownConnection.model}`}
-        className="flex items-center gap-1.5 rounded-full bg-soft px-2.5 py-1 text-xs font-medium text-strong"
+        className="flex items-center gap-1.5 rounded-full bg-soft px-2.5 py-1 text-xs font-medium text-strong hover:bg-soft/80"
       >
         <Sparkles className="size-3.5" />
         Your AI
-      </span>
-    );
-  }
-  const locked = !credits.data.emailVerified || !credits.data.consented;
-  if (locked) {
-    return (
-      <span
-        title={credits.data.reason ?? "Confirm your email address to unlock AI credits."}
-        className="flex items-center gap-1.5 rounded-full bg-soft px-2.5 py-1 text-xs font-medium text-muted"
-      >
-        <Lock className="size-3.5" />
-        AI locked
-      </span>
+      </Link>
     );
   }
   return (
-    <span
-      title={`${credits.data.remaining} of ${credits.data.allowance} free AI credits left today`}
-      className="flex items-center gap-1.5 rounded-full bg-soft px-2.5 py-1 text-xs font-medium text-strong"
+    <Link
+      to="/settings"
+      title="Connect your API key in Settings (BYOK)"
+      className="flex items-center gap-1.5 rounded-full bg-soft px-2.5 py-1 text-xs font-medium text-muted hover:text-strong"
     >
       <Sparkles className="size-3.5" />
-      {credits.data.remaining} AI
-    </span>
+      Connect AI
+    </Link>
   );
 }
 
@@ -168,7 +154,7 @@ export function AiPanel({ content, recordId, onApply }: AiPanelProps) {
         setClassification(data);
         onApply?.(data);
       } else setExtraction(result.data as AiExtractionResult);
-      notify(result.cached ? "Already worked out — no credit used" : "Done");
+      notify(result.cached ? "Already worked out" : "Done");
     },
     onError: (error) => notify(error instanceof Error ? error.message : "That did not work", "error"),
   });
@@ -176,7 +162,6 @@ export function AiPanel({ content, recordId, onApply }: AiPanelProps) {
   const status = credits.data;
   const locked = status?.available === false;
   const reason = status?.reason;
-  const remaining = status?.remaining ?? 0;
   /**
    * A provider of their own answers, so the agreement to send content to
    * Google does not apply to them.
@@ -216,21 +201,19 @@ export function AiPanel({ content, recordId, onApply }: AiPanelProps) {
           <h2 className="text-lg font-semibold">AI help</h2>
           <p className="mt-1 text-sm leading-6 text-muted">
             {own
-              ? `Summarise this, suggest a type and tags, or pull out the details. Your own key is used, so no credit is spent.`
+              ? `Summarise this, suggest a type and tags, or pull out the details. Using ${own.label} · ${own.model}.`
               : locked
                 ? reason
-                : remaining > 0
-                  ? `Summarise this, suggest a type and tags, or pull out the details. ${remaining} free ${remaining === 1 ? "credit" : "credits"} left today.`
-                  : "You have used all of today's free AI credits. They come back when the day rolls over."}
+                : `Summarise this, suggest a type and tags, or pull out the details.`}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button size="sm" disabled={locked || (!own && remaining <= 0) || run.isPending} onClick={() => run.mutate("summarize")}>
+            <Button size="sm" disabled={locked || run.isPending} onClick={() => run.mutate("summarize")}>
               <Wand2 className="size-4" />Summarise
             </Button>
-            <Button size="sm" variant="secondary" disabled={locked || (!own && remaining <= 0) || run.isPending} onClick={() => run.mutate("classify")}>
+            <Button size="sm" variant="secondary" disabled={locked || run.isPending} onClick={() => run.mutate("classify")}>
               Suggest a type
             </Button>
-            <Button size="sm" variant="secondary" disabled={locked || (!own && remaining <= 0) || run.isPending} onClick={() => run.mutate("extract")}>
+            <Button size="sm" variant="secondary" disabled={locked || run.isPending} onClick={() => run.mutate("extract")}>
               Pull out details
             </Button>
           </div>

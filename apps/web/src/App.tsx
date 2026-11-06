@@ -16,7 +16,6 @@ const DashboardPage = lazy(() => import("./features/dashboard/dashboard-page").t
 const SavedPage = lazy(() => import("./features/records/saved-page").then((module) => ({ default: module.SavedPage })));
 const SharePage = lazy(() => import("./features/records/share-page").then((module) => ({ default: module.SharePage })));
 const DocsPage = lazy(() => import("./features/docs/docs-page").then((module) => ({ default: module.DocsPage })));
-const OrganizePage = lazy(() => import("./features/records/organize-page").then((module) => ({ default: module.OrganizePage })));
 const RecordDetailPage = lazy(() => import("./features/records/record-detail-page").then((module) => ({ default: module.RecordDetailPage })));
 const SettingsPage = lazy(() => import("./features/settings/settings-pages").then((module) => ({ default: module.SettingsPage })));
 
@@ -74,7 +73,6 @@ export function App() {
             <Route path="share" element={<SharePage/>}/>
             <Route path="docs" element={<DocsPage/>}/>
             <Route path="docs/:id" element={<DocsPage/>}/>
-            <Route path="organize" element={<OrganizePage/>}/>
             <Route path="settings" element={<SettingsPage/>}/>
             {/* Legacy aliases. The financial-era paths were removed with their pages. */}
             <Route path="saved-data" element={<Navigate to="/saved" replace/>}/>
@@ -82,7 +80,9 @@ export function App() {
             <Route path="captures" element={<Navigate to="/saved" replace/>}/>
             <Route path="notes" element={<Navigate to="/docs" replace/>}/>
             <Route path="notes/:id" element={<LegacyNoteDetail/>}/>
-            <Route path="vault" element={<Navigate to="/organize" replace/>}/>
+            {/* The folders and tags live in the rail of the saved page now. */}
+            <Route path="organize" element={<Navigate to="/saved" replace/>}/>
+            <Route path="vault" element={<Navigate to="/saved" replace/>}/>
           </Route>
           <Route path="*" element={<Navigate to="/" replace/>}/>
         </Routes>

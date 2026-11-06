@@ -62,92 +62,173 @@ afterEach(async () => {
 });
 
 /**
- * Two folders, each with a collection of its own.
+ * Two folders, and a sub-folder inside each of them.
+ *
+ * The folders are made here rather than taken from the list, because the
+ * default folder cannot be removed, and one of the tests removes a folder.
  */
 async function makeFolders(session: BrowserSession, organizationId: string) {
-  const folders = await call("/api/v1/vaults", { session, organizationId });
-  const list = folders.payload.data as unknown as { id: string; name: string }[];
-  const first = list[0]!;
-  /**
-   * A second folder is made, because a collection belongs to one folder and
-   * the test needs one that belongs to another.
-   */
+  const firstMade = await call("/api/v1/vaults", { method: "POST", session, organizationId, body: { name: "Research", slug: `research-${suffix}`, kind: "workspace", color: "#b8a4ed" } });
+  const first = String((firstMade.payload.data as { id: string }).id);
   const made = await call("/api/v1/vaults", { method: "POST", session, organizationId, body: { name: "Another folder", slug: `another-${suffix}`, kind: "workspace", color: "#b8a4ed" } });
-  const second = { id: String((made.payload.data as { id: string }).id) };
-  const collection = await call("/api/v1/collections", { method: "POST", session, organizationId, body: { vaultId: first.id, name: "Reading", color: "#b8a4ed" } });
-  const other = await call("/api/v1/collections", { method: "POST", session, organizationId, body: { vaultId: second.id, name: "Elsewhere", color: "#b8a4ed" } });
+  const second = String((made.payload.data as { id: string }).id);
+  const inside = await call("/api/v1/vaults", { method: "POST", session, organizationId, body: { name: "Reading", parentId: first, kind: "workspace", color: "#b8a4ed" } });
+  const other = await call("/api/v1/vaults", { method: "POST", session, organizationId, body: { name: "Elsewhere", parentId: second, kind: "workspace", color: "#b8a4ed" } });
   return {
-    first: first.id,
-    second: second.id,
-    collectionId: String((collection.payload.data as { id: string }).id),
-    otherCollectionId: String((other.payload.data as { id: string }).id),
+    first,
+    second,
+    subfolderId: String((inside.payload.data as { id: string }).id),
+    otherSubfolderId: String((other.payload.data as { id: string }).id),
   };
 }
 
 describe("choosing where an item goes", () => {
-  test("a capture goes into the collection that was chosen", async () => {
-    const session = await register("Capture Admin", `collection-capture-${suffix}@example.com`);
+  test("a capture goes into the sub-folder that was chosen", async () => {
+    const session = await register("Capture Admin", `folder-capture-${suffix}@example.com`);
     const organizationId = await workspace(session);
-    const { first, collectionId } = await makeFolders(session, organizationId);
+    const { first, subfolderId } = await makeFolders(session, organizationId);
 
     const created = await call("/api/v1/captures", {
       method: "POST",
       session,
       organizationId,
-      idempotencyKey: `collection-capture-${suffix}`,
+      idempotencyKey: `folder-capture-${suffix}`,
       body: {
         selectedText: "A piece of a web page worth keeping.",
         source: { url: "https://example.com/one", title: "One", domain: "example.com" },
-        vaultId: first,
-        collectionIds: [collectionId],
+        vaultId: subfolderId,
       },
     });
     expect(created.response.status).toBe(201);
     const recordId = String((created.payload.data as { record: { id: string } }).record.id);
 
     const detail = await call(`/api/v1/saved-records/${recordId}`, { session, organizationId });
-    const collections = (detail.payload.data as { collections: { id: string }[] }).collections;
-    expect(collections.map((collection) => collection.id)).toEqual([collectionId]);
+    expect((detail.payload.data as { vaultId: string }).vaultId).toBe(subfolderId);
+    expect(first).not.toBe(subfolderId);
   }, 30_000);
 
-  test("a collection of another folder is refused", async () => {
-    const session = await register("Refuse Admin", `collection-refuse-${suffix}@example.com`);
+  test("a sub-folder of another workspace is refused", async () => {
+    const session = await register("Refuse Admin", `folder-refuse-${suffix}@example.com`);
     const organizationId = await workspace(session);
-    const { first, otherCollectionId } = await makeFolders(session, organizationId);
+    const { subfolderId } = await makeFolders(session, organizationId);
 
-    const created = await call("/api/v1/captures", {
-      method: "POST",
-      session,
-      organizationId,
-      idempotencyKey: `collection-refuse-${suffix}`,
-      body: {
-        selectedText: "A piece of a web page worth keeping.",
-        source: { url: "https://example.com/one", title: "One", domain: "example.com" },
-        vaultId: first,
-        collectionIds: [otherCollectionId],
-      },
-    });
-    expect(created.response.status).toBe(400);
-    expect(created.payload.error?.code).toBe("INVALID_COLLECTION");
+    const other = await register("Other Admin", `folder-other-${suffix}@example.com`);
+    const otherOrganizationId = await workspace(other);
+    const otherFolders = await call("/api/v1/vaults", { session: other, organizationId: otherOrganizationId });
+    const otherFolderId = String((otherFolders.payload.data as unknown as { id: string }[])[0]!.id);
+
+    const made = await call("/api/v1/vaults", { method: "POST", session: other, organizationId: otherOrganizationId, body: { name: "Borrowed", parentId: subfolderId, kind: "workspace", color: "#b8a4ed" } });
+    expect(made.response.status).toBe(400);
+    expect(made.payload.error?.code).toBe("INVALID_VAULT");
+    expect(otherFolderId).not.toBe(subfolderId);
   }, 30_000);
 
-  test("an item made by hand goes into the collection that was chosen", async () => {
-    const session = await register("Manual Admin", `collection-manual-${suffix}@example.com`);
+  test("an item made by hand goes into the sub-folder that was chosen", async () => {
+    const session = await register("Manual Admin", `folder-manual-${suffix}@example.com`);
     const organizationId = await workspace(session);
-    const { first, collectionId } = await makeFolders(session, organizationId);
+    const { subfolderId } = await makeFolders(session, organizationId);
 
     const created = await call("/api/v1/saved-records", {
       method: "POST",
       session,
       organizationId,
-      idempotencyKey: `collection-manual-${suffix}`,
-      body: { recordType: "note", title: "Something worth keeping", vaultId: first, collectionIds: [collectionId] },
+      idempotencyKey: `folder-manual-${suffix}`,
+      body: { recordType: "note", title: "Something worth keeping", vaultId: subfolderId },
     });
     expect(created.response.status).toBe(201);
     const recordId = String((created.payload.data as { id: string }).id);
 
     const detail = await call(`/api/v1/saved-records/${recordId}`, { session, organizationId });
-    const collections = (detail.payload.data as { collections: { id: string }[] }).collections;
-    expect(collections.map((collection) => collection.id)).toEqual([collectionId]);
+    expect((detail.payload.data as { vaultId: string }).vaultId).toBe(subfolderId);
+  }, 30_000);
+
+  test("a folder shows the items of the folders under it", async () => {
+    const session = await register("Tree Admin", `folder-tree-${suffix}@example.com`);
+    const organizationId = await workspace(session);
+    const { first, subfolderId } = await makeFolders(session, organizationId);
+
+    const created = await call("/api/v1/saved-records", {
+      method: "POST",
+      session,
+      organizationId,
+      idempotencyKey: `folder-tree-${suffix}`,
+      body: { recordType: "note", title: "Something worth keeping", vaultId: subfolderId },
+    });
+    expect(created.response.status).toBe(201);
+
+    const listed = await call(`/api/v1/saved-records?vaultId=${first}`, { session, organizationId });
+    const items = (listed.payload.data as { items: { id: string }[] }).items;
+    expect(items.length).toBe(1);
+
+    const counted = await call("/api/v1/vaults", { session, organizationId });
+    const folders = counted.payload.data as unknown as { id: string; itemCount?: number }[];
+    const parent = folders.find((folder) => folder.id === first);
+    expect(parent?.itemCount).toBe(1);
+  }, 30_000);
+
+  test("removing a folder removes the folders under it", async () => {
+    const session = await register("Remove Admin", `folder-remove-${suffix}@example.com`);
+    const organizationId = await workspace(session);
+    const { first, subfolderId } = await makeFolders(session, organizationId);
+
+    const created = await call("/api/v1/saved-records", {
+      method: "POST",
+      session,
+      organizationId,
+      idempotencyKey: `folder-remove-${suffix}`,
+      body: { recordType: "note", title: "Something worth keeping", vaultId: subfolderId },
+    });
+    expect(created.response.status).toBe(201);
+
+    const removed = await call(`/api/v1/vaults/${first}`, { method: "DELETE", session, organizationId });
+    expect(removed.response.status).toBe(200);
+
+    const folders = await call("/api/v1/vaults", { session, organizationId });
+    const remaining = (folders.payload.data as unknown as { id: string }[]).map((folder) => folder.id);
+    expect(remaining).not.toContain(subfolderId);
+    expect(remaining).not.toContain(first);
+  }, 30_000);
+
+  test("a tag added to a folder is put on the items of that folder", async () => {
+    const session = await register("Tag Admin", `folder-tag-${suffix}@example.com`);
+    const organizationId = await workspace(session);
+    const { first, subfolderId } = await makeFolders(session, organizationId);
+
+    const created = await call("/api/v1/saved-records", {
+      method: "POST",
+      session,
+      organizationId,
+      idempotencyKey: `folder-tag-${suffix}`,
+      body: { recordType: "note", title: "Something worth keeping", vaultId: first },
+    });
+    expect(created.response.status).toBe(201);
+    const recordId = String((created.payload.data as { id: string }).id);
+
+    const tagged = await call(`/api/v1/vaults/${first}/tags`, { method: "POST", session, organizationId, body: { name: "research" } });
+    expect(tagged.response.status).toBe(200);
+
+    const detail = await call(`/api/v1/saved-records/${recordId}`, { session, organizationId });
+    const tags = (detail.payload.data as { tags: { name: string }[] }).tags;
+    expect(tags.map((tag) => tag.name)).toContain("research");
+
+    // Verify folder tags are included in vault list
+    const vaultsList = await call("/api/v1/vaults", { session, organizationId });
+    const folderWithTag = (vaultsList.payload.data as unknown as { id: string; tags: { id: string; name: string }[] }[]).find((f) => f.id === first);
+    expect(folderWithTag?.tags.map((t) => t.name)).toContain("research");
+
+    // Verify tagging an empty subfolder works and appears in listTags
+    const subfolderTagged = await call(`/api/v1/vaults/${subfolderId}/tags`, { method: "POST", session, organizationId, body: { name: "subtag" } });
+    expect(subfolderTagged.response.status).toBe(200);
+    const subfolderTags = await call(`/api/v1/tags?vaultId=${subfolderId}`, { session, organizationId });
+    expect(subfolderTags.response.status).toBe(200);
+    const subfolderTagNames = (subfolderTags.payload.data as unknown as { name: string }[]).map((t) => t.name);
+    expect(subfolderTagNames).toContain("subtag");
+
+    // Verify untagging the subfolder
+    const subTagId = (subfolderTagged.payload.data as { id: string }).id;
+    const untagged = await call(`/api/v1/vaults/${subfolderId}/tags/${subTagId}`, { method: "DELETE", session, organizationId });
+    expect(untagged.response.status).toBe(200);
+    const subfolderTagsAfter = await call(`/api/v1/tags?vaultId=${subfolderId}`, { session, organizationId });
+    expect((subfolderTagsAfter.payload.data as unknown as { name: string }[]).map((t) => t.name)).not.toContain("subtag");
   }, 30_000);
 });

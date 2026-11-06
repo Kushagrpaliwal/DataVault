@@ -32,16 +32,14 @@ try {
   await page.getByRole("heading", { name: "Saved", exact: true }).waitFor();
   await page.screenshot({ path: "test-results/data-vault-saved.png", fullPage: true });
 
-  await page.goto(`${baseUrl}/organize`, { waitUntil: "networkidle" });
-  await page.getByRole("heading", { name: "Organize", exact: true }).waitFor();
-  await page.screenshot({ path: "test-results/data-vault-organize.png", fullPage: true });
-
   await page.goto(`${baseUrl}/settings`, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: "Settings", exact: true }).waitFor();
 
   // The old paths must still land somewhere useful.
   await page.goto(`${baseUrl}/vault`, { waitUntil: "networkidle" });
-  await page.waitForURL(`${baseUrl}/organize`, { timeout: 10_000 });
+  await page.waitForURL(`${baseUrl}/saved`, { timeout: 10_000 });
+  await page.goto(`${baseUrl}/organize`, { waitUntil: "networkidle" });
+  await page.waitForURL(`${baseUrl}/saved`, { timeout: 10_000 });
   await page.goto(`${baseUrl}/saved-data`, { waitUntil: "networkidle" });
   await page.waitForURL(`${baseUrl}/saved`, { timeout: 10_000 });
 

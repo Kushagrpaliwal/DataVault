@@ -1,13 +1,13 @@
 import { Elysia } from "elysia";
-import { collectionCreateSchema, collectionPatchSchema, itemOrganizationSchema, tagCreateSchema, tagPatchSchema, uuidSchema, vaultCreateSchema, vaultPatchSchema } from "@data-vault/schemas";
+import { folderTagSchema, itemOrganizationSchema, tagCreateSchema, tagPatchSchema, uuidSchema, vaultCreateSchema, vaultPatchSchema } from "@data-vault/schemas";
 import type { ServerEnvironment } from "@data-vault/config";
 import type { DataVaultAuth } from "../auth/better-auth";
 import { getTenantContext } from "../auth/context";
 import { requireCsrf } from "../auth/csrf";
 import { success } from "../lib/http";
 import {
-  createCollection, createTag, createVault, deleteCollection, deleteTag, deleteVault,
-  listCollections, listTags, listVaults, organizeSavedRecord, updateCollection, updateTag, updateVault,
+  createTag, createVault, deleteTag, deleteVault,
+  listTags, listVaults, organizeSavedRecord, tagFolder, untagFolder, updateTag, updateVault,
 } from "../services/vaults";
 
 export function createVaultRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
@@ -16,10 +16,14 @@ export function createVaultRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
     .post("/api/v1/vaults", async ({ body, request, set }) => { await requireCsrf(request, auth, env); set.status = 201; return success(await createVault(await getTenantContext(request, auth, env, "settings.manage"), request, vaultCreateSchema.parse(body))); })
     .patch("/api/v1/vaults/:id", async ({ body, params, request }) => { await requireCsrf(request, auth, env); return success(await updateVault(await getTenantContext(request, auth, env, "settings.manage"), request, uuidSchema.parse(params.id), vaultPatchSchema.parse(body))); })
     .delete("/api/v1/vaults/:id", async ({ params, request }) => { await requireCsrf(request, auth, env); return success(await deleteVault(await getTenantContext(request, auth, env, "settings.manage"), request, uuidSchema.parse(params.id))); })
-    .get("/api/v1/vaults/:id/collections", async ({ params, request }) => success(await listCollections(await getTenantContext(request, auth, env, "captures.read"), uuidSchema.parse(params.id))))
-    .post("/api/v1/collections", async ({ body, request, set }) => { await requireCsrf(request, auth, env); set.status = 201; return success(await createCollection(await getTenantContext(request, auth, env, "captures.update"), request, collectionCreateSchema.parse(body))); })
-    .patch("/api/v1/collections/:id", async ({ body, params, request }) => { await requireCsrf(request, auth, env); return success(await updateCollection(await getTenantContext(request, auth, env, "captures.update"), request, uuidSchema.parse(params.id), collectionPatchSchema.parse(body))); })
-    .delete("/api/v1/collections/:id", async ({ params, request }) => { await requireCsrf(request, auth, env); return success(await deleteCollection(await getTenantContext(request, auth, env, "captures.update"), request, uuidSchema.parse(params.id))); })
+    /**
+     * A tag is put on a folder.
+     *
+     * The tag is made in the workspace, and put on the items of the folder,
+     * so that it shows up in the list of the tags of that folder at once.
+     */
+    .post("/api/v1/vaults/:id/tags", async ({ body, params, request }) => { await requireCsrf(request, auth, env); return success(await tagFolder(await getTenantContext(request, auth, env, "captures.update"), request, uuidSchema.parse(params.id), folderTagSchema.parse(body))); })
+    .delete("/api/v1/vaults/:id/tags/:tagId", async ({ params, request }) => { await requireCsrf(request, auth, env); return success(await untagFolder(await getTenantContext(request, auth, env, "captures.update"), request, uuidSchema.parse(params.id), uuidSchema.parse(params.tagId))); })
     .get("/api/v1/tags", async ({ request, query }) => {
       /**
        * The folder is optional.

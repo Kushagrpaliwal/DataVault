@@ -14,6 +14,8 @@
 export interface FolderOption {
   id: string;
   name: string;
+  /** The folder this one sits inside. Empty when it is at the top. */
+  parentId?: string | null | undefined;
   isDefault: boolean;
   /** How many saved items are in this folder. */
   itemCount?: number | undefined;

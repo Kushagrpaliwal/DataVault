@@ -26,7 +26,7 @@ export function Button({ asChild, className, variant, size, ...props }: ButtonPr
   return <Component className={cn(buttonVariants({ variant, size }), className)} {...props} />;
 }
 
-export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { ref?: React.Ref<HTMLInputElement> }) {
   return <input className={cn("h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm text-ink outline-none placeholder:text-muted focus:border-deep focus:ring-1 focus:ring-focus", className)} {...props} />;
 }
 

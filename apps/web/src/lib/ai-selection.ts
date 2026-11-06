@@ -17,7 +17,8 @@ export interface SelectionPayload {
 /**
  * The words of a node, without the marks.
  */
-function plainText(node: JSONContent): string {
+function plainText(node: JSONContent | null | undefined): string {
+  if (!node) return "";
   if (node.type === "text" && typeof node.text === "string") return node.text;
   if (!Array.isArray(node.content)) return "";
   return node.content.map(plainText).join("");
@@ -26,7 +27,8 @@ function plainText(node: JSONContent): string {
 /**
  * The pieces of web pages that are in a part of a doc.
  */
-function clipsIn(node: JSONContent, found: { clipId: string; text: string }[]): void {
+function clipsIn(node: JSONContent | null | undefined, found: { clipId: string; text: string }[]): void {
+  if (!node) return;
   if (node.type === "clip") {
     const clipId = typeof node.attrs?.clipId === "string" ? node.attrs.clipId : "";
     if (clipId) {
@@ -38,18 +40,32 @@ function clipsIn(node: JSONContent, found: { clipId: string; text: string }[]): 
 }
 
 /**
+ * The payload of a part of a doc.
+ *
+ * The editor gives nothing back for a range that covers no words, so the
+ * empty selection is a real thing and not an error.
+ */
+export function payloadFromJson(json: JSONContent | null | undefined): SelectionPayload {
+  if (!json) return { markdown: "", clips: [] };
+  const clips: { clipId: string; text: string }[] = [];
+  clipsIn(json, clips);
+  return { markdown: docToMarkdown(json), clips };
+}
+
+/**
  * The selection, as it is sent.
  *
  * The text is the selection as Markdown, so that the model sees the words
  * and not the marks of the editor. The pieces are collected beside it, so
  * that a piece the model puts back is the piece that was there.
+ *
+ * An empty selection is not an error. The editor gives nothing back for a
+ * range that covers no words, and the person may still be asking for
+ * something to be written from an instruction alone.
  */
 export function selectionPayload(editor: Editor, from: number, to: number): SelectionPayload {
   const slice = editor.state.doc.slice(from, to);
-  const json = slice.toJSON() as JSONContent;
-  const clips: { clipId: string; text: string }[] = [];
-  clipsIn(json, clips);
-  return { markdown: docToMarkdown(json), clips };
+  return payloadFromJson(slice.toJSON() as JSONContent | null);
 }
 
 /**
@@ -61,14 +77,35 @@ export function selectionPayload(editor: Editor, from: number, to: number): Sele
 export function clipNodes(editor: Editor, from: number, to: number): Map<string, JSONContent> {
   const slice = editor.state.doc.slice(from, to);
   const found = new Map<string, JSONContent>();
-  const walk = (node: JSONContent) => {
+  const walk = (node: JSONContent | null | undefined) => {
+    if (!node) return;
     if (node.type === "clip") {
       const clipId = typeof node.attrs?.clipId === "string" ? node.attrs.clipId : "";
       if (clipId) found.set(clipId, node);
     }
     if (Array.isArray(node.content)) for (const child of node.content) walk(child);
   };
-  walk(slice.toJSON() as JSONContent);
+  walk(slice.toJSON() as JSONContent | null);
+  return found;
+}
+
+/**
+ * Every piece of a web page that is in the doc, as the editor's own nodes.
+ *
+ * The chat answers about the whole doc, so an answer that quotes a piece of
+ * a web page can keep that piece as it was, wherever it came from.
+ */
+export function clipNodesInDoc(editor: Editor): Map<string, JSONContent> {
+  const found = new Map<string, JSONContent>();
+  const walk = (node: JSONContent | null | undefined) => {
+    if (!node) return;
+    if (node.type === "clip") {
+      const clipId = typeof node.attrs?.clipId === "string" ? node.attrs.clipId : "";
+      if (clipId) found.set(clipId, node);
+    }
+    if (Array.isArray(node.content)) for (const child of node.content) walk(child);
+  };
+  walk(editor.getJSON());
   return found;
 }
 

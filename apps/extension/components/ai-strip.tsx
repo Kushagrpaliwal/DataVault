@@ -1,7 +1,6 @@
-import { Lock, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@data-vault/ui";
 import { WEB_URL } from "../lib/api";
-import { describeAiFailure, useAiCredits } from "../lib/ai";
+import { describeAiFailure } from "../lib/ai";
 
 /**
  * A one-line summary of the free AI allowance.
@@ -9,53 +8,8 @@ import { describeAiFailure, useAiCredits } from "../lib/ai";
  * The words are deliberately plain. A user should never have to think about
  * a rate limit to understand why a button is greyed out.
  */
-export function AiCreditStrip({ onUseCredit }: { onUseCredit?: () => void }) {
-  const { status, loading } = useAiCredits();
-  if (loading || !status) return null;
-  if (!status.available) return null;
-
-  if (!status.emailVerified || !status.consented) {
-    return (
-      <div className="flex items-center gap-2 border-b border-line bg-soft px-4 py-2 text-xs text-strong">
-        <Lock className="size-3.5 shrink-0" />
-        <span className="min-w-0 flex-1">
-          {status.emailVerified
-            ? "Agree to send content to Google to use AI."
-            : "Confirm your email address to unlock AI credits."}
-        </span>
-        <button
-          type="button"
-          className="shrink-0 font-semibold underline"
-          onClick={() => void chrome.tabs.create({ url: `${WEB_URL}/settings` })}
-        >
-          Open settings
-        </button>
-      </div>
-    );
-  }
-
-  if (status.remaining <= 0) {
-    return (
-      <div className="flex items-center gap-2 border-b border-line bg-soft px-4 py-2 text-xs text-strong">
-        <Lock className="size-3.5 shrink-0" />
-        <span className="min-w-0 flex-1">No AI credits left today. They come back tomorrow.</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-2 border-b border-line px-4 py-2 text-xs text-strong">
-      <Sparkles className="size-3.5 shrink-0" />
-      <span className="min-w-0 flex-1">
-        {status.remaining} free AI {status.remaining === 1 ? "credit" : "credits"} left today
-      </span>
-      {onUseCredit ? (
-        <button type="button" className="flex shrink-0 items-center gap-1 font-semibold underline" onClick={onUseCredit}>
-          <Wand2 className="size-3.5" />Summarise
-        </button>
-      ) : null}
-    </div>
-  );
+export function AiCreditStrip() {
+  return null;
 }
 
 /**
@@ -86,7 +40,7 @@ export function AiConsentPrompt({ onAgreed, onDeclined }: { onAgreed: () => void
 /** A short, plain explanation of why an AI action could not run. */
 export function AiErrorNote({ message, onOpenWebsite }: { message: string; onOpenWebsite: boolean }) {
   return (
-    <div className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+    <div className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
       <p>{message}</p>
       {onOpenWebsite ? (
         <button

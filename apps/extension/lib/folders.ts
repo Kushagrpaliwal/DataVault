@@ -17,11 +17,34 @@ export async function listFolders(force = false): Promise<FolderOption[]> {
   const folders = vaults.map((vault: Vault) => ({
     id: vault.id,
     name: vault.name,
+    parentId: vault.parentId,
     isDefault: vault.isDefault,
     itemCount: vault.itemCount,
   }));
   cachedFolders = { folders, at: Date.now() };
   return folders;
+}
+
+/**
+ * The folders, with the folder they sit inside, so that a sub-folder can be
+ * shown under the folder it belongs to.
+ */
+export function folderDepths(folders: FolderOption[]): Map<string, number> {
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  const depths = new Map<string, number>();
+  const depthOf = (id: string, seen: Set<string>): number => {
+    const known = depths.get(id);
+    if (known !== undefined) return known;
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    const folder = byId.get(id);
+    const parentId = folder?.parentId;
+    const depth = parentId ? depthOf(parentId, seen) + 1 : 0;
+    depths.set(id, depth);
+    return depth;
+  };
+  for (const folder of folders) depthOf(folder.id, new Set());
+  return depths;
 }
 
 /**

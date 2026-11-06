@@ -97,9 +97,9 @@ The extension works in the workspace its sign-in was authorised for. The access 
 
 The extension's **Where things go** setting chooses the folder new items go into. A folder belongs to one workspace, so it is only used while the extension is still in that workspace.
 
-A collection is a group inside a folder, and the extension can put an item into one as well. The collections of the chosen folder are offered underneath it, and they are only offered when the folder has some. The collection that is chosen is remembered with the folder it belongs to, so it is only used while that folder is the one that is chosen. A collection that has been removed on the website is not used, because the server would refuse the save.
+The folders are a tree on the website, and a sub-folder is offered under the folder it belongs to. A sub-folder is chosen the same way as a folder, and the item goes into it directly.
 
-The item being reviewed in the panel starts with the folder and the collection that are set, and either can be changed for that item alone. The **Saved** tab can be narrowed to a folder, and to a collection inside that folder.
+The item being reviewed in the panel starts with the folder that is set, and it can be changed for that item alone. The **Saved** tab can be narrowed to a folder, which shows the items of the folders under it as well.
 
 ## Free AI credits in the extension
 
@@ -169,6 +169,12 @@ Chrome only lets the side panel be opened while the click or the key press is st
 The menu itself is only added to, never taken away and made again. Tearing it down and rebuilding it made it flicker, and the worker starts often now.
 
 When the panel cannot be opened at all, the review is put in a small window instead, so the item is never left waiting where nobody can see it.
+
+## Appearance
+
+The panel is light, dark, or the same as the browser. The choice is in the header of the popup and of the side panel, and again in the side panel's settings, and it is kept in the browser so it is still there the next time the panel is opened.
+
+The colours are turned over by a class on the page rather than by the browser's own setting. That is deliberate: someone whose browser is dark can still ask for the light theme, and the choice is theirs. The website keeps its own choice in the same way, in `localStorage`, so the two do not have to know about each other.
 
 ## When something goes wrong
 

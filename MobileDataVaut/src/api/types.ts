@@ -94,7 +94,6 @@ export interface RecordDetail extends SavedRecord {
     createdAt: string
   }>
   audit: Array<Record<string, unknown>>
-  collections: Array<{ id: string; name: string; color: string }>
   tags: Array<{ id: string; name: string; color: string }>
   evidence: Array<{
     id: string

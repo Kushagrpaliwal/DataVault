@@ -75,6 +75,53 @@ export const noteRevisionRestoreSchema = z.object({
 });
 
 /**
+ * Where the notes go when they are applied.
+ *
+ * "replace" writes them into the doc that was read. "subpage" leaves that
+ * doc exactly as it was and puts the notes in a new doc inside it.
+ */
+export const noteNotesTargetSchema = z.enum(["replace", "subpage"]);
+
+/**
+ * What is asked for when a whole doc is turned into notes.
+ *
+ * The answer is kept on the server, so applying it costs no second credit
+ * and writes exactly what was shown.
+ */
+export const noteNotesRequestSchema = z.object({
+  apply: z.boolean().default(false),
+  previewId: uuidSchema.optional(),
+  target: noteNotesTargetSchema.default("replace"),
+});
+
+/**
+ * A question asked about a doc.
+ *
+ * The question is what the person typed. The earlier turns are given so the
+ * answer can follow the conversation, and the selection is given so that a
+ * question can be about one part of the doc.
+ */
+export const noteChatSchema = z.object({
+  question: z.string().trim().min(1).max(1000),
+  history: z.array(z.object({
+    role: z.enum(["user", "assistant"]),
+    text: z.string().trim().max(8000),
+  })).max(20).default([]),
+  selection: z.object({
+    /** The selection, as Markdown. */
+    markdown: z.string().max(60_000).default(""),
+    /** The pieces of web pages that are in the selection. */
+    clips: z.array(z.object({
+      clipId: z.string().max(120),
+      text: z.string().max(20_000),
+    })).max(200).default([]),
+  }).optional(),
+});
+
+export type NoteNotesTarget = z.infer<typeof noteNotesTargetSchema>;
+export type NoteChatInput = z.infer<typeof noteChatSchema>;
+
+/**
  * What the AI is asked to do with a selection.
  *
  * The actions are the ones people ask for most: put the rough notes into
@@ -139,7 +186,7 @@ export type NoteAiSelectionInput = z.infer<typeof noteAiSelectionSchema>;
  * browser turns them into the editor's own shape.
  */
 export const aiBlockSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("heading"), level: z.number().int().min(1).max(4).default(2), text: z.string().max(300), added: z.boolean().optional() }),
+  z.object({ type: z.literal("heading"), level: z.number().int().min(1).max(3).default(2), text: z.string().max(300), added: z.boolean().optional() }),
   z.object({ type: z.literal("paragraph"), text: z.string().max(20_000), added: z.boolean().optional() }),
   z.object({ type: z.literal("bullets"), items: z.array(z.string().max(2_000)).max(200), added: z.boolean().optional() }),
   z.object({ type: z.literal("numbered"), items: z.array(z.string().max(2_000)).max(200), added: z.boolean().optional() }),

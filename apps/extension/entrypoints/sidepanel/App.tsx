@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { defaultCaptureExtractor } from "@data-vault/capture-parser";
 import type { AuthSession, AiSummaryResult, ParsedCapture, SavedRecord } from "@data-vault/types";
 import {
@@ -10,16 +10,16 @@ import {
 import { browser } from "wxt/browser";
 import { ExtensionHeader } from "../../components/header";
 import { LoggedOut } from "../../components/logged-out";
+import { ThemeOptions } from "../../components/theme-picker";
 import { RecordList } from "../../components/record-list";
-import { AiConsentPrompt, AiCreditStrip, AiErrorNote, describeAiFailure } from "../../components/ai-strip";
+import { AiConsentPrompt, AiErrorNote, describeAiFailure } from "../../components/ai-strip";
 import { DocsView } from "../../components/docs-view";
 import { ShortcutHelp } from "../../components/shortcut-help";
 import { clearExtensionErrors, readExtensionErrors, type RecordedError } from "../../lib/errors";
 import { recordAiConsent, summariseItem, useAiCredits } from "../../lib/ai";
 import { signOutExtension } from "../../lib/auth";
 import { WEB_URL, withOrganization } from "../../lib/api";
-import { currentFolderId, listFolders, rememberFolder, type FolderOption } from "../../lib/folders";
-import { listCollections, collectionForFolder, type CollectionOption } from "../../lib/collections";
+import { currentFolderId, folderDepths, listFolders, rememberFolder, type FolderOption } from "../../lib/folders";
 import {
   getAuth, getPreferences, getReviewCapture, getRetryCaptures, clearRetryCaptures, setPendingCapture, setPreferences,
   subscribeStorage, type ExtensionPreferences, type PageCaptureMode, type PendingCapture,
@@ -73,7 +73,6 @@ export function SidePanelApp() {
       ) : null}
       {authenticated === null ? <p className="p-8 text-center text-sm text-muted">Opening DataVault…</p> : null}
       {authenticated === true ? <>
-        <AiCreditStrip />
         {tab === "review" ? (
           <ReviewView
             onSaved={(record, sourceTabId) => {
@@ -96,14 +95,6 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
   const [parsed, setParsed] = useState<ParsedCapture>({ confidence: {} });
   const [folderId, setFolderId] = useState("");
   const [folders, setFolders] = useState<FolderOption[]>([]);
-  /**
-   * The collections inside the folder that is chosen.
-   *
-   * There is only a list of them when the folder has some, so the picker
-   * is only shown when there is something to choose.
-   */
-  const [collections, setCollections] = useState<CollectionOption[]>([]);
-  const [collectionId, setCollectionId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState<SavedCapture>();
@@ -125,14 +116,13 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
    */
   const folderChosen = useRef(false);
   /**
-   * The folder and the collection that were picked for this item.
+   * The folder that was picked for this item.
    *
    * The panel re-reads itself every few minutes when the sign-in is
    * renewed, so the choices are kept here and not thrown away while the
    * item is being looked at.
    */
   const folderRef = useRef("");
-  const collectionRef = useRef("");
 
   const load = async () => {
     const value = await getReviewCapture();
@@ -146,7 +136,6 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
        */
       folderChosen.current = false;
       folderRef.current = "";
-      collectionRef.current = "";
       setParsed(await defaultCaptureExtractor.extract({
         text: value.selectedText,
         pageTitle: value.pageTitle,
@@ -168,48 +157,15 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
         setFolderId(folderRef.current);
       }
     } catch { /* The folder list is optional. */ }
-    /**
-     * The collections belong to one folder, so the list of them follows
-     * the folder that is chosen.
-     */
-    try {
-      const inside = await listCollections(folderRef.current);
-      setCollections(inside);
-      if (!collectionRef.current) {
-        /**
-         * A new item starts with the collection that is set, the same way
-         * it starts with the folder that is set.
-         */
-        const remembered = (await collectionForFolder(folderRef.current, inside)) ?? "";
-        collectionRef.current = remembered;
-        setCollectionId(remembered);
-      } else if (!inside.some((collection) => collection.id === collectionRef.current)) {
-        collectionRef.current = "";
-        setCollectionId("");
-      }
-    } catch { /* The collection list is optional. */ }
   };
 
   /**
    * Choose the folder this item goes into.
-   *
-   * The collections belong to one folder, so the list of them is asked for
-   * again when the folder changes.
    */
   const chooseFolder = async (next: string) => {
     folderChosen.current = true;
     folderRef.current = next;
     setFolderId(next);
-    try {
-      const inside = await listCollections(next);
-      setCollections(inside);
-      if (!inside.some((collection) => collection.id === collectionRef.current)) {
-        collectionRef.current = "";
-        setCollectionId("");
-      }
-    } catch {
-      setCollections([]);
-    }
   };
 
   useEffect(() => { void load(); return subscribeStorage(() => void load()); }, []);
@@ -250,7 +206,6 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
           captureQuality: current.captureQuality,
           parsedData: { ...parsed, title: cleanTitle }, recordType: parsed.recordType ?? "other", confirmDuplicate: true,
           captureKind: current.contentKind === "page-text" ? "page-text" : current.contentKind === "page-info" ? "page" : "selection", tagNames: [], vaultId: folderId || undefined,
-          ...(collectionId ? { collectionIds: [collectionId] } : {}),
         }, current.idempotencyKey));
         const resultRecord = result.record as Record<string, unknown> | undefined;
         if (!resultRecord?.id) throw new Error("DataVault did not return the saved item.");
@@ -352,28 +307,6 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
           </p>
         </div>
 
-        {collections.length ? (
-          <div>
-            <Label htmlFor="capture-collection">Collection</Label>
-            <select
-              id="capture-collection"
-              className="h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm"
-              value={collectionId}
-              onChange={(event) => { collectionRef.current = event.target.value; setCollectionId(event.target.value); }}
-            >
-              <option value="">None</option>
-              {collections.map((collection) => (
-                <option key={collection.id} value={collection.id}>
-                  {collection.name}{typeof collection.itemCount === "number" ? ` (${collection.itemCount})` : ""}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs leading-5 text-muted">
-              A collection is a group inside the folder, like a sub-folder. The item goes into the one chosen here.
-            </p>
-          </div>
-        ) : null}
-
         <details open className="rounded-xl bg-soft p-3">
           <summary className="cursor-pointer text-xs font-semibold">
             {{ selection: "Selected text", "page-info": "Page information", "page-text": "Page text" }[pending.contentKind ?? "selection"]}
@@ -383,7 +316,7 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
         </details>
 
         {pending.captureQuality?.warnings?.length ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
             <strong>Worth checking</strong>
             <ul className="mt-1 list-disc pl-4">{pending.captureQuality.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
             <p className="mt-2">Have a look at the text and screenshot before you save it.</p>
@@ -391,7 +324,7 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
         ) : null}
 
         {pending.queueState === "retry" ? (
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-900">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
             <strong>Waiting to sync</strong>
             <p className="mt-1">This was not lost. DataVault will retry it as soon as the connection is back.</p>
             {pending.lastError ? <p className="mt-1 opacity-75">Last error: {pending.lastError}</p> : null}
@@ -419,7 +352,7 @@ function ReviewView({ onSaved }: { onSaved: (record: SavedCapture, sourceTabId?:
           </p>
         )}
 
-        {error ? <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+        {error ? <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</div> : null}
 
         <div className="grid grid-cols-2 gap-2">
           <Button variant="secondary" onClick={() => void discard()} disabled={saving}>Discard</Button>
@@ -444,7 +377,7 @@ async function screenshotFile(dataUrl: string) {
 function WaitingCard({ items, onRetry, onDiscard }: { items: PendingCapture[]; onRetry: () => void; onDiscard: () => void }) {
   if (!items.length) return null;
   return (
-    <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+    <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
       <p className="font-semibold">Waiting to sync ({items.length})</p>
       <p className="mt-1 text-xs leading-5">
         These were saved on your device but could not reach DataVault yet. Nothing has been lost.
@@ -478,13 +411,10 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
   const [folders, setFolders] = useState<FolderOption[]>([]);
   const [folderId, setFolderId] = useState("");
   /**
-   * The collection being looked at.
-   *
-   * A collection belongs to one folder, so the list of them follows the
-   * folder that is chosen.
+   * How deep each folder sits, so that a sub-folder is shown under the
+   * folder it belongs to.
    */
-  const [collections, setCollections] = useState<CollectionOption[]>([]);
-  const [collectionId, setCollectionId] = useState("");
+  const depths = useMemo(() => folderDepths(folders), [folders]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebounced(term.trim()), 250);
@@ -495,21 +425,6 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
     void listFolders().then(setFolders).catch(() => undefined);
   }, []);
 
-  /**
-   * The collections of the folder that is chosen.
-   *
-   * The list is asked for again when the folder changes, so a collection
-   * that is not in the folder any more is never chosen.
-   */
-  useEffect(() => {
-    void listCollections(folderId || undefined)
-      .then((inside) => {
-        setCollections(inside);
-        setCollectionId((current) => (inside.some((collection) => collection.id === current) ? current : ""));
-      })
-      .catch(() => setCollections([]));
-  }, [folderId]);
-
   useEffect(() => {
     setRecords(undefined);
     /**
@@ -518,10 +433,10 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
      * The panel used to hide anything saved on the website, which made the
      * list look empty even when there was plenty to read.
      */
-    void withOrganization((api) => api.listSavedRecords({ q: debounced || undefined, limit: 30, vaultId: folderId || undefined, collectionId: collectionId || undefined }))
+    void withOrganization((api) => api.listSavedRecords({ q: debounced || undefined, limit: 30, vaultId: folderId || undefined }))
       .then((data) => setRecords(data.items))
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not load your saved items."));
-  }, [refreshKey, debounced, folderId, collectionId]);
+  }, [refreshKey, debounced, folderId]);
 
   const remove = async (record: SavedRecord) => {
     if (!window.confirm(`Move “${record.title}” to Trash? You can restore it later from the DataVault website.`)) return;
@@ -558,35 +473,14 @@ function SavedView({ refreshKey }: { refreshKey: number }) {
               <option value="">All folders</option>
               {folders.map((folder) => (
                 <option key={folder.id} value={folder.id}>
-                  {folder.name}{typeof folder.itemCount === "number" ? ` (${folder.itemCount})` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
-        {collections.length ? (
-          <div>
-            <label htmlFor="saved-collection" className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.13em] text-muted">
-              <FolderOpen className="size-3.5" />
-              Collection
-            </label>
-            <select
-              id="saved-collection"
-              className="mt-2 h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm"
-              value={collectionId}
-              onChange={(event) => setCollectionId(event.target.value)}
-            >
-              <option value="">All collections</option>
-              {collections.map((collection) => (
-                <option key={collection.id} value={collection.id}>
-                  {collection.name}{typeof collection.itemCount === "number" ? ` (${collection.itemCount})` : ""}
+                  {`${"— ".repeat(depths.get(folder.id) ?? 0)}${folder.name}${typeof folder.itemCount === "number" ? ` (${folder.itemCount})` : ""}`}
                 </option>
               ))}
             </select>
           </div>
         ) : null}
       </div>
-      {error ? <p className="mx-4 mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="mx-4 mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p> : null}
       <RecordList
         records={records}
         loading={!records && !error}
@@ -640,7 +534,9 @@ function QuickDetail({ record, onBack, onDeleted }: { record: SavedRecord; onBac
     await summarise();
   };
 
-  const aiReady = status?.available && status.emailVerified && status.consented && status.remaining > 0;
+  const aiReady = Boolean(
+    status?.available && (status.ownConnection ? status.ownConnection.keyReadable !== false : true)
+  );
 
   return (
     <div className="p-4">
@@ -692,7 +588,7 @@ function QuickDetail({ record, onBack, onDeleted }: { record: SavedRecord; onBac
       <Button className="mt-4 w-full" variant="secondary" onClick={() => void browser.tabs.create({ url: `${WEB_URL}/saved/${record.id}` })}>
         Open in DataVault<ExternalLink className="size-4" />
       </Button>
-      {onDeleted ? <Button className="mt-2 w-full text-red-700" variant="ghost" onClick={onDeleted}>Move to Trash</Button> : null}
+      {onDeleted ? <Button className="mt-2 w-full text-red-700 dark:text-red-300" variant="ghost" onClick={onDeleted}>Move to Trash</Button> : null}
     </div>
   );
 }
@@ -701,7 +597,7 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
   const [session, setSession] = useState<AuthSession>();
   const [workspaceId, setWorkspaceId] = useState<string | undefined>();
   const [vaultOptions, setVaultOptions] = useState<FolderOption[]>([]);
-  const [preferences, setPreferenceState] = useState<ExtensionPreferences>({ quickSaveSelectedText: false, pageCaptureMode: "visible" });
+  const [preferences, setPreferenceState] = useState<ExtensionPreferences>({ quickSaveSelectedText: false, pageCaptureMode: "visible", theme: "system" });
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [errors, setErrors] = useState<RecordedError[]>([]);
   const credits = useAiCredits();
@@ -801,7 +697,7 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
         {session && !session.user.emailVerified ? (
           <div className="mt-4 rounded-xl bg-surface/10 p-3">
             <p className="text-xs font-semibold">Email address not confirmed</p>
-            <p className="mt-1 text-xs leading-5 text-white/70">Confirm it on the website to unlock AI credits. Everything else works either way.</p>
+            <p className="mt-1 text-xs leading-5 text-white/70">Confirm it on the website to keep your account secure. Everything else works either way.</p>
             <button
               type="button"
               className="mt-2 text-xs font-semibold underline"
@@ -814,31 +710,35 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
       </div>
 
       <div className="mt-4 rounded-2xl border bg-surface p-4 text-sm">
-        <h3 className="font-semibold">Free AI credits</h3>
-        {credits.status?.available ? (
-          <>
-            <p className="mt-2 text-xs leading-5 text-muted">
-              {credits.status.emailVerified && credits.status.consented
-                ? `${credits.status.remaining} of ${credits.status.allowance} left today. They come back when the day rolls over.`
-                : credits.status.reason}
-            </p>
-            {credits.status.reason && (!credits.status.emailVerified || !credits.status.consented) ? (
-              <button
-                type="button"
-                className="mt-2 text-xs font-semibold underline"
-                onClick={() => void browser.tabs.create({ url: `${WEB_URL}/settings` })}
-              >
-                Open DataVault
-              </button>
-            ) : null}
-          </>
+        <h3 className="font-semibold">AI (BYOK)</h3>
+        {credits.status?.ownConnection ? (
+          <p className="mt-2 text-xs leading-5 text-muted">
+            Connected: {credits.status.ownConnection.label} · {credits.status.ownConnection.model}
+          </p>
         ) : (
-          <p className="mt-2 text-xs leading-5 text-muted">AI features are not switched on for this server yet.</p>
+          <p className="mt-2 text-xs leading-5 text-muted">
+            Connect your model provider in DataVault Settings.
+          </p>
         )}
+        <button
+          type="button"
+          className="mt-2 text-xs font-semibold underline"
+          onClick={() => void browser.tabs.create({ url: `${WEB_URL}/settings` })}
+        >
+          Manage AI in Settings
+        </button>
+      </div>
+
+      <div className="mt-4 rounded-2xl border bg-surface p-4 text-sm">
+        <h3 className="font-semibold">Appearance</h3>
+        <p className="mt-1 text-xs leading-5 text-muted">
+          The panel can be read in the dark, or follow the setting of the browser.
+        </p>
+        <ThemeOptions className="mt-3" />
       </div>
 
       {errors.length ? (
-        <section className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+        <section className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-semibold">Something went wrong</h3>
             <button onClick={() => { void clearExtensionErrors().then(() => setErrors([])); }} className="text-xs underline">Clear</button>

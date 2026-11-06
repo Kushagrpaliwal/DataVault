@@ -139,14 +139,14 @@ describe("a key of their own", () => {
 
   test("a ciphertext cannot be moved to another person", async () => {
     const master = environment.aiKeyEncryptionKey!;
-    const sealed = await sealSecret(master, "person-one", "connection-one", "sk-secret");
+    const sealed = await sealSecret(master, "person-one", "connection-one", "sk-secret", "api.example.com");
     /**
      * The same ciphertext, read as though it belonged to another person or
      * another connection, is refused.
      */
     let failure: unknown;
     try {
-      await openSecret(master, "person-two", "connection-one", sealed);
+      await openSecret(master, "person-two", "connection-one", sealed, "api.example.com");
     } catch (caught) {
       failure = caught;
     }
@@ -155,7 +155,7 @@ describe("a key of their own", () => {
 
     let other: unknown;
     try {
-      await openSecret(master, "person-one", "connection-two", sealed);
+      await openSecret(master, "person-one", "connection-two", sealed, "api.example.com");
     } catch (caught) {
       other = caught;
     }
@@ -164,7 +164,88 @@ describe("a key of their own", () => {
     /**
      * And the right person and connection do read it back.
      */
-    expect(await openSecret(master, "person-one", "connection-one", sealed)).toBe("sk-secret");
+    expect(await openSecret(master, "person-one", "connection-one", sealed, "api.example.com")).toBe("sk-secret");
+  });
+
+  test("a key that was given for one host will not open for another", async () => {
+    const master = environment.aiKeyEncryptionKey!;
+    const sealed = await sealSecret(master, "person-one", "connection-one", "sk-secret", "api.example.com");
+
+    /**
+     * The address of a connection can be changed by whoever has the
+     * session. The key is tied to the host it was given for, so it does not
+     * open for the new one, and so it is never sent there.
+     */
+    let failure: unknown;
+    try {
+      await openSecret(master, "person-one", "connection-one", sealed, "attacker.example.com");
+    } catch (caught) {
+      failure = caught;
+    }
+    expect(failure).toBeTruthy();
+    expect((failure as { code?: string }).code).toBe("AI_KEY_UNREADABLE");
+
+    /**
+     * The same host is the same host, whichever way it is written.
+     */
+    expect(await openSecret(master, "person-one", "connection-one", sealed, "API.Example.com")).toBe("sk-secret");
+  });
+
+  test("moving a connection to another address needs the key again", async () => {
+    const session = await register("Move Admin", `move-${suffix}@example.com`);
+    const organizationId = await workspace(session);
+
+    const created = await call("/api/v1/ai/connections", {
+      method: "POST",
+      session,
+      organizationId,
+      body: { label: "My key", kind: "openai-compatible", preset: "openai", baseUrl: "https://api.example.com/v1", model: "gpt-test", apiKey: "sk-secret-1234" },
+    });
+    expect(created.response.status).toBe(201);
+    const id = String((created.payload.data as { id: string }).id);
+
+    /**
+     * The address cannot be pointed somewhere else while the key is kept.
+     */
+    const moved = await call(`/api/v1/ai/connections/${id}`, {
+      method: "PATCH",
+      session,
+      organizationId,
+      body: { baseUrl: "https://attacker.example.com/v1" },
+    });
+    expect(moved.response.status).toBe(400);
+    expect(moved.payload.error?.code).toBe("AI_KEY_REQUIRED_FOR_NEW_ADDRESS");
+
+    /**
+     * The address that is kept is the one that was given.
+     */
+    const listed = await call("/api/v1/ai/connections", { session, organizationId });
+    expect((listed.payload.data as unknown as { baseUrl: string }[])[0]?.baseUrl).toBe("https://api.example.com/v1");
+  });
+
+  test("the key is not sent to a host it was not given for", async () => {
+    const session = await register("Host Admin", `host-${suffix}@example.com`);
+    const organizationId = await workspace(session);
+
+    const created = await call("/api/v1/ai/connections", {
+      method: "POST",
+      session,
+      organizationId,
+      body: { label: "My key", kind: "openai-compatible", preset: "openai", baseUrl: "https://api.example.com/v1", model: "gpt-test", apiKey: "sk-secret-1234" },
+    });
+    const id = String((created.payload.data as { id: string }).id);
+
+    /**
+     * The key is moved with the address, and the key is given again.
+     */
+    const moved = await call(`/api/v1/ai/connections/${id}`, {
+      method: "PATCH",
+      session,
+      organizationId,
+      body: { baseUrl: "https://other.example.com/v1", apiKey: "sk-secret-5678" },
+    });
+    expect(moved.response.status).toBe(200);
+    expect((moved.payload.data as { keyHint: string }).keyHint).toBe("5678");
   });
 
   test("one person cannot read the connection of another", async () => {
@@ -265,6 +346,98 @@ describe("a key of their own", () => {
       });
       expect(result.response.status).toBe(200);
       expect((result.payload.data as { models: string[] }).models).toEqual(["model-one", "model-two"]);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  test("the check of a saved connection says whether the key works and what it can use", async () => {
+    const session = await register("Check Admin", `check-${suffix}@example.com`);
+    const organizationId = await workspace(session);
+
+    const created = await call("/api/v1/ai/connections", {
+      method: "POST",
+      session,
+      organizationId,
+      body: { label: "My key", kind: "openai-compatible", preset: "openai", baseUrl: "https://1.1.1.1/v1", model: "model-one", apiKey: "sk-test" },
+    });
+    expect(created.response.status).toBe(201);
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: unknown) => {
+      const url = String(input);
+      /**
+       * The list of models, and then the model that is asked to say one
+       * word.
+       */
+      if (url.includes("/models")) return new Response(JSON.stringify({ data: [{ id: "model-one" }, { id: "model-two" }] }), { status: 200, headers: { "content-type": "application/json" } });
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ ok: true }) } }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    try {
+      const result = await call("/api/v1/ai/connections/test", {
+        method: "POST",
+        session,
+        organizationId,
+        body: { id: String((created.payload.data as { id: string }).id) },
+      });
+      expect(result.response.status).toBe(200);
+      const check = result.payload.data as { keyAccepted: boolean; models: string[]; model: string | null; modelAnswered: boolean | null; detail: string };
+      expect(check.keyAccepted).toBe(true);
+      expect(check.models).toEqual(["model-one", "model-two"]);
+      expect(check.model).toBe("model-one");
+      expect(check.modelAnswered).toBe(true);
+      expect(check.detail).toContain("Your key works");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  test("a key that is refused is said to be refused", async () => {
+    const session = await register("Refused Admin", `refused-${suffix}@example.com`);
+    const organizationId = await workspace(session);
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = mockFetch({ error: { message: "Invalid API key" } }, 401);
+    try {
+      const result = await call("/api/v1/ai/connections/test", {
+        method: "POST",
+        session,
+        organizationId,
+        body: { kind: "openai-compatible", baseUrl: "https://1.1.1.1/v1", model: "model-one", apiKey: "sk-wrong" },
+      });
+      expect(result.response.status).toBe(502);
+      expect(result.payload.error?.code).toBe("AI_PROVIDER_REFUSED");
+      expect(result.payload.error?.message).toContain("refused the key");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  test("the models list filters out non-chat models like embeddings, dall-e, and tts", async () => {
+    const session = await register("Filter Admin", `filter-${suffix}@example.com`);
+    const organizationId = await workspace(session);
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = mockFetch({
+      data: [
+        { id: "gpt-4o" },
+        { id: "text-embedding-3-small" },
+        { id: "dall-e-3" },
+        { id: "tts-1" },
+        { id: "gpt-4o-mini" },
+        { id: "whisper-1" },
+      ],
+    });
+    try {
+      const result = await call("/api/v1/ai/connections/test", {
+        method: "POST",
+        session,
+        organizationId,
+        body: { kind: "openai-compatible", baseUrl: "https://1.1.1.1/v1", apiKey: "sk-test" },
+      });
+      expect(result.response.status).toBe(200);
+      const data = result.payload.data as { models: string[] };
+      expect(data.models).toEqual(["gpt-4o", "gpt-4o-mini"]);
     } finally {
       globalThis.fetch = realFetch;
     }

@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { App } from './App.js'
 import { SessionProvider } from '../../auth/session.js'
+import { ThemeProvider } from '../../theme.js'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -13,7 +14,9 @@ const queryClient = new QueryClient({
 root.render(
   <QueryClientProvider client={queryClient}>
     <SessionProvider>
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </SessionProvider>
   </QueryClientProvider>,
 )

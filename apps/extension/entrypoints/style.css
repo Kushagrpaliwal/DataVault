@@ -7,9 +7,12 @@
  * The colours of the panel.
  *
  * They are named rather than written out, so that the whole panel can be
- * turned over at once. The panel follows the browser: when the browser is
- * in the dark theme, so is the panel.
+ * turned over at once. The class on the page is what turns it over, so a
+ * person who asks for the light theme gets it even when the browser is
+ * dark.
  */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --canvas: #fffaf0;
   --surface: #fffdf8;
@@ -30,24 +33,28 @@
   --danger: #b3261e;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --canvas: #121110;
-    --surface: #1b1a18;
-    --soft: #242220;
-    --hover: #2c2926;
-    --ink: #f3efe7;
-    --strong: #e6e1d8;
-    --muted: #a49e95;
-    --line: #35322c;
-    --line-soft: #2b2823;
-    --line-strong: #45413a;
-    --deep: #1c3d39;
-    --on-deep: #8fd8c9;
-    --focus: #7fd4c4;
-    --link: #8ab4f8;
-    --danger: #f2b8b5;
-  }
+/**
+ * The dark theme.
+ *
+ * The rule comes after the light one so that it wins, and the class is put
+ * on by the panel itself rather than by the browser's own setting.
+ */
+.dark {
+  --canvas: #121110;
+  --surface: #1b1a18;
+  --soft: #242220;
+  --hover: #2c2926;
+  --ink: #f3efe7;
+  --strong: #e6e1d8;
+  --muted: #a49e95;
+  --line: #35322c;
+  --line-soft: #2b2823;
+  --line-strong: #45413a;
+  --deep: #1c3d39;
+  --on-deep: #8fd8c9;
+  --focus: #7fd4c4;
+  --link: #8ab4f8;
+  --danger: #f2b8b5;
 }
 
 @theme inline {

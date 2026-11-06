@@ -171,7 +171,7 @@ export function DocsView({ onSignedOut }: { onSignedOut?: () => void }) {
         </details>
       ) : null}
 
-      {error ? <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p> : null}
 
       <div className="mt-5">
         <div className="relative">

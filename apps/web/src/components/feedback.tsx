@@ -28,7 +28,21 @@ export function useToast() { const value = useContext(ToastContext); if (!value)
  * and tabbing past the last control comes back to the first one. The
  * control that opened the panel gets the focus back when it closes.
  */
-export function Modal({ open, title, children, onClose, width = "max-w-xl" }: { open: boolean; title: string; children: ReactNode; onClose: () => void; width?: string }) {
+export function Modal({
+  open,
+  title,
+  subtitle,
+  children,
+  onClose,
+  width = "max-w-xl",
+}: {
+  open: boolean;
+  title: string;
+  subtitle?: ReactNode;
+  children: ReactNode;
+  onClose: () => void;
+  width?: string;
+}) {
   const panel = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLElement | null>(null);
 
@@ -59,7 +73,12 @@ export function Modal({ open, title, children, onClose, width = "max-w-xl" }: { 
     };
     document.addEventListener("keydown", onKeyDown, true);
     const timer = window.setTimeout(() => {
-      panel.current?.querySelector<HTMLElement>('button, input, textarea, select, a[href]')?.focus();
+      const autoFocusEl = panel.current?.querySelector<HTMLElement>("[autofocus]");
+      if (autoFocusEl) {
+        autoFocusEl.focus();
+      } else {
+        panel.current?.querySelector<HTMLElement>("input:not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), a[href]")?.focus();
+      }
     }, 0);
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
@@ -69,5 +88,33 @@ export function Modal({ open, title, children, onClose, width = "max-w-xl" }: { 
   }, [open, onClose]);
 
   if (!open) return null;
-  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-4" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><div ref={panel} className={cn("max-h-[90vh] w-full overflow-y-auto rounded-3xl border border-line bg-canvas p-6 shadow-xl", width)}><div className="mb-5 flex items-center justify-between"><h2 id="modal-title" className="text-xl font-semibold">{title}</h2><Button variant="ghost" size="sm" aria-label="Close" onClick={onClose}><X className="size-4" /></Button></div>{children}</div></div>;
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/35 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={panel}
+        className={cn("max-h-[90vh] w-full overflow-y-auto rounded-3xl border border-line bg-canvas p-6 shadow-xl", width)}
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <h2 id="modal-title" className="text-xl font-semibold">
+              {title}
+            </h2>
+            {subtitle ? <p className="mt-1 text-sm text-muted">{subtitle}</p> : null}
+          </div>
+          <Button variant="ghost" size="sm" aria-label="Close" onClick={onClose}>
+            <X className="size-4" />
+          </Button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
 }

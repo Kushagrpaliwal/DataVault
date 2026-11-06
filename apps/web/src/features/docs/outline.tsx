@@ -8,12 +8,14 @@ interface OutlineEntry {
   pos: number;
 }
 
+interface DocOutlineProps {
+  editor: Editor | null;
+}
+
 /**
- * The list of headings in the doc.
- *
- * Clicking one moves the page to that heading.
+ * The list of headings in the doc and stats.
  */
-export function DocOutline({ editor }: { editor: Editor | null }) {
+export function DocOutline({ editor }: DocOutlineProps) {
   const [entries, setEntries] = useState<OutlineEntry[]>([]);
   const [words, setWords] = useState(0);
 

@@ -7,7 +7,7 @@ import { mapSavedRecord } from "./records";
  * The overview of a workspace.
  *
  * It only counts what a researcher would ask about: how much has been
- * collected, where it came from, and how the collection is spread out.
+ * collected, where it came from, and how it is spread out.
  */
 export async function getDashboard(context: TenantContext) {
   return withTenant(context.organizationId, async (tx) => {

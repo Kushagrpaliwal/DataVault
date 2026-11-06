@@ -55,11 +55,4 @@ export const captureCreateSchema = z.object({
   vaultId: uuidSchema.optional(),
   captureKind: z.enum(CAPTURE_KINDS).default("selection"),
   tagNames: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
-  /**
-   * The collections the item goes into.
-   *
-   * A collection belongs to one folder, so every collection named here has
-   * to belong to the folder the item is in.
-   */
-  collectionIds: z.array(uuidSchema).max(20).default([]),
 });

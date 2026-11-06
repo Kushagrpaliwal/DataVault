@@ -1,10 +1,10 @@
 import type {
   AiActivityEntry, AiClassificationResult, AiConnection, AiCreditStatus, AiExtractionResult, AiRunResult, AiSummaryResult,
-  ApiResponse, AuthMethods, AuthSession, CaptureCreateInput, ExtensionSession, ExtensionTokenSet, Note, NoteClipResult,
-  NoteRevision, NoteSummary, NoteWriteUpSection, Organization, PaginationResult, SavedRecord, SearchResult, SemanticResult, Vault,
-  VaultCollection, VaultCreateInput, VaultTag,
+  ApiResponse, AuthMethods, AuthSession, CaptureCreateInput, ExtensionSession, ExtensionTokenSet, Note, NoteChatTurn, NoteClipResult,
+  NoteNotesSection, NoteRevision, NoteSummary, NoteSummaryDetail, Organization, PaginationResult, SavedRecord, SearchResult, SemanticResult, Vault,
+  VaultCreateInput, VaultTag,
 } from "@data-vault/types";
-import type { AiBlock, NoteAiAction, NoteAiContextMode } from "@data-vault/types";
+import type { AiBlock, NoteAiAction, NoteAiContextMode, NoteNotesTarget } from "@data-vault/types";
 
 export class DataVaultApiError extends Error {
   constructor(public readonly code: string, message: string, public readonly status: number, public readonly details?: unknown) {
@@ -134,7 +134,7 @@ export class DataVaultApiClient {
   patchAiConnection = (id: string, body: { label?: string; model?: string; baseUrl?: string; isDefault?: boolean; apiKey?: string }) => this.request<AiConnection>(`/api/v1/ai/connections/${id}`, { method: "PATCH", body: JSON.stringify(body) });
   deleteAiConnection = (id: string) => this.request<{ id: string }>(`/api/v1/ai/connections/${id}`, { method: "DELETE", body: "{}" });
   /** Try a provider and ask it which models it has. */
-  testAiConnection = (body: { id?: string; kind?: "openai-compatible" | "anthropic" | "gemini"; preset?: string; baseUrl?: string; model?: string; apiKey?: string }) => this.request<{ models: string[]; model: string | null }>("/api/v1/ai/connections/test", { method: "POST", body: JSON.stringify(body) });
+  testAiConnection = (body: { id?: string; kind?: "openai-compatible" | "anthropic" | "gemini"; preset?: string; baseUrl?: string; model?: string; apiKey?: string }) => this.request<{ keyAccepted: boolean; models: string[]; model: string | null; modelAnswered: boolean | null; detail: string }>("/api/v1/ai/connections/test", { method: "POST", body: JSON.stringify(body) });
   aiSummarize = (body: { recordId?: string; text?: string }, idempotencyKey: string = crypto.randomUUID()) => this.request<AiRunResult<AiSummaryResult>>("/api/v1/ai/summarize", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
   aiClassify = (body: { recordId?: string; text?: string }, idempotencyKey: string = crypto.randomUUID()) => this.request<AiRunResult<AiClassificationResult>>("/api/v1/ai/classify", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
   aiExtract = (body: { recordId?: string; text?: string }, idempotencyKey: string = crypto.randomUUID()) => this.request<AiRunResult<AiExtractionResult>>("/api/v1/ai/extract", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
@@ -152,17 +152,13 @@ export class DataVaultApiClient {
   updateSavedRecord = (id: string, body: Record<string, unknown>) => this.request<SavedRecord>(`/api/v1/saved-records/${id}`, { method: "PATCH", body: JSON.stringify(body) });
   archiveSavedRecord = (id: string) => this.request<void>(`/api/v1/saved-records/${id}/archive`, { method: "POST", body: "{}" });
   restoreSavedRecord = (id: string) => this.request<void>(`/api/v1/saved-records/${id}/restore`, { method: "POST", body: "{}" });
-  deleteSavedRecord = (id: string) => this.request<{ id: string }>(`/api/v1/saved-records/${id}`, { method: "DELETE" });
+  deleteSavedRecord = (id: string, options?: { permanent?: boolean }) => this.request<{ id: string }>(`/api/v1/saved-records/${id}${options?.permanent ? "?permanent=true" : ""}`, { method: "DELETE" });
   restoreTrashedRecord = (id: string) => this.request<SavedRecord>(`/api/v1/saved-records/${id}/trash/restore`, { method: "POST", body: "{}" });
   organizeSavedRecord = (id: string, body: Record<string, unknown>) => this.request<SavedRecord>(`/api/v1/saved-records/${id}/organization`, { method: "PUT", body: JSON.stringify(body) });
   listVaults = () => this.request<Vault[]>("/api/v1/vaults");
   createVault = (body: VaultCreateInput) => this.request<Vault>("/api/v1/vaults", { method: "POST", body: JSON.stringify(body) });
   updateVault = (id: string, body: Record<string, unknown>) => this.request<Vault>(`/api/v1/vaults/${id}`, { method: "PATCH", body: JSON.stringify(body) });
   deleteVault = (id: string) => this.request<{ id: string }>(`/api/v1/vaults/${id}`, { method: "DELETE" });
-  listCollections = (vaultId: string) => this.request<VaultCollection[]>(`/api/v1/vaults/${vaultId}/collections`);
-  createCollection = (body: Record<string, unknown>) => this.request<VaultCollection>("/api/v1/collections", { method: "POST", body: JSON.stringify(body) });
-  updateCollection = (id: string, body: Record<string, unknown>) => this.request<VaultCollection>(`/api/v1/collections/${id}`, { method: "PATCH", body: JSON.stringify(body) });
-  deleteCollection = (id: string) => this.request<{ id: string }>(`/api/v1/collections/${id}`, { method: "DELETE" });
   /**
    * The tags of the workspace.
    *
@@ -171,6 +167,13 @@ export class DataVaultApiClient {
    */
   listTags = (vaultId?: string) => this.request<VaultTag[]>("/api/v1/tags", {}, { vaultId });
   createTag = (body: Record<string, unknown>) => this.request<VaultTag>("/api/v1/tags", { method: "POST", body: JSON.stringify(body) });
+  /**
+   * Put a tag on a folder.
+   *
+   * The tag is made in the workspace and put on the items of the folder.
+   */
+  tagFolder = (vaultId: string, body: { name: string; color?: string }) => this.request<VaultTag>(`/api/v1/vaults/${vaultId}/tags`, { method: "POST", body: JSON.stringify(body) });
+  untagFolder = (vaultId: string, tagId: string) => this.request<{ vaultId: string; tagId: string }>(`/api/v1/vaults/${vaultId}/tags/${tagId}`, { method: "DELETE" });
   updateTag = (id: string, body: Record<string, unknown>) => this.request<VaultTag>(`/api/v1/tags/${id}`, { method: "PATCH", body: JSON.stringify(body) });
   deleteTag = (id: string) => this.request<{ id: string }>(`/api/v1/tags/${id}`, { method: "DELETE" });
   listSavedViews = () => this.request<Record<string, unknown>[]>("/api/v1/saved-views");
@@ -201,7 +204,7 @@ export class DataVaultApiClient {
   getNote = (id: string) => this.request<Note & Record<string, unknown>>(`/api/v1/notes/${id}`);
   createNote = (body: Record<string, unknown>, idempotencyKey: string = crypto.randomUUID()) => this.request<Note>("/api/v1/notes", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify(body) });
   updateNote = (id: string, body: Record<string, unknown>) => this.request<Note>(`/api/v1/notes/${id}`, { method: "PATCH", body: JSON.stringify(body) });
-  deleteNote = (id: string) => this.request<{ id: string }>(`/api/v1/notes/${id}`, { method: "DELETE" });
+  deleteNote = (id: string, options?: { permanent?: boolean }) => this.request<{ id: string }>(`/api/v1/notes/${id}${options?.permanent !== false ? "?permanent=true" : ""}`, { method: "DELETE" });
   restoreNote = (id: string) => this.request<Note>(`/api/v1/notes/${id}/restore`, { method: "POST", body: "{}" });
   /** A copy of a doc. */
   duplicateNote = (id: string, idempotencyKey: string = crypto.randomUUID()) => this.request<Note>(`/api/v1/notes/${id}/duplicate`, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: "{}" });
@@ -211,8 +214,14 @@ export class DataVaultApiClient {
   removeNoteClip = (id: string, clipId: string) => this.request<{ id: string; clipId: string }>(`/api/v1/notes/${id}/clips/${clipId}`, { method: "DELETE" });
   listNoteRevisions = (id: string) => this.request<NoteRevision[]>(`/api/v1/notes/${id}/revisions`);
   restoreNoteRevision = (id: string, revisionId: string) => this.request<Note>(`/api/v1/notes/${id}/revisions/${revisionId}/restore`, { method: "POST", body: "{}" });
-  /** Let the AI sort the doc into topics. */
-  organizeNote = (id: string, body: { apply?: boolean; previewId?: string } = {}) => this.request<{ preview: boolean; previewId?: string; sections: Array<{ title: string; clipIds: string[] }>; remaining: number }>(`/api/v1/notes/${id}/organize`, { method: "POST", body: JSON.stringify(body) });
+  /**
+   * Turn the whole doc into notes.
+   *
+   * Without `apply` the notes are proposed and kept on the server. With
+   * `{ apply: true, previewId, target }` the notes that were shown are
+   * written, either into the doc itself or into a new doc inside it.
+   */
+  notesFromNote = (id: string, body: { apply?: boolean; previewId?: string; target?: NoteNotesTarget } = {}) => this.request<{ preview: boolean; previewId?: string; target?: NoteNotesTarget; subpageId?: string | null; title?: string; sections: NoteNotesSection[]; remaining: number; source?: "own" | "free" }>(`/api/v1/notes/${id}/notes`, { method: "POST", body: JSON.stringify(body) });
   /**
    * Do something with a selection of the doc.
    *
@@ -220,8 +229,10 @@ export class DataVaultApiClient {
    * person sees it first and accepts it.
    */
   noteAiSelection = (id: string, body: { action: NoteAiAction; instruction?: string; selection: { markdown: string; clips: { clipId: string; text: string }[] }; context: { mode: NoteAiContextMode; recordIds?: string[] } }) => this.request<{ blocks: AiBlock[]; action: NoteAiAction; context: NoteAiContextMode; source: "own" | "free"; remaining: number; title: string }>(`/api/v1/notes/${id}/ai/selection`, { method: "POST", body: JSON.stringify(body) });
-  /** Turn the pieces into writing, with sentences that follow each other. */
-  writeUpNote = (id: string, body: { apply?: boolean; previewId?: string } = {}) => this.request<{ preview: boolean; previewId?: string; title?: string; sections: NoteWriteUpSection[]; remaining: number }>(`/api/v1/notes/${id}/write-up`, { method: "POST", body: JSON.stringify(body) });
+  /** Ask a question about the doc, and get a direct answer. */
+  noteAiChat = (id: string, body: { question: string; history?: NoteChatTurn[]; selection?: { markdown: string; clips: { clipId: string; text: string }[] } }) => this.request<{ blocks: AiBlock[]; source: "own" | "free"; remaining: number; title: string }>(`/api/v1/notes/${id}/ai/chat`, { method: "POST", body: JSON.stringify(body) });
+  /** A detailed summary of the doc: what it is about, and what each part says. */
+  summarizeNote = (id: string) => this.request<NoteSummaryDetail & { remaining: number; source: "own" | "free" }>(`/api/v1/notes/${id}/summary`, { method: "POST", body: "{}" });
   /** Sort the pieces of a doc again, using the mode the doc is set to. */
   rearrangeNote = (id: string) => this.request<Note>(`/api/v1/notes/${id}/rearrange`, { method: "POST", body: "{}" });
   /** The doc the keyboard shortcut adds to. */

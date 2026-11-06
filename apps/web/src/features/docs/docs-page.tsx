@@ -1,16 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Editor } from "@tiptap/react";
 import {
-  Copy, FileText, History, MoreHorizontal, PenLine, Pin, Plus, RefreshCw, RotateCcw, Search, Star, Trash2, Wand2,
+  CheckSquare, ChevronDown, Copy, FilePlus2, FileText, HelpCircle, History,
+  MessageCircle, MoreHorizontal, Plus, Quote, RefreshCw, RotateCcw, Search, Sparkles, Trash2, Wand2,
 } from "lucide-react";
 import { Button, Input, cn } from "@data-vault/ui";
-import type { Note, NoteSummary } from "@data-vault/types";
+import type { AiBlock, Note, NoteChatTurn, NoteNotesSection, NoteSummaryDetail } from "@data-vault/types";
 import { useAuth } from "../../lib/auth";
 import { useToast } from "../../components/feedback";
 import { Modal } from "../../components/feedback";
 import { QueryState } from "../../components/data-state";
 import { DocEditor } from "./doc-editor";
+import { DocTree } from "./doc-tree";
+import { DocSummaryModal } from "./doc-summary-modal";
+import { DocRearrangeModal } from "./doc-rearrange-modal";
+import { DocChatDrawer } from "./doc-chat-drawer";
+import { DocQaModal } from "./doc-qa-modal";
+import { blocksToContent, clipNodesInDoc } from "../../lib/ai-selection";
 import { docToMarkdown } from "@data-vault/notes";
 import { docToHtml } from "@data-vault/notes/html";
 import type { JSONContent } from "@tiptap/core";
@@ -28,21 +36,34 @@ export function DocsPage() {
   const { notify } = useToast();
   const client = useQueryClient();
   const navigate = useNavigate();
+
   const [term, setTerm] = useState("");
-  const [showTrash, setShowTrash] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [organizeOpen, setOrganizeOpen] = useState(false);
-  const [organizePreview, setOrganizePreview] = useState<Array<{ title: string; clipIds: string[] }> | null>(null);
-  const [organizePreviewId, setOrganizePreviewId] = useState<string | null>(null);
-  const [writeUpOpen, setWriteUpOpen] = useState(false);
-  const [writeUpPreview, setWriteUpPreview] = useState<Array<{ heading: string; paragraphs: string[] }> | null>(null);
-  const [writeUpPreviewId, setWriteUpPreviewId] = useState<string | null>(null);
-  const [writeUpTitle, setWriteUpTitle] = useState("");
+  const [docToDelete, setDocToDelete] = useState<{ id: string; title: string } | null>(null);
+
+  // Active Editor instance
+  const [editor, setEditor] = useState<Editor | null>(null);
+
+  // AI Feature State
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryData, setSummaryData] = useState<NoteSummaryDetail | null>(null);
+
+  const [rearrangeOpen, setRearrangeOpen] = useState(false);
+  const [rearrangeSections, setRearrangeSections] = useState<NoteNotesSection[]>([]);
+  const [rearrangePreviewId, setRearrangePreviewId] = useState<string | null>(null);
+  const [rearrangeTitle, setRearrangeTitle] = useState("");
+
+  const [chatOpen, setChatOpen] = useState(false);
+
+  const [qaOpen, setQaOpen] = useState(false);
+  const [qaBlocks, setQaBlocks] = useState<AiBlock[]>([]);
+  const [qaLoading, setQaLoading] = useState(false);
 
   const list = useQuery({
-    queryKey: ["notes", organization?.id, showTrash, term],
-    queryFn: () => api.listNotes({ q: term || undefined, trash: showTrash || undefined, limit: 100 }),
+    queryKey: ["notes", organization?.id, term],
+    queryFn: () => api.listNotes({ q: term || undefined, limit: 100 }),
   });
   const current = useQuery({
     queryKey: ["notes", "current", organization?.id],
@@ -62,6 +83,16 @@ export function DocsPage() {
     },
   });
 
+  const createSubpage = useMutation({
+    mutationFn: (parentId: string) => api.createNote({ title: "Untitled doc", parentId }),
+    onSuccess: async (created) => {
+      await client.invalidateQueries({ queryKey: ["notes"] });
+      navigate(`/docs/${created.id}`);
+      notify("A new doc was made inside it");
+    },
+    onError: (caught) => notify(caught instanceof Error ? caught.message : "The doc could not be made.", "error"),
+  });
+
   const makeCurrent = useMutation({
     mutationFn: (noteId: string) => api.setCurrentNote(noteId),
     onSuccess: async () => {
@@ -73,24 +104,19 @@ export function DocsPage() {
     },
   });
 
-  const trash = useMutation({
-    mutationFn: () => api.deleteNote(id!),
-    onSuccess: async () => {
+  const deleteDoc = useMutation({
+    mutationFn: (targetId: string) => api.deleteNote(targetId, { permanent: true }),
+    onSuccess: async (_, targetId) => {
       await client.invalidateQueries({ queryKey: ["notes"] });
-      navigate("/docs");
-      notify("Doc moved to Trash");
+      if (id === targetId) {
+        navigate("/docs");
+      }
+      notify("Doc deleted");
     },
+    onError: (caught) => notify(caught instanceof Error ? caught.message : "The doc could not be deleted.", "error"),
   });
 
-  const restore = useMutation({
-    mutationFn: () => api.restoreNote(id!),
-    onSuccess: async () => {
-      await client.invalidateQueries({ queryKey: ["notes"] });
-      notify("Doc restored");
-    },
-  });
-
-  const rearrange = useMutation({
+  const rearrangeClips = useMutation({
     mutationFn: () => api.rearrangeNote(id!),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["note", organization?.id, id] });
@@ -100,70 +126,148 @@ export function DocsPage() {
     onError: (caught) => notify(caught instanceof Error ? caught.message : "The doc could not be sorted again.", "error"),
   });
 
-  const writeUp = useMutation({
-    mutationFn: (apply: boolean) => api.writeUpNote(id!, apply ? { apply: true, ...(writeUpPreviewId ? { previewId: writeUpPreviewId } : {}) } : {}),
-    onSuccess: async (result) => {
-      if (result.preview) {
-        setWriteUpPreview(result.sections);
-        setWriteUpTitle(result.title ?? "");
-        setWriteUpPreviewId(result.previewId ?? null);
-        setWriteUpOpen(true);
-        return;
-      }
-      await client.invalidateQueries({ queryKey: ["note", organization?.id, id] });
-      await client.invalidateQueries({ queryKey: ["notes"] });
-      setWriteUpOpen(false);
-      setWriteUpPreview(null);
-      setWriteUpPreviewId(null);
-      notify("The doc was written up");
+  // AI 1: Summary
+  const summaryMutation = useMutation({
+    mutationFn: () => api.summarizeNote(id!),
+    onSuccess: (data) => {
+      setSummaryData(data);
     },
-    onError: (caught) => notify(caught instanceof Error ? caught.message : "The doc could not be written up.", "error"),
+    onError: (caught) => notify(caught instanceof Error ? caught.message : "Could not summarize doc.", "error"),
   });
 
-  const organize = useMutation({
-    mutationFn: (apply: boolean) => api.organizeNote(id!, apply ? { apply: true, ...(organizePreviewId ? { previewId: organizePreviewId } : {}) } : {}),
-    onSuccess: async (result) => {
-      if (result.preview) {
-        setOrganizePreview(result.sections);
-        setOrganizePreviewId(result.previewId ?? null);
-        setOrganizeOpen(true);
-        return;
-      }
-      await client.invalidateQueries({ queryKey: ["note", organization?.id, id] });
-      await client.invalidateQueries({ queryKey: ["notes"] });
-      setOrganizeOpen(false);
-      setOrganizePreview(null);
-      setOrganizePreviewId(null);
-      notify("The doc was sorted into topics");
+  const handleOpenSummary = () => {
+    if (!id) return;
+    setSummaryOpen(true);
+    setSummaryData(null);
+    summaryMutation.mutate();
+  };
+
+  // AI 2: Re-arrange into Notes
+  const rearrangeMutation = useMutation({
+    mutationFn: () => api.notesFromNote(id!),
+    onSuccess: (result) => {
+      setRearrangeSections(result.sections);
+      setRearrangeTitle(result.title ?? "");
+      setRearrangePreviewId(result.previewId ?? null);
     },
-    onError: (caught) => notify(caught instanceof Error ? caught.message : "The AI could not sort this doc.", "error"),
+    onError: (caught) => notify(caught instanceof Error ? caught.message : "Could not re-arrange doc.", "error"),
   });
 
-  const notes = list.data ?? [];
+  const handleOpenRearrange = () => {
+    if (!id) return;
+    setRearrangeOpen(true);
+    setRearrangeSections([]);
+    setRearrangePreviewId(null);
+    rearrangeMutation.mutate();
+  };
+
+  const handleApplyRearrange = async (target: "replace" | "subpage") => {
+    if (!id || !rearrangePreviewId) return;
+    const result = await api.notesFromNote(id, {
+      apply: true,
+      previewId: rearrangePreviewId,
+      target,
+    });
+    if (target === "subpage" && result.subpageId) {
+      await client.invalidateQueries({ queryKey: ["notes"] });
+      navigate(`/docs/${result.subpageId}`);
+      notify("Notes saved to a new subpage");
+    } else {
+      await client.invalidateQueries({ queryKey: ["note", organization?.id, id] });
+      notify("Doc reorganized into notes");
+    }
+  };
+
+  // AI 3: Doc AI Chat
+  const handleAskChat = async (question: string, history: NoteChatTurn[]) => {
+    if (!id) throw new Error("No doc is selected.");
+    return api.noteAiChat(id, { question, history });
+  };
+
+  const handleInsertBlocks = (blocks: AiBlock[]) => {
+    if (!editor) {
+      notify("Editor is not ready", "error");
+      return;
+    }
+    const clips = clipNodesInDoc(editor);
+    const content = blocksToContent(blocks, clips);
+    const insertPos = editor.state.selection.to;
+    editor.chain().focus().insertContentAt(insertPos, content).run();
+  };
+
+  // AI 4: Extract Action Items Checklist
+  const handleExtractTasks = async () => {
+    if (!id || !editor) return;
+    notify("Extracting action items…");
+    try {
+      const res = await api.noteAiChat(id, {
+        question: "Extract all action items, tasks, deadlines, and follow-ups from this document as a checklist block. Be direct and concise.",
+      });
+      const clips = clipNodesInDoc(editor);
+      const content = blocksToContent(res.blocks, clips);
+      editor.chain().focus().insertContentAt(0, content).run();
+      notify("Action items added to top of doc");
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Could not extract action items", "error");
+    }
+  };
+
+  // AI 5: Insert TL;DR Callout
+  const handleInsertTldr = async () => {
+    if (!id || !editor) return;
+    notify("Writing TL;DR callout…");
+    try {
+      const res = await api.noteAiChat(id, {
+        question: "Write an executive 2-sentence key takeaway of this document as a quote block. Start with 'Key Takeaway:'.",
+      });
+      const clips = clipNodesInDoc(editor);
+      const content = blocksToContent(res.blocks, clips);
+      editor.chain().focus().insertContentAt(0, content).run();
+      notify("TL;DR callout inserted at top");
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Could not generate TL;DR", "error");
+    }
+  };
+
+  // AI 6: Q&A Flashcards
+  const handleOpenQa = async () => {
+    if (!id) return;
+    setQaOpen(true);
+    setQaBlocks([]);
+    setQaLoading(true);
+    try {
+      const res = await api.noteAiChat(id, {
+        question: "Create 5 key study questions with answers based on this document. Use headings for each question and paragraphs for answers.",
+      });
+      setQaBlocks(res.blocks);
+    } catch (err) {
+      notify(err instanceof Error ? err.message : "Could not generate Q&A", "error");
+    } finally {
+      setQaLoading(false);
+    }
+  };
+
+  // Subpage save helper
+  const handleSaveSubpageDoc = async (content: JSONContent, title: string) => {
+    if (!id) return;
+    const created = await api.createNote({ title, parentId: id, content });
+    await client.invalidateQueries({ queryKey: ["notes"] });
+    navigate(`/docs/${created.id}`);
+    notify("Saved as subpage");
+  };
+
+  const notes_ = list.data ?? [];
   const selected = note.data as Note | undefined;
-  const firstNoteId = notes[0]?.id;
+  const firstNoteId = notes_[0]?.id;
 
-  /**
-   * The doc that is open when the page is entered without one.
-   *
-   * The page used to show "Your docs live here" even when there were docs
-   * waiting, which looked as though nothing had been saved. The doc the
-   * browser extension adds to is opened first, because that is the one being
-   * worked on, and the newest doc is opened when there is no current one.
-   */
   useEffect(() => {
     if (id) return;
-    if (showTrash) return;
     if (current.isLoading || list.isLoading) return;
     const target = current.data?.noteId ?? firstNoteId;
     if (!target) return;
     navigate(`/docs/${target}`, { replace: true });
-  }, [id, showTrash, current.isLoading, current.data?.noteId, list.isLoading, firstNoteId, navigate]);
+  }, [id, current.isLoading, current.data?.noteId, list.isLoading, firstNoteId, navigate]);
 
-  /**
-   * The doc is refetched every so often, so a clip added from the extension
-   * shows up without the page being reloaded.
-   */
   useEffect(() => {
     if (!id) return;
     const timer = window.setInterval(() => {
@@ -174,20 +278,20 @@ export function DocsPage() {
 
   const isCurrent = current.data?.noteId === id;
 
-  /**
-   * The menu closes when the escape key is pressed and when the pointer
-   * goes somewhere else, so it never sits over the page after it is done.
-   */
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen && !aiMenuOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        setAiMenuOpen(false);
+      }
     };
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest("[role='menu']")) return;
       if (target?.closest("[aria-haspopup='menu']")) return;
       setMenuOpen(false);
+      setAiMenuOpen(false);
     };
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("mousedown", onPointerDown);
@@ -195,7 +299,7 @@ export function DocsPage() {
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("mousedown", onPointerDown);
     };
-  }, [menuOpen]);
+  }, [menuOpen, aiMenuOpen]);
 
   const download = (content: JSONContent, format: "md" | "html") => {
     const title = selected?.title ?? "Doc";
@@ -223,25 +327,19 @@ export function DocsPage() {
             <Button size="sm" onClick={() => create.mutate()} disabled={create.isPending} aria-label="New doc"><Plus className="size-4" /></Button>
           </div>
 
-          <div className="mt-3 flex items-center justify-between text-xs">
-            <button onClick={() => setShowTrash(false)} className={cn("rounded-full px-2 py-1 font-medium", !showTrash ? "bg-soft text-ink" : "text-muted")}>Docs</button>
-            <button onClick={() => setShowTrash(true)} className={cn("rounded-full px-2 py-1 font-medium", showTrash ? "bg-soft text-ink" : "text-muted")}>Trash</button>
-          </div>
-
           <div className="mt-3 flex-1 space-y-1 overflow-y-auto">
-            {notes.map((item) => (
-              <DocListItem
-                key={item.id}
-                item={item}
-                active={item.id === id}
-                isCurrent={current.data?.noteId === item.id}
-                onOpen={() => navigate(`/docs/${item.id}`)}
-                onMakeCurrent={() => makeCurrent.mutate(item.id)}
-              />
-            ))}
-            {!notes.length && !list.isLoading ? (
+            <DocTree
+              notes={notes_}
+              activeId={id}
+              currentId={current.data?.noteId ?? undefined}
+              onOpen={(noteId) => navigate(`/docs/${noteId}`)}
+              onMakeCurrent={(noteId) => makeCurrent.mutate(noteId)}
+              onNewSubpage={(parentId) => createSubpage.mutate(parentId)}
+              onDelete={(noteId, title) => setDocToDelete({ id: noteId, title })}
+            />
+            {!notes_.length && !list.isLoading ? (
               <p className="px-2 py-6 text-center text-sm text-muted">
-                {showTrash ? "The trash is empty." : "No docs yet. Press the plus button to start one."}
+                No docs yet. Press the plus button to start one.
               </p>
             ) : null}
           </div>
@@ -253,7 +351,76 @@ export function DocsPage() {
           <>
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <h1 className="display text-2xl">{selected?.title ?? "Doc"}</h1>
-              <div className="relative ml-auto">
+              <div className="relative ml-auto flex items-center gap-2">
+                {/* Ask AI Chat button */}
+                <Button
+                  size="sm"
+                  variant={chatOpen ? "primary" : "secondary"}
+                  onClick={() => setChatOpen((open) => !open)}
+                  className="flex items-center gap-1.5"
+                >
+                  <MessageCircle className="size-3.5 text-purple-600 dark:text-purple-400" />
+                  <span>Ask AI</span>
+                </Button>
+
+                {/* AI Tools dropdown */}
+                <div className="relative">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setAiMenuOpen((open) => !open)}
+                    className="flex items-center gap-1.5 border-purple-200 dark:border-purple-800"
+                    aria-expanded={aiMenuOpen}
+                    aria-haspopup="menu"
+                  >
+                    <Sparkles className="size-3.5 text-purple-600 dark:text-purple-400" />
+                    <span>AI Tools</span>
+                    <ChevronDown className="size-3 text-muted" />
+                  </Button>
+                  {aiMenuOpen ? (
+                    <div role="menu" className="absolute right-0 top-full z-40 mt-1 w-64 rounded-2xl border border-line bg-surface p-1.5 shadow-xl">
+                      <MenuHeading>Document AI</MenuHeading>
+                      <MenuItem onClick={() => { handleOpenSummary(); setAiMenuOpen(false); }}>
+                        <FileText className="size-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="block font-medium">Summarize doc</span>
+                          <span className="block text-xs text-muted">Key takeaways & subpage export</span>
+                        </div>
+                      </MenuItem>
+                      <MenuItem onClick={() => { handleOpenRearrange(); setAiMenuOpen(false); }}>
+                        <Wand2 className="size-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="block font-medium">Re-arrange into Notes</span>
+                          <span className="block text-xs text-muted">Clean structure, exact facts</span>
+                        </div>
+                      </MenuItem>
+                      <MenuDivider />
+                      <MenuItem onClick={() => { void handleExtractTasks(); setAiMenuOpen(false); }}>
+                        <CheckSquare className="size-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="block font-medium">Extract action items</span>
+                          <span className="block text-xs text-muted">Generate task checklist</span>
+                        </div>
+                      </MenuItem>
+                      <MenuItem onClick={() => { void handleInsertTldr(); setAiMenuOpen(false); }}>
+                        <Quote className="size-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="block font-medium">Insert TL;DR callout</span>
+                          <span className="block text-xs text-muted">2-sentence top summary</span>
+                        </div>
+                      </MenuItem>
+                      <MenuItem onClick={() => { void handleOpenQa(); setAiMenuOpen(false); }}>
+                        <HelpCircle className="size-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="block font-medium">Q&A study cards</span>
+                          <span className="block text-xs text-muted">Review questions & answers</span>
+                        </div>
+                      </MenuItem>
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* More Menu */}
                 <Button size="sm" variant="secondary" onClick={() => setMenuOpen((open) => !open)} aria-expanded={menuOpen} aria-haspopup="menu">
                   <MoreHorizontal className="size-4" />Menu
                 </Button>
@@ -270,9 +437,10 @@ export function DocsPage() {
                       }}>{label}</MenuItem>
                     ))}
                     <MenuDivider />
-                    <MenuItem onClick={() => { void rearrange.mutate(); setMenuOpen(false); }}><RefreshCw className="size-4" />Re-arrange by page</MenuItem>
-                    <MenuItem onClick={() => { void writeUp.mutate(false); setMenuOpen(false); }}><PenLine className="size-4" />Write it up as sentences</MenuItem>
-                    <MenuItem onClick={() => { setOrganizePreview(null); organize.mutate(false); setMenuOpen(false); }}><Wand2 className="size-4" />Organize with AI</MenuItem>
+                    <MenuItem onClick={() => { handleOpenRearrange(); setMenuOpen(false); }}><Wand2 className="size-4 text-purple-600" />Re-arrange into Notes</MenuItem>
+                    <MenuItem onClick={() => { handleOpenSummary(); setMenuOpen(false); }}><FileText className="size-4 text-amber-600" />Summarize doc</MenuItem>
+                    <MenuItem onClick={() => { void rearrangeClips.mutate(); setMenuOpen(false); }}><RefreshCw className="size-4" />Re-arrange by page</MenuItem>
+                    <MenuItem onClick={() => { void createSubpage.mutate(id); setMenuOpen(false); }}><FilePlus2 className="size-4" />New subpage</MenuItem>
                     <MenuItem onClick={() => { setHistoryOpen(true); setMenuOpen(false); }}><History className="size-4" />Version history</MenuItem>
                     <MenuDivider />
                     <MenuItem onClick={() => { download(selected?.content ?? { type: "doc" }, "md"); setMenuOpen(false); }}><Copy className="size-4" />Export as Markdown</MenuItem>
@@ -281,11 +449,7 @@ export function DocsPage() {
                     <MenuItem onClick={() => { void navigator.clipboard.writeText(docToMarkdown(selected?.content ?? { type: "doc" })); notify("The doc was copied as Markdown"); setMenuOpen(false); }}><Copy className="size-4" />Copy as Markdown</MenuItem>
                     <MenuDivider />
                     <MenuItem onClick={() => { void api.duplicateNote(id).then(async (copy) => { await client.invalidateQueries({ queryKey: ["notes"] }); notify("A copy was made"); navigate(`/docs/${copy.id}`); }); setMenuOpen(false); }}><Copy className="size-4" />Duplicate</MenuItem>
-                    {selected?.deletedAt ? (
-                      <MenuItem onClick={() => { restore.mutate(); setMenuOpen(false); }}><RotateCcw className="size-4" />Restore from Trash</MenuItem>
-                    ) : (
-                      <MenuItem danger onClick={() => { trash.mutate(); setMenuOpen(false); }}><Trash2 className="size-4" />Move to Trash</MenuItem>
-                    )}
+                    <MenuItem danger onClick={() => { setDocToDelete({ id, title: selected?.title ?? "Untitled doc" }); setMenuOpen(false); }}><Trash2 className="size-4" />Delete doc</MenuItem>
                   </div>
                 ) : null}
               </div>
@@ -303,7 +467,7 @@ export function DocsPage() {
                 isCurrent={Boolean(isCurrent)}
                 noteId={selected.id}
                 onTitleChange={(title) => { void api.updateNote(id, { title }); }}
-                onIconChange={(icon) => { void api.updateNote(id, { icon }); }}
+                onIconChange={(icon) => { void api.updateNote(icon ? id : id, { icon }); }}
                 onSave={async (content, baseVersion) => {
                   const result = await api.updateNote(id, { content, baseVersion });
                   return result.version;
@@ -312,16 +476,11 @@ export function DocsPage() {
                   void client.invalidateQueries({ queryKey: ["note", organization?.id, id] });
                 }}
                 onMakeCurrent={() => makeCurrent.mutate(id)}
+                onEditorReady={(ed) => setEditor(ed)}
               />
             ) : null}
           </>
         ) : current.isLoading || list.isLoading ? (
-          /**
-           * The doc is being opened.
-           *
-           * The empty message is not shown while this is happening, because
-           * it would flash up on the way to a doc that is really there.
-           */
           <div className="grid min-h-[60vh] place-items-center">
             <p className="text-sm text-muted">Opening your doc…</p>
           </div>
@@ -342,6 +501,62 @@ export function DocsPage() {
         )}
       </div>
 
+      {/* Doc AI Chat Drawer */}
+      <DocChatDrawer
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        noteTitle={selected?.title ?? "Doc"}
+        onAsk={handleAskChat}
+        onInsertToDoc={handleInsertBlocks}
+        onNotify={notify}
+      />
+
+      {/* AI Summary Modal */}
+      <DocSummaryModal
+        open={summaryOpen}
+        data={summaryData}
+        loading={summaryMutation.isPending && !summaryData}
+        error={summaryMutation.error instanceof Error ? summaryMutation.error.message : null}
+        onClose={() => setSummaryOpen(false)}
+        onRegenerate={() => {
+          setSummaryData(null);
+          summaryMutation.mutate();
+        }}
+        onSaveSubpage={handleSaveSubpageDoc}
+        onNotify={notify}
+      />
+
+      {/* AI Re-arrange Modal */}
+      <DocRearrangeModal
+        open={rearrangeOpen}
+        loading={rearrangeMutation.isPending && !rearrangeSections.length}
+        error={rearrangeMutation.error instanceof Error ? rearrangeMutation.error.message : null}
+        title={rearrangeTitle}
+        sections={rearrangeSections}
+        onClose={() => setRearrangeOpen(false)}
+        onApply={handleApplyRearrange}
+        onRegenerate={() => {
+          setRearrangeSections([]);
+          setRearrangePreviewId(null);
+          rearrangeMutation.mutate();
+        }}
+        onNotify={notify}
+      />
+
+      {/* AI Q&A Flashcards Modal */}
+      <DocQaModal
+        open={qaOpen}
+        loading={qaLoading}
+        blocks={qaBlocks}
+        noteTitle={selected?.title ?? "Doc"}
+        onClose={() => setQaOpen(false)}
+        onRegenerate={() => void handleOpenQa()}
+        onInsertToDoc={handleInsertBlocks}
+        onSaveSubpage={handleSaveSubpageDoc}
+        onNotify={notify}
+      />
+
+      {/* Version History Modal */}
       <Modal open={historyOpen} title="Version history" onClose={() => setHistoryOpen(false)}>
         <VersionHistory
           noteId={id!}
@@ -355,71 +570,29 @@ export function DocsPage() {
         />
       </Modal>
 
-      <Modal open={writeUpOpen} title="Write it up as sentences" onClose={() => setWriteUpOpen(false)} width="max-w-2xl">
-        <p className="text-sm leading-6 text-muted">
-          The pieces are joined into sentences that follow each other, and the sentences that belong together are put
-          in the same paragraph. Nothing has changed yet.
-        </p>
-        {writeUpTitle ? <p className="mt-3 font-semibold">{writeUpTitle}</p> : null}
-        <div className="mt-3 max-h-80 space-y-4 overflow-y-auto rounded-2xl bg-soft p-4">
-          {(writeUpPreview ?? []).map((section) => (
-            <div key={section.heading || section.paragraphs[0]}>
-              {section.heading ? <p className="mb-1 font-semibold">{section.heading}</p> : null}
-              {section.paragraphs.map((paragraph) => <p key={paragraph.slice(0, 40)} className="mb-2 text-sm leading-6 last:mb-0">{paragraph}</p>)}
-            </div>
-          ))}
-        </div>
-        <div className="mt-5 flex gap-2">
-          <Button onClick={() => writeUp.mutate(true)} disabled={writeUp.isPending}>{writeUp.isPending ? "Working…" : "Use this writing"}</Button>
-          <Button variant="secondary" onClick={() => setWriteUpOpen(false)}>Keep it as it is</Button>
-        </div>
-      </Modal>
-
-      <Modal open={organizeOpen} title="Sort this doc into topics" onClose={() => setOrganizeOpen(false)}>
-        <p className="text-sm text-muted">The AI read every piece and grouped them. Nothing has changed yet.</p>
-        <ul className="mt-4 space-y-2">
-          {(organizePreview ?? []).map((section) => (
-            <li key={section.title} className="rounded-xl bg-soft p-3">
-              <p className="font-semibold">{section.title}</p>
-              <p className="text-xs text-muted">{section.clipIds.length} {section.clipIds.length === 1 ? "piece" : "pieces"}</p>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-5 flex gap-2">
-          <Button onClick={() => organize.mutate(true)} disabled={organize.isPending}>{organize.isPending ? "Working…" : "Apply this order"}</Button>
-          <Button variant="secondary" onClick={() => setOrganizeOpen(false)}>Keep it as it is</Button>
+      {/* Delete Confirmation Modal */}
+      <Modal open={Boolean(docToDelete)} title="Delete doc" onClose={() => setDocToDelete(null)}>
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            Are you sure you want to delete <strong className="text-ink">{docToDelete?.title || "this doc"}</strong>? This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setDocToDelete(null)}>Cancel</Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (docToDelete) {
+                  deleteDoc.mutate(docToDelete.id);
+                  setDocToDelete(null);
+                }
+              }}
+              disabled={deleteDoc.isPending}
+            >
+              Delete
+            </Button>
+          </div>
         </div>
       </Modal>
-    </div>
-  );
-}
-
-function DocListItem({ item, active, isCurrent, onOpen, onMakeCurrent }: { item: NoteSummary; active: boolean; isCurrent: boolean; onOpen: () => void; onMakeCurrent: () => void }) {
-  return (
-    <div className={cn("group flex items-start gap-1 rounded-xl", active ? "bg-soft" : "hover:bg-soft")}>
-      <button onClick={onOpen} className="flex min-w-0 flex-1 items-start gap-2 px-2.5 py-2 text-left">
-        <span className="mt-0.5 text-base">{item.icon ?? "📄"}</span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-medium">{item.title}</span>
-            {item.isPinned ? <Pin className="size-3 shrink-0 text-muted" /> : null}
-          </span>
-          <span className="block truncate text-xs text-muted">{item.excerpt || "Empty doc"}</span>
-        </span>
-      </button>
-      {/**
-       * The doc the extension shortcut adds to. It is marked here so it can
-       * be chosen without opening the doc first.
-       */}
-      <button
-        onClick={onMakeCurrent}
-        title={isCurrent ? "This is the doc the extension adds to" : "Use as the doc the extension adds to"}
-        aria-label={isCurrent ? `${item.title} is the current doc` : `Make ${item.title} the current doc`}
-        aria-pressed={isCurrent}
-        className={cn("mr-1 mt-2 grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-soft", isCurrent ? "text-deep-text" : "opacity-0 group-hover:opacity-100")}
-      >
-        <Star className={cn("size-3.5", isCurrent && "fill-current")} />
-      </button>
     </div>
   );
 }
@@ -460,4 +633,3 @@ function VersionHistory({ noteId, onRestore }: { noteId: string; onRestore: (rev
     </ul>
   );
 }
-

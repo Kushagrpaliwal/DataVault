@@ -182,19 +182,19 @@ describe("bringing material in", () => {
     expect((result.payload.data as { imported: number }).imported).toBe(3);
 
     /**
-     * The items are in a folder of their own, and the folder they came
-     * from became a collection.
+     * The items are in a folder of their own, and the folders they came
+     * from became sub-folders.
      */
     const folders = await call("/api/v1/vaults", { session, organizationId });
-    const folders_ = folders.payload.data as unknown as { id: string; name: string }[];
+    const folders_ = folders.payload.data as unknown as { id: string; name: string; parentId: string | null }[];
     const imported = folders_.find((folder) => folder.name === "My old bookmarks");
     expect(imported).toBeTruthy();
 
     const items = await call(`/api/v1/saved-records?vaultId=${imported!.id}`, { session, organizationId });
     expect((items.payload.data as { total: number }).total).toBe(3);
 
-    const collections = await call(`/api/v1/vaults/${imported!.id}/collections`, { session, organizationId });
-    expect((collections.payload.data as unknown as unknown[]).length).toBe(2);
+    const subfolders = folders_.filter((folder) => folder.parentId === imported!.id);
+    expect(subfolders.length).toBe(2);
   }, 30_000);
 
   test("a file of Pocket or Raindrop brings the tags and the folders with it", async () => {
@@ -236,19 +236,19 @@ describe("bringing material in", () => {
     expect(items.items[0]?.url).toBe("https://example.com/instapaper-one");
 
     const folders = await call("/api/v1/vaults", { session, organizationId });
-    const folders_ = folders.payload.data as unknown as { id: string; name: string }[];
+    const folders_ = folders.payload.data as unknown as { id: string; name: string; parentId: string | null }[];
     const raindropFolder = folders_.find((entry) => entry.name === "From Raindrop");
     const instapaperFolder = folders_.find((entry) => entry.name === "From Instapaper");
     expect(raindropFolder).toBeTruthy();
     expect(instapaperFolder).toBeTruthy();
 
     /**
-     * The folder the file had became a collection.
+     * The folder the file had became a sub-folder.
      */
-    const raindropCollections = await call(`/api/v1/vaults/${raindropFolder!.id}/collections`, { session, organizationId });
-    expect((raindropCollections.payload.data as unknown as { name: string }[]).map((collection) => collection.name)).toContain("Long");
-    const instapaperCollections = await call(`/api/v1/vaults/${instapaperFolder!.id}/collections`, { session, organizationId });
-    expect((instapaperCollections.payload.data as unknown as { name: string }[]).map((collection) => collection.name)).toContain("Later");
+    const raindropSubfolders = folders_.filter((entry) => entry.parentId === raindropFolder!.id).map((entry) => entry.name);
+    expect(raindropSubfolders).toContain("Long");
+    const instapaperSubfolders = folders_.filter((entry) => entry.parentId === instapaperFolder!.id).map((entry) => entry.name);
+    expect(instapaperSubfolders).toContain("Later");
 
     /**
      * The tags of the file are tags.

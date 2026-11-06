@@ -50,8 +50,8 @@ describe("the rows that expire", () => {
      * one that has not.
      */
     await withUser(user.id, organization.id, (tx) => tx.insert(noteAiPreviews).values([
-      { organizationId: organization.id, noteId: note.id, userId: user.id, feature: "organize", baseVersion: 1, payload: {}, expiresAt: new Date(Date.now() - 60_000) },
-      { organizationId: organization.id, noteId: note.id, userId: user.id, feature: "write-up", baseVersion: 1, payload: {}, expiresAt: new Date(Date.now() + 3_600_000) },
+      { organizationId: organization.id, noteId: note.id, userId: user.id, feature: "notes-old", baseVersion: 1, payload: {}, expiresAt: new Date(Date.now() - 60_000) },
+      { organizationId: organization.id, noteId: note.id, userId: user.id, feature: "notes", baseVersion: 1, payload: {}, expiresAt: new Date(Date.now() + 3_600_000) },
     ]));
 
     /**
@@ -76,7 +76,7 @@ describe("the rows that expire", () => {
     await pruneExpiredRows();
 
     const previews = await withUser(user.id, organization.id, (tx) => tx.select({ feature: noteAiPreviews.feature }).from(noteAiPreviews));
-    expect(previews.map((preview) => preview.feature)).toEqual(["write-up"]);
+    expect(previews.map((preview) => preview.feature)).toEqual(["notes"]);
 
     const keys = await withTenant(organization.id, (tx) => tx.select({ key: idempotencyKeys.key }).from(idempotencyKeys));
     expect(keys.map((entry) => entry.key)).toEqual(["live-key"]);

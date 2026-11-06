@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { browser } from "wxt/browser";
 import { ExternalLink, FileText, FolderOpen, Highlighter, LogOut, Plus, ScanText } from "lucide-react";
 import { Button } from "@data-vault/ui";
 import type { AuthSession } from "@data-vault/types";
 import { ExtensionHeader } from "../../components/header";
 import { LoggedOut } from "../../components/logged-out";
-import { AiCreditStrip } from "../../components/ai-strip";
 import { ShortcutHelp } from "../../components/shortcut-help";
 import { EditableTitle } from "../../components/editable-title";
 import { clearExtensionErrors, readExtensionErrors, type RecordedError } from "../../lib/errors";
@@ -13,8 +12,7 @@ import { getAuth, getPreferences, setPreferences, subscribeStorage, type PageDet
 import { signOutExtension } from "../../lib/auth";
 import { WEB_URL, withOrganization } from "../../lib/api";
 import { refreshCurrentDoc, renameDoc, startNewDoc } from "../../lib/docs";
-import { currentFolderId, listFolders, rememberFolder, type FolderOption } from "../../lib/folders";
-import { collectionForFolder, listCollections, rememberCollection, type CollectionOption } from "../../lib/collections";
+import { currentFolderId, folderDepths, listFolders, rememberFolder, type FolderOption } from "../../lib/folders";
 import { openReviewPanel, openReviewWindow } from "../../lib/panel";
 
 /**
@@ -42,13 +40,10 @@ export function PopupApp() {
   const [folders, setFolders] = useState<FolderOption[]>([]);
   const [folderId, setFolderId] = useState("");
   /**
-   * The collections inside the folder that is chosen.
-   *
-   * There is only a list of them when the folder has some, so the picker
-   * is only shown when there is something to choose.
+   * How deep each folder sits, so that a sub-folder is shown under the
+   * folder it belongs to.
    */
-  const [collections, setCollections] = useState<CollectionOption[]>([]);
-  const [collectionId, setCollectionId] = useState("");
+  const depths = useMemo(() => folderDepths(folders), [folders]);
 
   const load = async () => {
     const auth = await getAuth();
@@ -64,9 +59,6 @@ export function PopupApp() {
       setFolders(listed);
       const folder = await currentFolderId(listed);
       setFolderId(folder);
-      const inside = await listCollections(folder);
-      setCollections(inside);
-      setCollectionId((await collectionForFolder(folder, inside)) ?? "");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not reach DataVault.");
     }
@@ -185,26 +177,6 @@ export function PopupApp() {
   const chooseFolder = async (next: string) => {
     setFolderId(next);
     await rememberFolder(next);
-    /**
-     * The collections belong to one folder, so the list of them is asked
-     * for again when the folder changes.
-     */
-    const inside = await listCollections(next);
-    setCollections(inside);
-    const remembered = (await collectionForFolder(next, inside)) ?? "";
-    setCollectionId(remembered);
-    await rememberCollection(remembered, next);
-  };
-
-  /**
-   * Choose the collection new items go into.
-   *
-   * It is remembered with the folder it belongs to, so that it is only used
-   * while that folder is chosen.
-   */
-  const chooseCollection = async (next: string) => {
-    setCollectionId(next);
-    await rememberCollection(next || undefined, folderId || undefined);
   };
 
   const signOut = async () => {
@@ -240,8 +212,6 @@ export function PopupApp() {
         <div className="p-8 text-center text-sm text-muted">Opening DataVault…</div>
       ) : (
         <>
-          <AiCreditStrip />
-
           <section className="space-y-2 border-b border-line p-4">
             <div className="rounded-2xl bg-deep p-4 text-white">
               <div className="flex items-start gap-3">
@@ -275,7 +245,7 @@ export function PopupApp() {
             <ShortcutHelp />
 
           {errors.length ? (
-            <section className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+            <section className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
               <div className="flex items-start justify-between gap-2">
                 <p className="font-semibold">Something went wrong</p>
                 <button onClick={() => { void clearExtensionErrors().then(() => setErrors([])); }} className="text-xs underline">Clear</button>
@@ -307,7 +277,7 @@ export function PopupApp() {
                 {folders.length
                   ? folders.map((folder) => (
                     <option key={folder.id} value={folder.id}>
-                      {folder.name}{typeof folder.itemCount === "number" ? ` (${folder.itemCount})` : ""}
+                      {`${"— ".repeat(depths.get(folder.id) ?? 0)}${folder.name}${typeof folder.itemCount === "number" ? ` (${folder.itemCount})` : ""}`}
                     </option>
                   ))
                   : <option value="">The default folder</option>}
@@ -315,30 +285,6 @@ export function PopupApp() {
               <p className="mt-1 text-xs leading-5 text-muted">
                 The folder new items go into. It is the same folder you have on the website, and it is remembered for next time.
               </p>
-              {collections.length ? (
-                <>
-                  <label htmlFor="popup-collection" className="mt-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.13em] text-muted">
-                    <FolderOpen className="size-3.5" />
-                    Collection
-                  </label>
-                  <select
-                    id="popup-collection"
-                    className="mt-2 h-11 w-full rounded-xl border border-line-strong bg-surface px-3 text-sm"
-                    value={collectionId}
-                    onChange={(event) => void chooseCollection(event.target.value)}
-                  >
-                    <option value="">None</option>
-                    {collections.map((collection) => (
-                      <option key={collection.id} value={collection.id}>
-                        {collection.name}{typeof collection.itemCount === "number" ? ` (${collection.itemCount})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-1 text-xs leading-5 text-muted">
-                    The collection inside the folder. It is the same one you have on the website.
-                  </p>
-                </>
-              ) : null}
             </div>
             <Button className="w-full justify-start" onClick={() => void savePage()} disabled={busy !== null}>
               <ScanText className="size-4" />
@@ -360,7 +306,7 @@ export function PopupApp() {
               </p>
             ) : null}
 
-            {error ? <p className="mt-2 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+            {error ? <p className="mt-2 rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p> : null}
           </section>
 
           <section className="border-t border-line p-4">

@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import {
   CheckSquare, Code, Eraser, Heading1, Heading2, Heading3, Image as ImageIcon, Link2, List, ListOrdered,
-  Minus, Quote, Sparkles, Table2, Type,
+  LoaderCircle, Minus, Quote, Sparkles, Table2, Type, Wand2,
 } from "lucide-react";
 import { cn } from "@data-vault/ui";
-import { useDocAi } from "./ai-assist";
+import { useAuth } from "../../lib/auth";
+import { blocksToContent, clipNodes, selectionPayload } from "../../lib/ai-selection";
 
 interface SlashCommand {
   id: string;
@@ -31,7 +32,6 @@ const COMMANDS: SlashCommand[] = [
     if (address?.trim() && /^https:\/\//i.test(address.trim())) editor.chain().focus().setImage({ src: address.trim() }).run();
   } },
   { id: "table", label: "Table", hint: "A grid of cells", icon: <Table2 className="size-4" />, run: (editor) => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-  { id: "ai", label: "AI", hint: "Ask the AI about this block", icon: <Sparkles className="size-4" />, run: () => undefined },
 ];
 
 function filtered(term: string) {
@@ -51,7 +51,6 @@ export function SlashMenu({ editor }: { editor: Editor | null }) {
   const [term, setTerm] = useState("");
   const [index, setIndex] = useState(0);
   const [position, setPosition] = useState({ top: 0, left: 0 });
-  const ai = useDocAi();
 
   useEffect(() => {
     if (!editor) return;
@@ -88,16 +87,7 @@ export function SlashMenu({ editor }: { editor: Editor | null }) {
   const choose = (command: SlashCommand) => {
     if (!editor) return;
     editor.chain().focus().deleteRange({ from: editor.state.selection.from - term.length - 1, to: editor.state.selection.from }).run();
-    /**
-     * The AI works on a part of the doc, and the command knows which part:
-     * the block the cursor is in.
-     */
-    if (command.id === "ai") {
-      const { $from } = editor.state.selection;
-      ai.openAi({ from: $from.start(), to: $from.end() });
-    } else {
-      command.run(editor);
-    }
+    command.run(editor);
     setOpen(false);
     setTerm("");
     setIndex(0);
@@ -160,8 +150,19 @@ export function SlashMenu({ editor }: { editor: Editor | null }) {
  *
  * It holds the things people reach for most often while writing.
  */
-export function SelectionMenu({ editor }: { editor: Editor | null }) {
-  const ai = useDocAi();
+export function SelectionMenu({
+  editor,
+  noteId,
+  onNotify,
+}: {
+  editor: Editor | null;
+  noteId?: string | undefined;
+  onNotify?: ((msg: string, tone?: "success" | "error") => void) | undefined;
+}) {
+  const { api } = useAuth();
+  const [aiMenuOpen, setAiMenuOpen] = useState(false);
+  const [running, setRunning] = useState(false);
+
   if (!editor) return null;
   const setLink = () => {
     const current = editor.getAttributes("link").href as string | undefined;
@@ -174,15 +175,82 @@ export function SelectionMenu({ editor }: { editor: Editor | null }) {
     editor.chain().focus().extendMarkRange("link").setLink({ href: address.trim() }).run();
   };
 
+  const runAi = async (action: "list" | "clean-up" | "checklist") => {
+    if (!editor || !noteId) return;
+    const { from, to } = editor.state.selection;
+    if (from === to) return;
+    const payload = selectionPayload(editor, from, to);
+    if (!payload.markdown.trim()) return;
+
+    setRunning(true);
+    setAiMenuOpen(false);
+    try {
+      const res = await api.noteAiSelection(noteId, {
+        action,
+        selection: payload,
+        context: { mode: "selection" },
+      });
+      const clips = clipNodes(editor, from, to);
+      const content = blocksToContent(res.blocks, clips);
+      editor.chain().focus().insertContentAt({ from, to }, content).run();
+      onNotify?.("Updated with AI");
+    } catch (err) {
+      onNotify?.(err instanceof Error ? err.message : "Could not apply AI", "error");
+    } finally {
+      setRunning(false);
+    }
+  };
+
   return (
-    <div className="flex items-center gap-0.5 rounded-xl border border-line bg-surface p-1 shadow-lg">
+    <div className="relative flex items-center gap-0.5 rounded-xl border border-line bg-surface p-1 shadow-lg">
       <BubbleButton label="Bold" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}><span className="text-xs font-bold">B</span></BubbleButton>
       <BubbleButton label="Italic" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}><span className="text-xs italic">I</span></BubbleButton>
       <BubbleButton label="Underline" active={editor.isActive("underline")} onClick={() => editor.chain().focus().toggleUnderline().run()}><span className="text-xs underline">U</span></BubbleButton>
       <BubbleButton label="Highlight" active={editor.isActive("highlight")} onClick={() => editor.chain().focus().toggleHighlight({ color: "#fff3a3" }).run()}><span className="rounded bg-[#fff3a3] px-1 text-[10px]">H</span></BubbleButton>
       <BubbleButton label="Link" active={editor.isActive("link")} onClick={setLink}><Link2 className="size-3.5" /></BubbleButton>
-      {ai.ready ? <BubbleButton label="Ask the AI" onClick={() => ai.openAi()}><Sparkles className="size-3.5" /></BubbleButton> : null}
       <BubbleButton label="Clear" onClick={() => editor.chain().focus().unsetAllMarks().run()}><Eraser className="size-3.5" /></BubbleButton>
+
+      {noteId ? (
+        <>
+          <span className="my-1 mx-0.5 block h-4 w-px bg-line" aria-hidden />
+          <BubbleButton
+            label={running ? "Working…" : "AI Actions"}
+            active={aiMenuOpen}
+            onClick={() => setAiMenuOpen((open) => !open)}
+          >
+            {running ? <LoaderCircle className="size-3.5 animate-spin text-purple-600" /> : <Sparkles className="size-3.5 text-purple-600 dark:text-purple-400" />}
+          </BubbleButton>
+
+          {aiMenuOpen ? (
+            <div className="absolute left-full top-0 ml-1 flex flex-col gap-0.5 rounded-xl border border-line bg-surface p-1 shadow-xl whitespace-nowrap z-50">
+              <button
+                type="button"
+                onClick={() => void runAi("list")}
+                className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-strong hover:bg-soft"
+              >
+                <List className="size-3.5 text-purple-600" />
+                <span>Make bullet points</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void runAi("clean-up")}
+                className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-strong hover:bg-soft"
+              >
+                <Wand2 className="size-3.5 text-blue-600" />
+                <span>Fix grammar & clarity</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void runAi("checklist")}
+                className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-strong hover:bg-soft"
+              >
+                <CheckSquare className="size-3.5 text-emerald-600" />
+                <span>Turn into checklist</span>
+              </button>
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

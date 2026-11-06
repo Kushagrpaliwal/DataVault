@@ -3,9 +3,9 @@ import type {
   captureCreateSchema, loginSchema, noteSchema, noteSummarySchema, organizationCreateSchema, parsedCaptureSchema,
   registerSchema, savedRecordCreateSchema, savedRecordSchema, vaultCreateSchema,
 } from "@data-vault/schemas";
-import type { AiBlock, NoteAiAction, NoteAiContextMode } from "@data-vault/schemas";
+import type { AiBlock, NoteAiAction, NoteAiContextMode, NoteNotesTarget } from "@data-vault/schemas";
 
-export type { AiBlock, NoteAiAction, NoteAiContextMode };
+export type { AiBlock, NoteAiAction, NoteAiContextMode, NoteNotesTarget };
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -57,14 +57,41 @@ export interface NoteRevision {
   noteId: string;
   version: number;
   title: string;
-  reason: "autosave" | "ai-organize" | "ai-write-up" | "conflict" | "restore";
+  reason: "autosave" | "ai-notes" | "conflict" | "restore";
   createdAt: string;
 }
 
-/** A part of a written doc. */
-export interface NoteWriteUpSection {
+/** A part of the notes a whole doc was turned into. */
+export interface NoteNotesSection {
+  /** The topic the points are about. */
   heading: string;
-  paragraphs: string[];
+  /** The short points that make up the part. */
+  points: string[];
+}
+
+/**
+ * A detailed summary of a doc.
+ *
+ * It is a breakdown rather than a few lines: what the doc is about, what
+ * each of its parts says, what to take from it, and what it does not say.
+ */
+export interface NoteSummaryDetail {
+  /** A title that fits the doc better than the one it has. */
+  title: string;
+  /** What the doc is about, in a few sentences. */
+  overview: string;
+  /** What each part of the doc says. */
+  sections: Array<{ heading: string; summary: string }>;
+  /** The points worth taking away. */
+  keyPoints: string[];
+  /** The questions the doc leaves open. */
+  questions: string[];
+}
+
+/** One turn of a conversation about a doc. */
+export interface NoteChatTurn {
+  role: "user" | "assistant";
+  text: string;
 }
 
 export interface User {
@@ -90,23 +117,19 @@ export interface Organization {
 export interface Vault {
   id: string;
   organizationId: string;
+  /** The folder this one sits inside. Empty when it is at the top. */
+  parentId: string | null;
   name: string;
   slug: string;
   description: string | null;
   kind: "personal" | "workspace";
   color: string;
   isDefault: boolean;
-  /** How many saved items are in this folder. */
+  /** How many saved items are in this folder and in the folders under it. */
   itemCount?: number;
+  /** The tags associated directly with this folder. */
+  tags?: VaultTag[];
   createdAt: string;
-}
-
-export interface VaultCollection {
-  id: string;
-  vaultId: string;
-  name: string;
-  color: string;
-  itemCount?: number;
 }
 
 export interface VaultTag {
@@ -239,7 +262,7 @@ export interface AiCreditStatus {
    * Their own key is used instead of the shared one, so the words about
    * credits and about Google do not apply to them.
    */
-  ownConnection: { label: string; preset: string; model: string } | null;
+  ownConnection: { label: string; preset: string; model: string; keyReadable: boolean } | null;
 }
 
 /**

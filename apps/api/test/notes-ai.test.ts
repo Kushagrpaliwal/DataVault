@@ -66,7 +66,6 @@ describe("applying an answer the model gave", () => {
     expect(created.response.status).toBe(201);
     const noteId = String(created.payload.data.id);
 
-    const clipIds: string[] = [];
     for (const piece of ["The first piece", "The second piece"]) {
       const clip = await call(`/api/v1/notes/${noteId}/clips`, {
         method: "POST",
@@ -75,7 +74,6 @@ describe("applying an answer the model gave", () => {
         body: { html: `<p>${piece}</p>`, text: piece, source: { url: `https://example.com/${piece.length}`, title: "A page", domain: "example.com" } },
       });
       expect(clip.response.status).toBe(200);
-      clipIds.push(String((clip.payload.data as { clipId: string }).clipId));
     }
 
     const detail = await call(`/api/v1/notes/${noteId}`, { session, organizationId });
@@ -89,16 +87,16 @@ describe("applying an answer the model gave", () => {
       organizationId,
       noteId,
       userId: session.userId,
-      feature: "organize",
+      feature: "notes",
       baseVersion,
-      payload: { sections: [{ title: "A topic", clipIds }] },
+      payload: { title: "Notes", sections: [{ heading: "A topic", points: ["The first piece", "The second piece"] }] },
       expiresAt: new Date(Date.now() + 60_000),
     }).returning({ id: noteAiPreviews.id }));
     expect(preview).toBeTruthy();
 
     const [first, second] = await Promise.all([
-      call(`/api/v1/notes/${noteId}/organize`, { method: "POST", session, organizationId, body: { apply: true, previewId: preview!.id } }),
-      call(`/api/v1/notes/${noteId}/organize`, { method: "POST", session, organizationId, body: { apply: true, previewId: preview!.id } }),
+      call(`/api/v1/notes/${noteId}/notes`, { method: "POST", session, organizationId, body: { apply: true, previewId: preview!.id } }),
+      call(`/api/v1/notes/${noteId}/notes`, { method: "POST", session, organizationId, body: { apply: true, previewId: preview!.id } }),
     ]);
 
     const statuses = [first.response.status, second.response.status].sort();
@@ -112,5 +110,47 @@ describe("applying an answer the model gave", () => {
 
     const after = await call(`/api/v1/notes/${noteId}`, { session, organizationId });
     expect(Number((after.payload.data as { version: number }).version)).toBe(baseVersion + 1);
+  }, 30_000);
+
+  test("the notes can go into a new doc inside the one they were made from", async () => {
+    const session = await register("Subpage Admin", `subpage-${suffix}@example.com`);
+    const orgs = await call("/api/v1/organizations", { session });
+    const organizationId = String((orgs.payload.data as unknown as { id: string }[])[0]!.id);
+    createdOrganizationIds.push(organizationId);
+
+    const created = await call("/api/v1/notes", { method: "POST", session, organizationId, idempotencyKey: `subpage-note-${suffix}`, body: { title: "Parent doc" } });
+    expect(created.response.status).toBe(201);
+    const noteId = String(created.payload.data.id);
+
+    const detail = await call(`/api/v1/notes/${noteId}`, { session, organizationId });
+    const baseVersion = Number((detail.payload.data as { version: number }).version);
+
+    const [preview] = await withTenant(organizationId, (tx) => tx.insert(noteAiPreviews).values({
+      organizationId,
+      noteId,
+      userId: session.userId,
+      feature: "notes",
+      baseVersion,
+      payload: { title: "Notes", sections: [{ heading: "A topic", points: ["A point that was kept"] }] },
+      expiresAt: new Date(Date.now() + 60_000),
+    }).returning({ id: noteAiPreviews.id }));
+    expect(preview).toBeTruthy();
+
+    const applied = await call(`/api/v1/notes/${noteId}/notes`, { method: "POST", session, organizationId, body: { apply: true, previewId: preview!.id, target: "subpage" } });
+    expect(applied.response.status).toBe(200);
+    const result = applied.payload.data as { target: string; subpageId: string; title: string };
+    expect(result.target).toBe("subpage");
+    expect(result.subpageId).toBeTruthy();
+
+    /**
+     * The new doc sits inside the one it was made from, and the doc that was
+     * read was left exactly as it was.
+     */
+    const subpage = await call(`/api/v1/notes/${result.subpageId}`, { session, organizationId });
+    expect((subpage.payload.data as { parentId: string | null }).parentId).toBe(noteId);
+    expect((subpage.payload.data as { contentText: string }).contentText).toContain("A point that was kept");
+
+    const parent = await call(`/api/v1/notes/${noteId}`, { session, organizationId });
+    expect(Number((parent.payload.data as { version: number }).version)).toBe(baseVersion);
   }, 30_000);
 });

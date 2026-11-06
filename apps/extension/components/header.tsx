@@ -1,5 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import { WEB_URL } from "../lib/api";
+import { ThemePicker } from "./theme-picker";
 
 export function ExtensionHeader({ compact = false }: { compact?: boolean }) {
   return (
@@ -9,8 +10,9 @@ export function ExtensionHeader({ compact = false }: { compact?: boolean }) {
         <h1 className="font-semibold leading-tight">DataVault</h1>
         {!compact ? <p className="text-[11px] text-muted">Save anything from the web</p> : null}
       </div>
+      <ThemePicker className="ml-auto" />
       <button
-        className="ml-auto text-strong hover:text-ink"
+        className="text-strong hover:text-ink"
         title="Open DataVault"
         aria-label="Open DataVault"
         onClick={() => void chrome.tabs.create({ url: WEB_URL })}

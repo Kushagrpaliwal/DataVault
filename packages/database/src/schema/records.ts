@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, customType, index, jsonb, numeric, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, customType, index, jsonb, numeric, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { users } from "./auth";
 import { createdViaEnum, recordTypeEnum, sourceTypeEnum } from "./enums";
 import { organizations } from "./tenancy";
@@ -26,6 +26,13 @@ const searchVector = sql`setweight(to_tsvector('english', coalesce("title", ''))
 export const vaults = pgTable("vaults", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  /**
+   * The folder this one sits inside.
+   *
+   * A folder with no parent is at the top. The default folder is always at
+   * the top, so the tree always has a place to fall back to.
+   */
+  parentId: uuid("parent_id").references((): AnyPgColumn => vaults.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
   description: text("description"),
@@ -35,7 +42,20 @@ export const vaults = pgTable("vaults", {
   createdBy: uuid("created_by").notNull().references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [uniqueIndex("vaults_org_slug_unique").on(table.organizationId, table.slug), index("vaults_org_default_idx").on(table.organizationId, table.isDefault)]);
+}, (table) => [
+  /**
+   * A name has to be apart from its siblings only.
+   *
+   * Two folders in different places may carry the same name, but two
+   * folders in the same place may not. The parent is folded into the index
+   * with coalesce, because PostgreSQL treats a null as different from every
+   * other null, and two folders at the top would otherwise be allowed to
+   * share a name.
+   */
+  uniqueIndex("vaults_sibling_slug_unique").on(table.organizationId, sql`coalesce(${table.parentId}, '00000000-0000-0000-0000-000000000000'::uuid)`, table.slug),
+  index("vaults_org_parent_idx").on(table.organizationId, table.parentId),
+  index("vaults_org_default_idx").on(table.organizationId, table.isDefault),
+]);
 
 export const savedRecords = pgTable("saved_records", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -112,17 +132,6 @@ export const evidenceSnapshots = pgTable("evidence_snapshots", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [index("evidence_snapshots_record_idx").on(table.organizationId, table.savedRecordId), uniqueIndex("evidence_snapshots_record_hash_unique").on(table.savedRecordId, table.contentHash)]);
 
-export const vaultCollections = pgTable("vault_collections", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
-  vaultId: uuid("vault_id").notNull().references(() => vaults.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  color: text("color").notNull().default("#b8a4ed"),
-  createdBy: uuid("created_by").notNull().references(() => users.id),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [uniqueIndex("vault_collections_name_unique").on(table.vaultId, table.name), index("vault_collections_org_vault_idx").on(table.organizationId, table.vaultId)]);
-
 export const tags = pgTable("tags", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
@@ -132,19 +141,23 @@ export const tags = pgTable("tags", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex("tags_org_name_unique").on(table.organizationId, table.name)]);
 
-export const savedRecordCollections = pgTable("saved_record_collections", {
-  savedRecordId: uuid("saved_record_id").notNull().references(() => savedRecords.id, { onDelete: "cascade" }),
-  collectionId: uuid("collection_id").notNull().references(() => vaultCollections.id, { onDelete: "cascade" }),
-  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [primaryKey({ columns: [table.savedRecordId, table.collectionId] }), index("saved_record_collections_org_collection_idx").on(table.organizationId, table.collectionId)]);
-
 export const savedRecordTags = pgTable("saved_record_tags", {
   savedRecordId: uuid("saved_record_id").notNull().references(() => savedRecords.id, { onDelete: "cascade" }),
   tagId: uuid("tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [primaryKey({ columns: [table.savedRecordId, table.tagId] }), index("saved_record_tags_org_tag_idx").on(table.organizationId, table.tagId)]);
+
+export const vaultTags = pgTable("vault_tags", {
+  vaultId: uuid("vault_id").notNull().references(() => vaults.id, { onDelete: "cascade" }),
+  tagId: uuid("tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ columns: [table.vaultId, table.tagId] }),
+  index("vault_tags_org_tag_idx").on(table.organizationId, table.tagId),
+  index("vault_tags_org_vault_idx").on(table.organizationId, table.vaultId),
+]);
 
 export const processingJobs = pgTable("processing_jobs", {
   id: uuid("id").primaryKey().defaultRandom(),

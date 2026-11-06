@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, ArrowLeft, ExternalLink, FileText, RotateCcw, Save, Trash2 } from "lucide-react";
-import { Badge, Button, Input, RecordTypeIcon, recordTypeLabel } from "@data-vault/ui";
+import {
+  Archive, ArrowLeft, BookOpen, Check, Copy, ExternalLink, FileText, Quote, RotateCcw, Save, Trash2,
+} from "lucide-react";
+import { Badge, Button, Input, RecordTypeIcon, recordTypeLabel, cn } from "@data-vault/ui";
 import type { NoteSummary, SavedRecord } from "@data-vault/types";
 import { format } from "date-fns";
 import { useAuth } from "../../lib/auth";
@@ -10,13 +12,13 @@ import { snapshotWithPolicy } from "../../lib/snapshot";
 import { QueryState } from "../../components/data-state";
 import { Modal, useToast } from "../../components/feedback";
 import { AiPanel } from "../../components/ai-panel";
+import { flattenFolders, folderTree } from "./folder-tree";
 
 type Detail = SavedRecord & {
   metadata: Record<string, unknown>;
   capture: Record<string, unknown> | null;
   attachments: Attachment[];
   audit: Record<string, unknown>[];
-  collections: Array<{ id: string; name: string; color: string }>;
   tags: Array<{ id: string; name: string; color: string }>;
   evidence: Array<{ id: string; sourceUrl: string | null; sourceTitle: string | null; sourceDomain: string | null; contentHash: string; capturedAt: string }>;
 };
@@ -39,13 +41,13 @@ export function RecordDetailPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [citeOpen, setCiteOpen] = useState(false);
   /**
    * The page as it was, when the item was saved.
    */
   const [snapshot, setSnapshot] = useState<string | null>(null);
   const [snapshotOpen, setSnapshotOpen] = useState(false);
   const [snapshotBusy, setSnapshotBusy] = useState(false);
-  const snapshotDocument = useMemo(() => (snapshot ? snapshotWithPolicy(snapshot) : ""), [snapshot]);
 
   const showSnapshot = async () => {
     setSnapshotBusy(true);
@@ -160,7 +162,15 @@ export function RecordDetailPage() {
                     </>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => void showSnapshot()} disabled={snapshotBusy}>
+                    <BookOpen className="size-4" />
+                    Reader mode
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => setCiteOpen(true)}>
+                    <Quote className="size-4" />
+                    Cite
+                  </Button>
                   <Button size="sm" variant="secondary" onClick={() => setAddOpen(true)}>
                     <FileText className="size-4" />
                     Add to doc
@@ -256,7 +266,7 @@ export function RecordDetailPage() {
             <section className="panel p-6">
               <h2 className="text-lg font-semibold">Organization</h2>
               <p className="mt-1 text-sm leading-6 text-muted">
-                Put this item in a folder, group it with a collection, and mark it with tags so you can find it again.
+                Put this item in a folder, and mark it with tags so you can find it again.
               </p>
               <OrganizePanel record={query.data} onSaved={async () => {
                 await client.invalidateQueries({ queryKey: ["record", organization?.id, id] });
@@ -288,26 +298,30 @@ export function RecordDetailPage() {
         </div>
       ) : null}
       {query.data ? (
-        <AddToDocDialog
-          open={addOpen}
-          onClose={() => setAddOpen(false)}
-          record={query.data}
-          onAdded={(noteTitle) => {
-            setAddOpen(false);
-            notify(`Added to ${noteTitle}`);
-            void client.invalidateQueries({ queryKey: ["notes"] });
-          }}
-        />
+        <>
+          <AddToDocDialog
+            open={addOpen}
+            onClose={() => setAddOpen(false)}
+            record={query.data}
+            onAdded={(noteTitle) => {
+              setAddOpen(false);
+              notify(`Added to ${noteTitle}`);
+              void client.invalidateQueries({ queryKey: ["notes"] });
+            }}
+          />
+          <CitationModal
+            open={citeOpen}
+            onClose={() => setCiteOpen(false)}
+            record={query.data}
+          />
+          <ReaderAndSnapshotModal
+            open={snapshotOpen}
+            onClose={() => setSnapshotOpen(false)}
+            snapshotHtml={snapshot}
+            record={query.data}
+          />
+        </>
       ) : null}
-      <Modal open={snapshotOpen} title="The page as it was" width="max-w-3xl" onClose={() => setSnapshotOpen(false)}>
-        <p className="mb-3 text-sm text-muted">This is the page as it was when the item was saved. It is shown in a sandbox, so nothing in it can run.</p>
-        <iframe
-          title="The page as it was"
-          sandbox=""
-          className="h-[60vh] w-full rounded-xl border border-line bg-white"
-          srcDoc={snapshotDocument}
-        />
-      </Modal>
     </>
   );
 }
@@ -315,33 +329,26 @@ export function RecordDetailPage() {
 /**
  * Where an item lives, and what it is marked with.
  *
- * The item can be moved between folders, put in collections, and marked with
- * tags. A tag that does not exist yet is made when it is used.
+ * The item can be moved between folders, and marked with tags. A tag that
+ * does not exist yet is made when it is used.
  */
 function OrganizePanel({ record, onSaved }: { record: Detail; onSaved: () => Promise<void> | void }) {
   const { api, organization } = useAuth();
   const { notify } = useToast();
   const [vaultId, setVaultId] = useState(record.vaultId);
-  const [collectionIds, setCollectionIds] = useState<string[]>(record.collections.map((collection) => collection.id));
   const [tagText, setTagText] = useState(record.tags.map((tag) => tag.name).join(", "));
 
   const vaults = useQuery({ queryKey: ["vaults", organization?.id], queryFn: () => api.listVaults(), enabled: Boolean(organization) });
-  const collections = useQuery({ queryKey: ["collections", vaultId], queryFn: () => api.listCollections(vaultId), enabled: Boolean(vaultId) });
 
   /**
-   * A collection belongs to one folder, so the ones left behind when the
-   * folder changes are dropped.
+   * The folders, with the folders under them, so that a sub-folder can be
+   * chosen as well as a folder.
    */
-  useEffect(() => {
-    if (!collections.data) return;
-    const allowed = collections.data.map((collection) => collection.id);
-    setCollectionIds((current) => current.filter((id) => allowed.includes(id)));
-  }, [collections.data]);
+  const folders = useMemo(() => flattenFolders(folderTree(vaults.data ?? [])), [vaults.data]);
 
   const save = useMutation({
     mutationFn: () => api.organizeSavedRecord(record.id, {
       vaultId,
-      collectionIds,
       tagNames: tagText.split(",").map((tag) => tag.trim()).filter(Boolean),
     }),
     onSuccess: async () => {
@@ -360,38 +367,11 @@ function OrganizePanel({ record, onSaved }: { record: Detail; onSaved: () => Pro
           onChange={(event) => setVaultId(event.target.value)}
           className="mt-2 h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm"
         >
-          {vaults.data?.map((vault) => <option key={vault.id} value={vault.id}>{vault.name}</option>)}
+          {folders.map((folder) => <option key={folder.id} value={folder.id}>{`${"— ".repeat(folder.depth)}${folder.name}`}</option>)}
         </select>
         <p className="mt-1 text-xs leading-5 text-muted">
           The folder this item lives in. Every item is in one folder, and the browser extension can save into any of them.
         </p>
-      </div>
-
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[.12em] text-muted">Collections</p>
-        {collections.data?.length ? (
-          <div className="mt-2 space-y-1">
-            {collections.data.map((collection) => (
-              <label key={collection.id} className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm hover:bg-soft">
-                <input
-                  type="checkbox"
-                  checked={collectionIds.includes(collection.id)}
-                  onChange={(event) => setCollectionIds((current) => event.target.checked
-                    ? [...current, collection.id]
-                    : current.filter((id) => id !== collection.id))}
-                />
-                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: collection.color }} />
-                {collection.name}
-              </label>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-2 text-sm leading-6 text-muted">
-            This folder has no collections yet. One is made in{" "}
-            <Link to="/organize" className="font-semibold text-ink underline">Organize</Link>.
-          </p>
-        )}
-        <p className="mt-1 text-xs leading-5 text-muted">A collection groups items inside the folder, like a sub-folder.</p>
       </div>
 
       <div>
@@ -541,5 +521,289 @@ function Field({
         {value || "—"}
       </dd>
     </div>
+  );
+}
+
+function generateCitations(record: Detail) {
+  const author = (record.metadata?.author as string) || (record.metadata?.byline as string) || "";
+  const title = record.title || "Untitled";
+  const siteName = record.sourcePageTitle || record.sourceDomain || "Web";
+  const url = record.sourceUrl || "";
+  const pubDateRaw = (record.metadata?.publicationDate as string) || record.capturedAt || record.createdAt;
+  const pubDate = new Date(pubDateRaw);
+  const isValidDate = !isNaN(pubDate.getTime());
+  const year = isValidDate ? pubDate.getFullYear().toString() : "n.d.";
+  const monthDay = isValidDate ? format(pubDate, "MMMM d") : "";
+  const accessedDate = format(new Date(), "MMMM d, yyyy");
+  const authorDisplay = author || siteName;
+  const citeKey = ((author ? author.split(" ").pop() : siteName) ?? "source").toLowerCase().replace(/[^a-z0-9]/g, "") + year;
+
+  const apa = `${authorDisplay}. (${year}${monthDay ? `, ${monthDay}` : ""}). ${title}. ${siteName !== authorDisplay ? siteName + ". " : ""}${url}`;
+  const mla = `${authorDisplay}. "${title}." ${siteName}, ${isValidDate ? format(pubDate, "d MMM. yyyy") : "n.d."}, ${url}. Accessed ${accessedDate}.`;
+  const chicago = `${authorDisplay}. "${title}." ${siteName}. ${isValidDate ? format(pubDate, "MMMM d, yyyy") : ""}. Accessed ${accessedDate}. ${url}.`;
+  const harvard = `${authorDisplay} (${year}) '${title}', ${siteName}, available at: ${url} (Accessed: ${accessedDate}).`;
+  const bibtex = `@misc{${citeKey},
+  author = {${authorDisplay}},
+  title = {${title.replace(/[{}]/g, "")}},
+  year = {${year}},
+  howpublished = {\\url{${url}}},
+  note = {Accessed: ${accessedDate}}
+}`;
+
+  return { apa, mla, chicago, harvard, bibtex };
+}
+
+function extractReaderContent(html: string) {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    doc.querySelectorAll("script, style, noscript, iframe, svg, nav, footer, header, aside").forEach((el) => el.remove());
+    const bodyText = doc.body.innerText || doc.body.textContent || "";
+    const words = bodyText.trim().split(/\s+/).filter(Boolean);
+    const wordCount = words.length;
+    const readTimeMinutes = Math.max(1, Math.ceil(wordCount / 200));
+
+    const elements = Array.from(doc.querySelectorAll("h1, h2, h3, h4, p, blockquote, pre"));
+    const paragraphs = elements
+      .map((el) => ({ tag: el.tagName.toLowerCase(), text: el.textContent?.trim() || "" }))
+      .filter((p) => p.text.length > 20 || p.tag.startsWith("h"));
+
+    return {
+      title: doc.title || "",
+      paragraphs,
+      wordCount,
+      readTimeMinutes,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function CitationModal({
+  open,
+  onClose,
+  record,
+}: {
+  open: boolean;
+  onClose: () => void;
+  record: Detail;
+}) {
+  const { notify } = useToast();
+  const [formatChoice, setFormatChoice] = useState<"apa" | "mla" | "chicago" | "harvard" | "bibtex">("apa");
+  const [copied, setCopied] = useState(false);
+
+  const citations = useMemo(() => generateCitations(record), [record]);
+  const activeText = citations[formatChoice];
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(activeText);
+    setCopied(true);
+    notify(`${formatChoice.toUpperCase()} citation copied`);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Cite this source" width="max-w-2xl">
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-2 border-b border-line pb-3">
+          {(["apa", "mla", "chicago", "harvard", "bibtex"] as const).map((fmt) => (
+            <button
+              key={fmt}
+              type="button"
+              onClick={() => {
+                setFormatChoice(fmt);
+                setCopied(false);
+              }}
+              className={cn(
+                "rounded-xl px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition",
+                formatChoice === fmt ? "bg-deep text-white" : "border border-line bg-surface text-muted hover:bg-soft hover:text-ink",
+              )}
+            >
+              {fmt}
+            </button>
+          ))}
+        </div>
+
+        <div className="rounded-2xl bg-soft p-5">
+          <pre className="font-mono text-xs leading-relaxed text-ink whitespace-pre-wrap break-all">
+            {activeText}
+          </pre>
+          <div className="mt-4 flex justify-end">
+            <Button size="sm" onClick={() => void handleCopy()} className="gap-1.5">
+              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+              {copied ? "Copied" : "Copy citation"}
+            </Button>
+          </div>
+        </div>
+
+        <p className="text-xs text-muted">
+          Generated based on extracted author, title, publication date, and source domain.
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
+function ReaderAndSnapshotModal({
+  open,
+  onClose,
+  snapshotHtml,
+  record,
+}: {
+  open: boolean;
+  onClose: () => void;
+  snapshotHtml: string | null;
+  record: Detail;
+}) {
+  const [mode, setMode] = useState<"reader" | "sandbox">("reader");
+  const [fontSize, setFontSize] = useState<"sm" | "base" | "lg" | "xl">("base");
+  const [fontFamily, setFontFamily] = useState<"sans" | "serif">("serif");
+  const [tone, setTone] = useState<"light" | "sepia" | "dark">("light");
+
+  const snapshotDocument = useMemo(() => (snapshotHtml ? snapshotWithPolicy(snapshotHtml) : ""), [snapshotHtml]);
+  const parsedContent = useMemo(() => (snapshotHtml ? extractReaderContent(snapshotHtml) : null), [snapshotHtml]);
+
+  const rawTextParagraphs = useMemo(() => {
+    if (parsedContent?.paragraphs.length) return parsedContent.paragraphs;
+    if (record.originalText) {
+      return record.originalText.split(/\n\n+/).map((t) => ({ tag: "p", text: t.trim() })).filter((t) => t.text.length > 0);
+    }
+    return [];
+  }, [parsedContent, record.originalText]);
+
+  const wordCount = parsedContent?.wordCount ?? (record.originalText ? record.originalText.split(/\s+/).length : 0);
+  const readTime = Math.max(1, Math.ceil(wordCount / 200));
+
+  const toneClass = {
+    light: "bg-surface text-ink",
+    sepia: "bg-[#fbf0d9] text-[#433422]",
+    dark: "bg-[#18181b] text-[#f4f4f5]",
+  }[tone];
+
+  const fontClass = fontFamily === "serif" ? "font-serif" : "font-sans";
+  const sizeClass = {
+    sm: "text-sm leading-6",
+    base: "text-base leading-7",
+    lg: "text-lg leading-8",
+    xl: "text-xl leading-9",
+  }[fontSize];
+
+  return (
+    <Modal open={open} onClose={onClose} title={record.title} width="max-w-4xl">
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
+          <div className="flex items-center gap-1.5 rounded-xl border border-line bg-surface p-1">
+            <button
+              type="button"
+              onClick={() => setMode("reader")}
+              className={cn("rounded-lg px-3 py-1 text-xs font-semibold transition", mode === "reader" ? "bg-deep text-white" : "text-muted hover:text-ink")}
+            >
+              <BookOpen className="inline-block mr-1.5 size-3.5" />
+              Reader view
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("sandbox")}
+              className={cn("rounded-lg px-3 py-1 text-xs font-semibold transition", mode === "sandbox" ? "bg-deep text-white" : "text-muted hover:text-ink")}
+            >
+              Archived page
+            </button>
+          </div>
+
+          {mode === "reader" ? (
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+              <span>{wordCount.toLocaleString()} words · ~{readTime} min read</span>
+
+              <div className="flex items-center gap-1 rounded-lg border border-line bg-surface p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setFontFamily("sans")}
+                  className={cn("rounded px-2 py-0.5 font-sans font-semibold", fontFamily === "sans" ? "bg-soft text-ink" : "text-muted")}
+                >
+                  Sans
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFontFamily("serif")}
+                  className={cn("rounded px-2 py-0.5 font-serif font-semibold", fontFamily === "serif" ? "bg-soft text-ink" : "text-muted")}
+                >
+                  Serif
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1 rounded-lg border border-line bg-surface p-0.5">
+                {(["sm", "base", "lg", "xl"] as const).map((sz) => (
+                  <button
+                    key={sz}
+                    type="button"
+                    onClick={() => setFontSize(sz)}
+                    className={cn("rounded px-1.5 py-0.5 text-xs font-semibold uppercase", fontSize === sz ? "bg-soft text-ink" : "text-muted")}
+                  >
+                    {sz === "sm" ? "S" : sz === "base" ? "M" : sz === "lg" ? "L" : "XL"}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-1 rounded-lg border border-line bg-surface p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setTone("light")}
+                  className={cn("size-5 rounded-full border border-line bg-white", tone === "light" && "ring-2 ring-deep ring-offset-1")}
+                  title="Light"
+                />
+                <button
+                  type="button"
+                  onClick={() => setTone("sepia")}
+                  className={cn("size-5 rounded-full bg-[#fbf0d9] border border-amber-300", tone === "sepia" && "ring-2 ring-deep ring-offset-1")}
+                  title="Sepia"
+                />
+                <button
+                  type="button"
+                  onClick={() => setTone("dark")}
+                  className={cn("size-5 rounded-full bg-[#18181b] border border-zinc-700", tone === "dark" && "ring-2 ring-deep ring-offset-1")}
+                  title="Dark"
+                />
+              </div>
+            </div>
+          ) : (
+            <span className="text-xs text-muted">Original HTML in secure sandbox</span>
+          )}
+        </div>
+
+        {mode === "reader" ? (
+          <div className={cn("max-h-[65vh] overflow-y-auto rounded-2xl p-8 transition-colors", toneClass)}>
+            <div className={cn("mx-auto max-w-2xl space-y-4", fontClass, sizeClass)}>
+              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">{record.title}</h1>
+              {record.sourceDomain ? (
+                <p className="text-xs uppercase tracking-widest opacity-70">
+                  {record.sourceDomain} {record.capturedAt ? `· ${format(new Date(record.capturedAt), "MMMM d, yyyy")}` : ""}
+                </p>
+              ) : null}
+              <hr className="my-6 border-line/50" />
+              {rawTextParagraphs.length ? (
+                rawTextParagraphs.map((item, idx) => {
+                  if (item.tag.startsWith("h")) {
+                    return <h3 key={idx} className="pt-3 text-lg font-bold">{item.text}</h3>;
+                  }
+                  if (item.tag === "blockquote") {
+                    return <blockquote key={idx} className="border-l-4 border-line pl-4 italic opacity-85">{item.text}</blockquote>;
+                  }
+                  return <p key={idx}>{item.text}</p>;
+                })
+              ) : (
+                <p className="italic opacity-60">No full article text preserved. View the archived page or check the original text snippet.</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <iframe
+            title="The page as it was"
+            sandbox=""
+            className="h-[65vh] w-full rounded-2xl border border-line bg-white shadow-inner"
+            srcDoc={snapshotDocument}
+          />
+        )}
+      </div>
+    </Modal>
   );
 }

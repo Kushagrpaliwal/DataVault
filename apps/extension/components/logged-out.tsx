@@ -39,7 +39,7 @@ export function LoggedOut({ onSignedIn, capturePending = false }: { onSignedIn: 
           ? "Your selected text is waiting safely in this browser. Sign in, then check it and save."
           : "Sign in on the DataVault website. Your password never reaches the extension."}
       </p>
-      {error ? <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p> : null}
       <Button className="mt-5 w-full" disabled={signingIn} onClick={() => void signIn()}>
         {signingIn ? "Opening sign in…" : capturePending ? "Sign in to save" : "Sign in"}
       </Button>

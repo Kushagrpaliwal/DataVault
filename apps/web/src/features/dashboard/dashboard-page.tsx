@@ -105,7 +105,7 @@ function GettingStarted() {
           ["Right-click and save", "Choose “Save to DataVault”. It shows up here instantly."],
         ].map(([title, description], index) => (
           <div key={title} className="bg-surface p-6">
-            <span className="grid size-8 place-items-center rounded-full bg-ink text-sm font-semibold text-white">
+            <span className="grid size-8 place-items-center rounded-full bg-ink text-sm font-semibold text-canvas">
               {index + 1}
             </span>
             <h3 className="mt-4 font-semibold">{title}</h3>

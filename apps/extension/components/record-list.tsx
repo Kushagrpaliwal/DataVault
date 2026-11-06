@@ -32,7 +32,7 @@ export function RecordList({ records, loading, empty = "No saved items yet.", on
           </button>
           {onDelete ? (
             <button
-              className="mr-3 rounded-lg p-2 text-red-700 hover:bg-red-50"
+              className="mr-3 rounded-lg p-2 text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40"
               title={`Move ${record.title} to Trash`}
               aria-label={`Move ${record.title} to Trash`}
               onClick={() => onDelete(record)}

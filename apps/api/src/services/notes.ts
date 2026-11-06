@@ -214,6 +214,18 @@ export async function trashNote(context: TenantContext, request: Request, id: st
   });
 }
 
+export async function deleteNotePermanent(context: TenantContext, request: Request, id: string) {
+  return withTenant(context.organizationId, async (tx) => {
+    await clearCurrentNote(tx, context, id);
+    const [note] = await tx.delete(notes)
+      .where(and(eq(notes.organizationId, context.organizationId), eq(notes.id, id)))
+      .returning({ id: notes.id });
+    if (!note) throw notFound("note");
+    await writeAudit(tx, context, request, { action: "deleted", resourceType: "note", resourceId: id });
+    return note;
+  });
+}
+
 export async function restoreNote(context: TenantContext, request: Request, id: string): Promise<Note> {
   return withTenant(context.organizationId, async (tx) => {
     const [note] = await tx.update(notes).set({ deletedAt: null, updatedAt: new Date(), updatedBy: context.userId })
@@ -234,7 +246,7 @@ async function snapshotRevision(
   tx: DatabaseTransaction,
   context: TenantContext,
   before: NoteRow,
-  reason: "autosave" | "ai-organize" | "ai-write-up" | "conflict" | "restore",
+  reason: "autosave" | "ai-notes" | "conflict" | "restore",
 ) {
   const [latest] = await tx.select({ createdAt: noteRevisions.createdAt }).from(noteRevisions)
     .where(and(eq(noteRevisions.organizationId, context.organizationId), eq(noteRevisions.noteId, before.id)))
@@ -546,57 +558,4 @@ function stripClipsAndSections(doc: JSONContent): JSONContent {
     return true;
   });
   return { ...doc, content: content.map((node) => (Array.isArray(node.content) ? stripClipsAndSections(node) : node)) };
-}
-
-/**
- * Rebuild a doc so that its clips sit under topic headings.
- *
- * The writing that is not a clip stays at the top, and every clip that the
- * AI could not place goes under "Other".
- */
-export function rebuildWithSections(doc: JSONContent, sections: Array<{ title: string; clipIds: string[] }>): JSONContent {
-  const content = doc.content ?? [];
-  const clips = new Map<string, JSONContent>();
-
-  const collect = (nodes: JSONContent[]) => {
-    for (const node of nodes) {
-      if (node.type === "clip") {
-        const clipId = String(node.attrs?.clipId ?? "");
-        if (clipId) clips.set(clipId, node);
-        continue;
-      }
-      if (Array.isArray(node.content)) collect(node.content);
-    }
-  };
-  collect(content);
-
-  /**
-   * Everything that is not a clip and is not a heading stays at the top, so
-   * the user's own writing is never lost.
-   */
-  const preamble = content.filter((node) => node.type !== "clip" && node.type !== "heading");
-
-  const placed = new Set<string>();
-  const next: JSONContent[] = [...preamble];
-  for (const section of sections) {
-    next.push({
-      type: "heading",
-      attrs: { level: 2, sectionKey: `topic:${section.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}` },
-      content: [{ type: "text", text: section.title }],
-    });
-    for (const clipId of section.clipIds) {
-      const clip = clips.get(clipId);
-      if (!clip || placed.has(clipId)) continue;
-      placed.add(clipId);
-      next.push(clip);
-    }
-  }
-
-  const leftovers = [...clips.values()].filter((clip) => !placed.has(String(clip.attrs?.clipId ?? "")));
-  if (leftovers.length) {
-    next.push({ type: "heading", attrs: { level: 2, sectionKey: "topic:other" }, content: [{ type: "text", text: "Other" }] });
-    next.push(...leftovers);
-  }
-
-  return { type: "doc", content: next };
 }

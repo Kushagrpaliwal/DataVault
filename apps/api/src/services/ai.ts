@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { z } from "zod";
 import { aiResponseCache, aiUsageEvents, getDatabase, savedRecords, withUser, withTenant } from "@data-vault/database";
 import type { ServerEnvironment } from "@data-vault/config";
 import { AppError } from "../lib/errors";
@@ -45,19 +46,27 @@ export interface ResolvedAi {
 /**
  * Find the provider that answers for this person.
  *
- * A connection that has been removed on the website is not used, and a
- * server that cannot hold the keys of the users falls back to the free
- * one rather than failing.
+ * A person who has no connection gets the shared one. A person who has one
+ * gets their own, and if their key cannot be read then the request fails
+ * and says so. It used to fall back to the shared key instead, and the
+ * person was told their own key was being used while it was not.
  */
 export async function resolveAi(env: ServerEnvironment, context: AiCreditContext): Promise<ResolvedAi> {
+  const connection = await defaultConnection(context.userId);
+  if (!connection) return { source: "free" };
+  let target: AiTarget;
   try {
-    const connection = await defaultConnection(context.userId);
-    if (!connection) return { source: "free" };
-    const target = await targetFor(env, context.userId, connection);
-    return { source: "own", target, label: connection.label, preset: connection.preset, model: connection.model };
-  } catch {
-    return { source: "free" };
+    target = await targetFor(env, context.userId, connection);
+  } catch (error) {
+    if (error instanceof AppError && error.code === "AI_KEY_UNREADABLE") {
+      throw new AppError(409, "AI_KEY_UNREADABLE", "Your saved key could not be read. Please enter it again in Settings.");
+    }
+    if (error instanceof AppError && error.code === "AI_KEYS_UNAVAILABLE") {
+      throw new AppError(503, "AI_KEYS_UNAVAILABLE", "The server cannot hold the keys of the users right now.");
+    }
+    throw error;
   }
+  return { source: "own", target, label: connection.label, preset: connection.preset, model: connection.model };
 }
 
 /**
@@ -76,6 +85,15 @@ export interface ModelRequest {
   schema: Record<string, unknown>;
   maxOutputTokens?: number | undefined;
   temperature?: number | undefined;
+  /**
+   * Read the answer, and say so when it cannot be read.
+   *
+   * The reading happens here rather than in the caller, because a credit
+   * that was taken for an answer that could not be read has to come back,
+   * and by the time the caller looks at the answer the credit is already
+   * spent.
+   */
+  validate?: ((data: unknown) => unknown) | undefined;
 }
 
 /**
@@ -86,14 +104,14 @@ export interface ModelRequest {
  * already. The free path is the one that spends a credit, and it is
  * unchanged.
  */
-export async function runModel(
+export async function runModel<T = unknown>(
   env: ServerEnvironment,
   context: AiCreditContext,
   requestId: string,
   options: { idempotencyKey?: string | undefined },
   feature: string,
-  input: ModelRequest,
-): Promise<{ data: unknown; inputTokens: number; outputTokens: number; source: "own" | "free"; remaining: number }> {
+  input: ModelRequest & { validate?: ((data: unknown) => T) | undefined },
+): Promise<{ data: T; inputTokens: number; outputTokens: number; source: "own" | "free"; remaining: number }> {
   const resolved = await resolveAi(env, context);
   if (resolved.source === "own" && resolved.target) {
     const maxOutputTokens = Math.min(input.maxOutputTokens ?? env.AI_BYO_MAX_OUTPUT_TOKENS, env.AI_BYO_MAX_OUTPUT_TOKENS);
@@ -117,7 +135,12 @@ export async function runModel(
       cached: 0,
       requestId,
     }));
-    return { data: result.data, inputTokens: result.inputTokens, outputTokens: result.outputTokens, source: "own", remaining: 0 };
+    /**
+     * An answer that cannot be read is refused. There is no credit to give
+     * back, because their own key paid for it.
+     */
+    const data = (input.validate ? input.validate(result.data) : result.data) as T;
+    return { data, inputTokens: result.inputTokens, outputTokens: result.outputTokens, source: "own", remaining: 0 };
   }
 
   const reservation = await reserveCredit(env, context, feature, env.GEMINI_MODEL, requestId, options);
@@ -131,8 +154,14 @@ export async function runModel(
       ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
     });
     await recordUsage(reservation, { inputTokens: result.inputTokens, outputTokens: result.outputTokens });
+    /**
+     * The answer is read here, so that an answer that cannot be read gives
+     * the credit back. The promise in the documentation is that a credit is
+     * only spent on an answer that was read.
+     */
+    const data = (input.validate ? input.validate(result.data) : result.data) as T;
     const status = await readCreditStatus(env, context);
-    return { data: result.data, inputTokens: result.inputTokens, outputTokens: result.outputTokens, source: "free", remaining: status.remaining };
+    return { data, inputTokens: result.inputTokens, outputTokens: result.outputTokens, source: "free", remaining: status.remaining };
   } catch (error) {
     await refundCredit(reservation, error instanceof Error ? error.message : "The request failed.");
     throw error;
@@ -194,6 +223,37 @@ const EXTRACT_SCHEMA = {
   required: ["title"],
 } as const;
 
+/**
+ * The shapes the answers are read back with.
+ *
+ * They are the same shapes that are asked for, written in a way that can be
+ * read. A field that the model may leave out is left out here as well.
+ */
+const SUMMARY_RESULT = z.object({
+  summary: z.string(),
+  keyPoints: z.array(z.string()),
+  suggestedTitle: z.string(),
+});
+
+const CLASSIFY_RESULT = z.object({
+  recordType: z.string(),
+  tags: z.array(z.string()),
+  /**
+   * A model that writes the number as words is read as well, because the
+   * number itself is not what the person is shown.
+   */
+  confidence: z.coerce.number(),
+  reason: z.string(),
+});
+
+const EXTRACT_RESULT = z.object({
+  title: z.string(),
+  author: z.string().optional(),
+  publishedAt: z.string().optional(),
+  claim: z.string().optional(),
+  number: z.string().optional(),
+});
+
 const SYSTEM_PROMPTS: Record<AiFeature, string> = {
   summarize: [
     "You summarise text that a person saved from the web.",
@@ -222,6 +282,31 @@ const SCHEMAS: Record<AiFeature, Record<string, unknown>> = {
   summarize: SUMMARY_SCHEMA as unknown as Record<string, unknown>,
   classify: CLASSIFY_SCHEMA as unknown as Record<string, unknown>,
   extract: EXTRACT_SCHEMA as unknown as Record<string, unknown>,
+};
+
+/**
+ * The answer that is read back.
+ *
+ * The shape of the answer was asked for, and it is checked here rather than
+ * left to whoever uses it. An answer that cannot be read gives the credit
+ * back, because the person did not get anything for it.
+ */
+const RESULTS: Record<AiFeature, (data: unknown) => unknown> = {
+  summarize: (data) => {
+    const parsed = SUMMARY_RESULT.safeParse(data);
+    if (!parsed.success) throw new AppError(502, "AI_INVALID_RESPONSE", "The AI service returned an answer we could not read. Please try again.");
+    return parsed.data;
+  },
+  classify: (data) => {
+    const parsed = CLASSIFY_RESULT.safeParse(data);
+    if (!parsed.success) throw new AppError(502, "AI_INVALID_RESPONSE", "The AI service returned an answer we could not read. Please try again.");
+    return parsed.data;
+  },
+  extract: (data) => {
+    const parsed = EXTRACT_RESULT.safeParse(data);
+    if (!parsed.success) throw new AppError(502, "AI_INVALID_RESPONSE", "The AI service returned an answer we could not read. Please try again.");
+    return parsed.data;
+  },
 };
 
 function clamp(text: string, maxTokens: number): string {
@@ -271,7 +356,7 @@ export async function runAiFeature(
    * The request is made through the one path that knows whether a key of
    * the person is used, so that the credits are only spent when they are.
    */
-  const result = await runModel(env, context, requestId, options, feature, { system, contents, schema });
+  const result = await runModel(env, context, requestId, options, feature, { system, contents, schema, validate: RESULTS[feature] });
   await writeCached(await cacheKeyFor({ system, contents, responseSchema: schema }, model), feature, model, result.data);
 
   const status = await readCreditStatus(env, context);

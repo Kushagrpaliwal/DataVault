@@ -53,7 +53,7 @@ export const noteRevisions = pgTable("note_revisions", {
   title: text("title").notNull(),
   content: jsonb("content").$type<Record<string, unknown>>().notNull(),
   /** Why the version was kept. */
-  reason: text("reason").$type<"autosave" | "ai-organize" | "ai-write-up" | "conflict" | "restore">().notNull().default("autosave"),
+  reason: text("reason").$type<"autosave" | "ai-notes" | "conflict" | "restore">().notNull().default("autosave"),
   createdBy: uuid("created_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

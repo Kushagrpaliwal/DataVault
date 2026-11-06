@@ -23,7 +23,7 @@ export function createMailer(env: ServerEnvironment): Mailer {
       await mailer.send({
         to: email,
         subject: "Confirm your email address",
-        text: `Hi ${name},\n\nConfirm your email address to unlock your AI credits: ${url}\n\nYou can still use DataVault without confirming, but AI credits stay locked until you do. If you did not create an account, ignore this email.`,
+        text: `Hi ${name},\n\nConfirm your email address: ${url}\n\nYou can still use DataVault without confirming. If you did not create an account, ignore this email.`,
       });
     },
     async sendPasswordSetup({ email, name, url }) {

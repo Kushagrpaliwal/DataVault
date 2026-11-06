@@ -1,8 +1,8 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { strToU8, zipSync } from "fflate";
 import {
-  attachments, evidenceSnapshots, noteRevisions, notes, organizations, savedRecords, savedRecordCollections,
-  savedRecordTags, tags, vaultCollections, vaults, withTenant, type DatabaseTransaction,
+  attachments, evidenceSnapshots, noteRevisions, notes, organizations, savedRecords,
+  savedRecordTags, tags, vaults, withTenant, type DatabaseTransaction,
 } from "@data-vault/database";
 import type { z } from "zod";
 import type { JSONContent } from "@tiptap/core";
@@ -343,7 +343,7 @@ function chunks<T>(values: T[], size: number): T[][] {
  * Bring material into a workspace.
  *
  * The items are filed in a folder of their own, and the folders they came
- * from become collections, so that the shape of the import is kept.
+ * from become sub-folders, so that the shape of the import is kept.
  *
  * An item that is already in the workspace is not brought in a second time,
  * and neither is one that appears twice in the file. Both are counted as
@@ -389,10 +389,10 @@ export async function runImport(context: TenantContext, request: Request, input:
     }
 
     /**
-     * The folders the material came from become collections, so that the
+     * The folders the material came from become sub-folders, so that the
      * shape of the import is kept.
      */
-    const collectionIds = await makeCollections(tx, context, vaultId, items);
+    const subfolders = await makeSubfolders(tx, context, vaultId, items);
     /**
      * The tags are made once, before the items, because the items all use
      * the same few of them.
@@ -430,7 +430,7 @@ export async function runImport(context: TenantContext, request: Request, input:
       prepared.push({
         values: {
           organizationId: context.organizationId,
-          vaultId,
+          vaultId: item.folder ? subfolders.get(item.folder) ?? vaultId : vaultId,
           recordType: "bookmark",
           title,
           description: item.url,
@@ -450,7 +450,6 @@ export async function runImport(context: TenantContext, request: Request, input:
         url: item.url,
         domain,
         text: item.text ?? null,
-        collectionId: item.folder ? collectionIds.get(item.folder) : undefined,
         tagIds: tagNames.map((tagName) => tagIds.get(tagName)).filter((id): id is string => Boolean(id)),
       });
     }
@@ -476,7 +475,6 @@ interface PreparedItem {
   url: string;
   domain: string;
   text: string | null;
-  collectionId: string | undefined;
   tagIds: string[];
 }
 
@@ -490,14 +488,12 @@ async function writeBatch(tx: DatabaseTransaction, context: TenantContext, batch
   const inserted = await tx.insert(savedRecords).values(batch.map((entry) => entry.values)).returning({ id: savedRecords.id });
   const hashes = await Promise.all(batch.map((entry) => sha256(entry.url)));
   const saved: { id: string; title: string; url: string }[] = [];
-  const collectionLinks: (typeof savedRecordCollections.$inferInsert)[] = [];
   const tagLinks: (typeof savedRecordTags.$inferInsert)[] = [];
   const evidence: (typeof evidenceSnapshots.$inferInsert)[] = [];
   batch.forEach((entry, index) => {
     const id = inserted[index]?.id;
     if (!id) return;
     saved.push({ id, title: entry.title, url: entry.url });
-    if (entry.collectionId) collectionLinks.push({ savedRecordId: id, collectionId: entry.collectionId, organizationId: context.organizationId });
     for (const tagId of entry.tagIds) tagLinks.push({ savedRecordId: id, tagId, organizationId: context.organizationId });
     evidence.push({
       organizationId: context.organizationId,
@@ -512,16 +508,18 @@ async function writeBatch(tx: DatabaseTransaction, context: TenantContext, batch
       capturedAt: new Date(),
     });
   });
-  if (collectionLinks.length) await tx.insert(savedRecordCollections).values(collectionLinks);
   if (tagLinks.length) await tx.insert(savedRecordTags).values(tagLinks);
   if (evidence.length) await tx.insert(evidenceSnapshots).values(evidence);
   return saved;
 }
 
 /**
- * The collections for the folders the material came from.
+ * The sub-folders for the folders the material came from.
+ *
+ * A folder that is already there is used as it is, so an import that is run
+ * twice does not make the same folders again.
  */
-async function makeCollections(
+async function makeSubfolders(
   tx: DatabaseTransaction,
   context: TenantContext,
   vaultId: string,
@@ -530,19 +528,35 @@ async function makeCollections(
   const folders = [...new Set(items.map((item) => item.folder).filter((folder): folder is string => Boolean(folder)))];
   if (!folders.length) return new Map();
   const names = [...new Set(folders.map((folder) => folder.split("/").pop() ?? folder))];
-  for (const batch of chunks(names, BATCH_SIZE)) {
-    await tx.insert(vaultCollections).values(batch.map((collectionName) => ({
-      organizationId: context.organizationId,
-      vaultId,
-      name: collectionName,
-      color: "#b8a4ed",
-      createdBy: context.userId,
-    }))).onConflictDoNothing({ target: [vaultCollections.vaultId, vaultCollections.name] });
+  const existing = await tx.select({ id: vaults.id, name: vaults.name, slug: vaults.slug })
+    .from(vaults)
+    .where(and(eq(vaults.organizationId, context.organizationId), eq(vaults.parentId, vaultId), inArray(vaults.name, names)));
+  const byName = new Map(existing.map((row) => [row.name, row.id]));
+  const taken = new Set(existing.map((row) => row.slug));
+  const missing = names.filter((name) => !byName.has(name));
+  for (const batch of chunks(missing, BATCH_SIZE)) {
+    const values = batch.map((name) => {
+      const base = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 100) || "folder";
+      let slug = base;
+      let suffix = 1;
+      while (taken.has(slug)) {
+        suffix += 1;
+        slug = `${base}-${suffix}`;
+      }
+      taken.add(slug);
+      return {
+        organizationId: context.organizationId,
+        parentId: vaultId,
+        name,
+        slug,
+        kind: "workspace" as const,
+        color: "#b8a4ed",
+        createdBy: context.userId,
+      };
+    });
+    const made = await tx.insert(vaults).values(values).onConflictDoNothing().returning({ id: vaults.id, name: vaults.name });
+    for (const row of made) byName.set(row.name, row.id);
   }
-  const rows = await tx.select({ id: vaultCollections.id, name: vaultCollections.name })
-    .from(vaultCollections)
-    .where(and(eq(vaultCollections.organizationId, context.organizationId), eq(vaultCollections.vaultId, vaultId), inArray(vaultCollections.name, names)));
-  const byName = new Map(rows.map((row) => [row.name, row.id]));
   const byFolder = new Map<string, string>();
   for (const folder of folders) {
     const id = byName.get(folder.split("/").pop() ?? folder);
@@ -594,20 +608,18 @@ function hostOf(url: string): string {
 /**
  * Everything in a workspace, as one file.
  *
- * The file holds the items, the folders, the collections, the tags, the
- * docs and the attachments, so that the workspace can be read somewhere
- * else, or brought back if it is lost.
+ * The file holds the items, the folders, the tags, the docs and the
+ * attachments, so that the workspace can be read somewhere else, or brought
+ * back if it is lost.
  */
 export async function exportWorkspace(context: TenantContext) {
   return withTenant(context.organizationId, async (tx) => {
     const [organization] = await tx.select({ id: organizations.id, name: organizations.name, slug: organizations.slug }).from(organizations).where(eq(organizations.id, context.organizationId)).limit(1);
-    const [folderRows, collectionRows, tagRows] = await Promise.all([
+    const [folderRows, tagRows] = await Promise.all([
       tx.select().from(vaults).where(eq(vaults.organizationId, context.organizationId)),
-      tx.select().from(vaultCollections).where(eq(vaultCollections.organizationId, context.organizationId)),
       tx.select().from(tags).where(eq(tags.organizationId, context.organizationId)),
     ]);
     const recordRows = await tx.select().from(savedRecords).where(eq(savedRecords.organizationId, context.organizationId));
-    const itemRows = await tx.select().from(savedRecordCollections).where(eq(savedRecordCollections.organizationId, context.organizationId));
     const tagRowsForItems = await tx.select().from(savedRecordTags).where(eq(savedRecordTags.organizationId, context.organizationId));
     const evidenceRows = await tx.select().from(evidenceSnapshots).where(eq(evidenceSnapshots.organizationId, context.organizationId));
     const attachmentRows = await tx.select().from(attachments).where(eq(attachments.organizationId, context.organizationId));
@@ -618,7 +630,6 @@ export async function exportWorkspace(context: TenantContext) {
      * the item they belong to. Looking through the whole list for every
      * item turns the export into a long wait.
      */
-    const collectionsByRecord = groupBy(itemRows, (link) => link.savedRecordId, (link) => link.collectionId);
     const tagsByRecord = groupBy(tagRowsForItems, (link) => link.savedRecordId, (link) => link.tagId);
     const evidenceByRecord = groupBy(evidenceRows, (row) => row.savedRecordId, (row) => ({ id: row.id, sourceUrl: row.sourceUrl, sourceTitle: row.sourceTitle, sourceDomain: row.sourceDomain, capturedText: row.capturedText, pageHtml: row.pageHtml, contentHash: row.contentHash, capturedAt: row.capturedAt.toISOString() }));
     const attachmentsByRecord = groupBy(attachmentRows, (row) => row.savedRecordId, (row) => ({ id: row.id, fileName: row.fileName, mimeType: row.mimeType, byteSize: Number(row.byteSize), sha256: row.sha256, createdAt: row.createdAt.toISOString() }));
@@ -628,12 +639,10 @@ export async function exportWorkspace(context: TenantContext) {
       version: 2,
       exportedAt: new Date().toISOString(),
       organization: organization ? { id: organization.id, name: organization.name, slug: organization.slug } : null,
-      folders: folderRows.map((row) => ({ id: row.id, name: row.name, slug: row.slug, description: row.description, color: row.color, isDefault: row.isDefault, createdAt: row.createdAt.toISOString() })),
-      collections: collectionRows.map((row) => ({ id: row.id, folderId: row.vaultId, name: row.name, color: row.color })),
+      folders: folderRows.map((row) => ({ id: row.id, parentId: row.parentId, name: row.name, slug: row.slug, description: row.description, color: row.color, isDefault: row.isDefault, createdAt: row.createdAt.toISOString() })),
       tags: tagRows.map((row) => ({ id: row.id, name: row.name, color: row.color })),
       items: recordRows.map((row) => ({
         ...mapSavedRecord(row),
-        collections: collectionsByRecord.get(row.id) ?? [],
         tags: tagsByRecord.get(row.id) ?? [],
         evidence: evidenceByRecord.get(row.id) ?? [],
         attachments: attachmentsByRecord.get(row.id) ?? [],

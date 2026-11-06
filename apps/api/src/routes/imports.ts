@@ -30,7 +30,7 @@ export function createImportRoutes(auth: DataVaultAuth, env: ServerEnvironment) 
     /**
      * Everything in the workspace, as one file.
      *
-     * The file holds the items, the folders, the collections, the tags, the
+     * The file holds the items, the folders, the tags, the docs and the
      * docs and the attachments, so that the workspace can be read somewhere
      * else, or brought back if it is lost. It is an archive, so it can be
      * opened like a folder and the attachments come out as they are.

@@ -8,13 +8,13 @@ import { Button, cn, EmptyState, RecordTypeIcon } from "@data-vault/ui";
 import { useAuth } from "../lib/auth";
 import { useVaultSync } from "../lib/use-vault-sync";
 import { Modal } from "./feedback";
-import { AiAccessNotice, AiCreditBadge } from "./ai-panel";
+import { ThemePicker } from "./theme-picker";
+import { AiAccessNotice } from "./ai-panel";
 
 const navigation = [
   ["Overview", "/", LayoutDashboard],
   ["Saved", "/saved", Download],
   ["Docs", "/docs", FileText],
-  ["Organize", "/organize", Puzzle],
   ["Settings", "/settings", Settings],
 ] as const;
 
@@ -46,7 +46,7 @@ export function AppShell() {
       <aside className={cn("fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-line bg-hover transition-transform lg:translate-x-0", mobileOpen ? "translate-x-0" : "-translate-x-full")}>
         <div className="flex h-16 items-center justify-between px-5">
           <NavLink to="/" className="flex items-center gap-2 text-lg font-semibold" onClick={() => setMobileOpen(false)}>
-            <span className="grid size-8 place-items-center rounded-xl bg-ink text-white font-bold">D</span>
+            <span className="grid size-8 place-items-center rounded-xl bg-ink text-canvas font-bold">D</span>
             DataVault
           </NavLink>
           <button className="lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close navigation">
@@ -114,7 +114,7 @@ export function AppShell() {
           <div className="hidden size-9 place-items-center rounded-full bg-[#b8a4ed] text-sm font-semibold text-deep sm:grid">
             {session?.user.name.split(" ").map((word) => word[0]).join("").slice(0, 2)}
           </div>
-          <AiCreditBadge />
+          <ThemePicker />
         </header>
         <main id="main" className="mx-auto max-w-[1500px] p-4 md:p-7 lg:p-8">
           <Outlet />
@@ -149,7 +149,7 @@ function ExtensionInstall({ open, onClose }: { open: boolean; onClose: () => voi
           ["Right-click and save", "Choose “Save to DataVault”. It appears in your Saved list right away."],
         ].map(([title, description], index) => (
           <li key={title} className="flex gap-3 rounded-xl bg-soft p-4">
-            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-ink text-xs font-semibold text-white">
+            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-ink text-xs font-semibold text-canvas">
               {index + 1}
             </span>
             <span>
@@ -247,7 +247,7 @@ function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => void })
   const quickActions = [
     ["Open your saved items", "/saved"],
     ["Open your docs", "/docs"],
-    ["Organize with folders and tags", "/organize"],
+    ["Organize with folders and tags", "/saved"],
   ] as const;
 
   const items = byMeaning

@@ -8,9 +8,18 @@ const PREFERENCES_KEY = "dataVaultCapturePreferencesV2";
 
 export interface StoredAuth extends ExtensionTokenSet { expiresAt: number }
 export type PageCaptureMode = "visible" | "full-text" | "selection-only";
+/**
+ * The theme of the panel.
+ *
+ * The panel used to take the colour of the browser and had no say in it, so
+ * a person whose browser was dark had a dark panel whether they wanted one
+ * or not. The choice is theirs now, and it is kept between openings.
+ */
+export type ExtensionTheme = "light" | "dark" | "system";
 export interface ExtensionPreferences {
   quickSaveSelectedText: boolean;
   pageCaptureMode: PageCaptureMode;
+  theme: ExtensionTheme;
   defaultVaultId?: string | undefined;
   /**
    * The workspace the chosen folder belongs to.
@@ -19,15 +28,6 @@ export interface ExtensionPreferences {
    * extension is still in that workspace.
    */
   defaultVaultOrganizationId?: string | undefined;
-  /**
-   * The collection new items go into.
-   *
-   * A collection belongs to one folder, so the folder it was chosen in is
-   * remembered with it. It is only used while that folder is the one that
-   * is chosen.
-   */
-  defaultCollectionId?: string | undefined;
-  defaultCollectionVaultId?: string | undefined;
   /**
    * The doc that the keyboard shortcut adds to.
    *
@@ -115,7 +115,7 @@ export async function getAuth() { return (await browser.storage.local.get(AUTH_K
 export async function setAuth(value?: StoredAuth) { if (value) await browser.storage.local.set({ [AUTH_KEY]: value }); else await browser.storage.local.remove(AUTH_KEY); }
 export async function getPreferences() {
   const stored = (await browser.storage.local.get(PREFERENCES_KEY))[PREFERENCES_KEY] as Partial<ExtensionPreferences> | undefined;
-  return { quickSaveSelectedText: false, pageCaptureMode: "visible" as const, ...stored };
+  return { quickSaveSelectedText: false, pageCaptureMode: "visible" as const, theme: "system" as const, ...stored };
 }export async function setPreferences(value: ExtensionPreferences) { await browser.storage.local.set({ [PREFERENCES_KEY]: value }); }
 
 /**

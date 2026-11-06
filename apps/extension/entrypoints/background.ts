@@ -5,7 +5,6 @@ import { WEB_URL, withOrganization } from "../lib/api";
 import { signInExtension } from "../lib/auth";
 import { addClipToCurrentDoc, addClipToDoc, broadcastNoteUpdate as broadcastNoteChanged, makeCurrentDoc, refreshCurrentDoc, removeClipFromDoc, startNewDoc } from "../lib/docs";
 import { folderForNewItems } from "../lib/folders";
-import { collectionForNewItems } from "../lib/collections";
 import { enqueuePendingCapture, getAuth, getPendingCaptures, getPreferences, removePendingCapture, subscribeStorage, updatePendingCapture, type CaptureQuality, type ExtensionPreferences, type PageDetails, type PendingCapture, type PendingDocClip } from "../lib/storage";
 import { recordExtensionError } from "../lib/errors";
 import { openReviewPanel, openReviewWindow as openReviewPanelWindow } from "../lib/panel";
@@ -28,7 +27,7 @@ let authenticationInFlight: Promise<unknown> | undefined;
  * click is still being handled, so the choice between saving straight away
  * and asking for a review has to be made without waiting for anything.
  */
-let cachedPreferences: ExtensionPreferences = { quickSaveSelectedText: false, pageCaptureMode: "visible" };
+let cachedPreferences: ExtensionPreferences = { quickSaveSelectedText: false, pageCaptureMode: "visible", theme: "system" };
 /**
  * True once the real settings have been read.
  *
@@ -304,7 +303,7 @@ async function stagePageCapture(tab: chrome.tabs.Tab, page?: PageDetails) {
   }
 }
 
-function capturePayload(pending: PendingCapture, vaultId?: string, collectionId?: string) {
+function capturePayload(pending: PendingCapture, vaultId?: string) {
   return {
     selectedText: pending.selectedText,
     originalText: pending.selectedText,
@@ -317,7 +316,6 @@ function capturePayload(pending: PendingCapture, vaultId?: string, collectionId?
     captureKind: pending.contentKind === "page-text" ? "page-text" as const : pending.contentKind === "page-info" ? "page" as const : "selection" as const,
     tagNames: [],
     vaultId,
-    ...(collectionId ? { collectionIds: [collectionId] } : {}),
   };
 }
 
@@ -330,13 +328,8 @@ function capturePayload(pending: PendingCapture, vaultId?: string, collectionId?
  */
 async function saveCapture(pending: PendingCapture) {
   const vaultId = await folderForNewItems();
-  /**
-   * The collection belongs to the folder, so it is only used when the
-   * folder is the one that was chosen.
-   */
-  const collectionId = await collectionForNewItems(vaultId);
   try {
-    return await withOrganization((api) => api.createCapture(capturePayload(pending, vaultId, collectionId), pending.idempotencyKey));
+    return await withOrganization((api) => api.createCapture(capturePayload(pending, vaultId), pending.idempotencyKey));
   } catch (error) {
     if (vaultId && error instanceof DataVaultApiError && error.code === "INVALID_VAULT") {
       return withOrganization((api) => api.createCapture(capturePayload(pending, undefined), pending.idempotencyKey));

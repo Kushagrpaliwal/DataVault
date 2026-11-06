@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Archive, ArrowDownUp, ChevronLeft, ChevronRight, Download, ExternalLink,
-  FolderOpen, Library, Link2, Plus, RotateCcw, Search, Trash2, X,
+  Archive, ArrowDownUp, Bookmark, BookmarkPlus, ChevronLeft, ChevronRight, Download, ExternalLink,
+  Folder, FolderOpen, GripVertical, Library, Link2, Plus, RotateCcw, Search, Tag, Trash2, X,
 } from "lucide-react";
 import {
   Badge, Button, EmptyState, Input, Label, PRIMARY_RECORD_TYPES, RecordTypeIcon,
-  RecordTypeLabel, recordTypeLabel,
+  RecordTypeLabel, recordTypeLabel, cn,
 } from "@data-vault/ui";
 import type { SavedRecord } from "@data-vault/types";
 import { RECORD_TYPES } from "@data-vault/schemas";
@@ -16,14 +16,17 @@ import { useAuth } from "../../lib/auth";
 import { QueryState } from "../../components/data-state";
 import { Modal, useToast } from "../../components/feedback";
 import { PageHeader } from "../../components/page";
+import { FolderTree, flattenFolders, folderTree } from "./folder-tree";
+import { SaveViewModal } from "./save-view-modal";
 
 /**
  * The single place where every saved item lives.
  *
  * This page used to be split in two — a "Vault" page and a "Saved Captures"
  * page — which showed the same records behind two different filter UIs and
- * made it impossible to guess where to look. Folders, collections, and tags
- * now live in a filter rail beside the list.
+ * made it impossible to guess where to look. Folders and tags now live in a
+ * rail beside the list, and an item is moved into a folder by dragging it
+ * there.
  */
 export function SavedPage() {
   const { api, organization } = useAuth();
@@ -34,6 +37,11 @@ export function SavedPage() {
   const [debounced, setDebounced] = useState(search);
   const [page, setPage] = useState(1);
   const [manualOpen, setManualOpen] = useState(false);
+  const [saveViewOpen, setSaveViewOpen] = useState(false);
+  const [movingId, setMovingId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkMoving, setBulkMoving] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const recordType = params.get("type") ?? "";
   const archived = params.get("archived") === "true";
@@ -41,7 +49,6 @@ export function SavedPage() {
   const sort = params.get("sort") ?? "createdAt";
   const direction = params.get("direction") ?? "desc";
   const vaultId = params.get("vault") ?? "";
-  const collectionId = params.get("collection") ?? "";
   const tag = params.get("tag") ?? "";
 
   useEffect(() => {
@@ -57,7 +64,7 @@ export function SavedPage() {
    * somewhere else was hidden without saying so.
    */
   const activeVaultId = vaultId;
-  const collections = useQuery({ queryKey: ["collections", activeVaultId], queryFn: () => api.listCollections(activeVaultId), enabled: Boolean(organization && activeVaultId) });
+  const tree = useMemo(() => folderTree(vaults.data ?? []), [vaults.data]);
   /**
    * The tags of the folder that is open.
    *
@@ -69,7 +76,7 @@ export function SavedPage() {
   const tags = useQuery({ queryKey: ["tags", organization?.id, activeVaultId], queryFn: () => api.listTags(activeVaultId || undefined), enabled: Boolean(organization) });
 
   const query = useQuery({
-    queryKey: ["records", organization?.id, page, debounced, recordType, archived, trash, sort, direction, activeVaultId, collectionId, tag],
+    queryKey: ["records", organization?.id, page, debounced, recordType, archived, trash, sort, direction, activeVaultId, tag],
     queryFn: () => api.listSavedRecords({
       page,
       limit: 25,
@@ -80,7 +87,6 @@ export function SavedPage() {
       sort,
       direction,
       vaultId: activeVaultId || undefined,
-      collectionId: collectionId || undefined,
       tag: tag || undefined,
     }),
     enabled: Boolean(organization),
@@ -108,6 +114,49 @@ export function SavedPage() {
     },
   });
 
+  /**
+   * An item is moved into another folder.
+   *
+   * The folder is the place the item lives in, so this is the one thing
+   * that has to change. The tags of the item are left alone.
+   */
+  const moveRecord = useMutation({
+    mutationFn: (input: { id: string; vaultId: string }) => api.organizeSavedRecord(input.id, { vaultId: input.vaultId }),
+    onSuccess: async () => {
+      notify("Moved");
+      await client.invalidateQueries({ queryKey: ["records"] });
+      await client.invalidateQueries({ queryKey: ["vaults"] });
+    },
+  });
+
+  const createFolder = useMutation({
+    mutationFn: (input: { name: string; parentId: string | null }) => api.createVault({
+      name: input.name,
+      parentId: input.parentId,
+      kind: organization?.isPersonal ? "personal" : "workspace",
+      color: "#b8a4ed",
+    }),
+    onSuccess: async () => {
+      notify("Folder created");
+      await client.invalidateQueries({ queryKey: ["vaults"] });
+    },
+  });
+  const renameFolder = useMutation({
+    mutationFn: (input: { id: string; name: string }) => api.updateVault(input.id, { name: input.name }),
+    onSuccess: async () => {
+      notify("Folder renamed");
+      await client.invalidateQueries({ queryKey: ["vaults"] });
+    },
+  });
+  const deleteFolder = useMutation({
+    mutationFn: (id: string) => api.deleteVault(id),
+    onSuccess: async () => {
+      notify("Folder removed, its items moved to the default folder");
+      await client.invalidateQueries({ queryKey: ["vaults"] });
+      await client.invalidateQueries({ queryKey: ["records"] });
+    },
+  });
+
   const updateFilter = (key: string, value: string) => {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value); else next.delete(key);
@@ -123,7 +172,7 @@ export function SavedPage() {
   const clearFilters = () => {
     setSearch("");
     const next = new URLSearchParams(params);
-    for (const key of ["type", "collection", "tag", "archived", "trash"]) next.delete(key);
+    for (const key of ["type", "tag", "archived", "trash"]) next.delete(key);
     setParams(next, { replace: true });
     setPage(1);
   };
@@ -149,12 +198,13 @@ export function SavedPage() {
   const saveView = useMutation({
     mutationFn: (name: string) => api.createSavedView({
       name,
-      filters: { q: debounced, type: recordType, archived: archived ? "true" : "", trash: trash ? "true" : "", vault: vaultId, collection: collectionId, tag },
+      filters: { q: debounced, type: recordType, archived: archived ? "true" : "", trash: trash ? "true" : "", vault: vaultId, tag },
       columns: [],
       sort: { field: sort, direction },
     }),
     onSuccess: async () => {
       notify("The view was saved");
+      setSaveViewOpen(false);
       await client.invalidateQueries({ queryKey: ["saved-views"] });
     },
   });
@@ -169,7 +219,7 @@ export function SavedPage() {
     const filters = (view.filters ?? {}) as Record<string, unknown>;
     const viewSort = (view.sort ?? {}) as Record<string, unknown>;
     const next = new URLSearchParams();
-    for (const key of ["q", "type", "archived", "trash", "vault", "collection", "tag"]) {
+    for (const key of ["q", "type", "archived", "trash", "vault", "tag"]) {
       const value = filters[key];
       if (typeof value === "string" && value) next.set(key, value);
     }
@@ -179,17 +229,30 @@ export function SavedPage() {
     setParams(next, { replace: true });
     setPage(1);
   };
-  const storeView = () => {
-    const name = window.prompt("Name this view", "My view");
-    if (!name?.trim()) return;
-    saveView.mutate(name.trim());
-  };
+
+  const activeViewId = useMemo(() => {
+    if (!views.data?.length) return undefined;
+    const match = views.data.find((v) => {
+      const f = (v.filters ?? {}) as Record<string, unknown>;
+      const s = (v.sort ?? {}) as Record<string, unknown>;
+      if ((f.q ?? "") !== debounced) return false;
+      if ((f.type ?? "") !== recordType) return false;
+      if ((f.archived ?? "") !== (archived ? "true" : "")) return false;
+      if ((f.trash ?? "") !== (trash ? "true" : "")) return false;
+      if ((f.vault ?? "") !== vaultId) return false;
+      if ((f.tag ?? "") !== tag) return false;
+      if (s.field && s.field !== sort) return false;
+      if (s.direction && s.direction !== direction) return false;
+      return true;
+    });
+    return match ? String(match.id) : undefined;
+  }, [views.data, debounced, recordType, archived, trash, vaultId, tag, sort, direction]);
 
   const exportCsv = async () => {
     if (!query.data?.total) return;
     const records: SavedRecord[] = [];
     for (let exportPage = 1; exportPage <= Math.ceil(query.data.total / 100); exportPage += 1) {
-      const result = await api.listSavedRecords({ page: exportPage, limit: 100, q: debounced || undefined, recordType: recordType || undefined, archived, trash, sort, direction, vaultId: activeVaultId || undefined, collectionId: collectionId || undefined, tag: tag || undefined });
+      const result = await api.listSavedRecords({ page: exportPage, limit: 100, q: debounced || undefined, recordType: recordType || undefined, archived, trash, sort, direction, vaultId: activeVaultId || undefined, tag: tag || undefined });
       records.push(...result.items);
     }
     const rows = records.map((record) => [record.title, record.originalText ?? "", record.sourceDomain ?? "", record.capturedAt ?? record.createdAt, recordTypeLabel(record.recordType)].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","));
@@ -201,7 +264,95 @@ export function SavedPage() {
     URL.revokeObjectURL(link.href);
   };
 
-  const activeFilterCount = [recordType, collectionId, tag, archived ? "1" : "", trash ? "1" : ""].filter(Boolean).length;
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, debounced, recordType, archived, trash, activeVaultId, tag]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const pageItems = query.data?.items ?? [];
+  const allPageSelected = pageItems.length > 0 && pageItems.every((item) => selectedIds.has(item.id));
+
+  const toggleSelectAll = () => {
+    if (allPageSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(pageItems.map((item) => item.id)));
+    }
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkMove = async (folderId: string) => {
+    if (!selectedIds.size) return;
+    setBulkBusy(true);
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) => api.organizeSavedRecord(id, { vaultId: folderId })));
+      notify(`Moved ${selectedIds.size} item${selectedIds.size === 1 ? "" : "s"}`);
+      setSelectedIds(new Set());
+      setBulkMoving(false);
+      await client.invalidateQueries({ queryKey: ["records"] });
+      await client.invalidateQueries({ queryKey: ["vaults"] });
+    } catch {
+      notify("Some items could not be moved", "error");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkArchive = async () => {
+    if (!selectedIds.size) return;
+    setBulkBusy(true);
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) => (archived ? api.restoreSavedRecord(id) : api.archiveSavedRecord(id))));
+      notify(archived ? `Restored ${selectedIds.size} item${selectedIds.size === 1 ? "" : "s"}` : `Archived ${selectedIds.size} item${selectedIds.size === 1 ? "" : "s"}`);
+      setSelectedIds(new Set());
+      await client.invalidateQueries({ queryKey: ["records"] });
+    } catch {
+      notify("Some items could not be updated", "error");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkTrash = async () => {
+    if (!selectedIds.size) return;
+    const count = selectedIds.size;
+    const actionLabel = trash ? "Restore" : "Move to Trash";
+    if (!window.confirm(`${actionLabel} ${count} selected item${count === 1 ? "" : "s"}?`)) return;
+    setBulkBusy(true);
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) => (trash ? api.restoreTrashedRecord(id) : api.deleteSavedRecord(id))));
+      notify(trash ? `Restored ${count} item${count === 1 ? "" : "s"}` : `Moved ${count} item${count === 1 ? "" : "s"} to Trash`);
+      setSelectedIds(new Set());
+      await client.invalidateQueries({ queryKey: ["records"] });
+    } catch {
+      notify("Some items could not be deleted", "error");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkExportCsv = () => {
+    const selectedRecords = (query.data?.items ?? []).filter((r) => selectedIds.has(r.id));
+    if (!selectedRecords.length) return;
+    const rows = selectedRecords.map((record) => [record.title, record.originalText ?? "", record.sourceDomain ?? "", record.capturedAt ?? record.createdAt, recordTypeLabel(record.recordType)].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","));
+    const blob = new Blob([["Title,Text,Source,Saved at,Type", ...rows].join("\n")], { type: "text/csv" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `datavault-selected-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const activeFilterCount = [recordType, tag, archived ? "1" : "", trash ? "1" : ""].filter(Boolean).length;
   const hasItems = Boolean(query.data?.items.length);
   /**
    * The folder that is open, when nothing else is narrowing the list.
@@ -211,15 +362,71 @@ export function SavedPage() {
    * looked like the folder was broken.
    */
   const activeFolder = vaults.data?.find((vault) => vault.id === activeVaultId);
-  const onlyFolderIsOpen = Boolean(activeFolder) && !recordType && !collectionId && !tag && !archived && !trash && !debounced;
+  const onlyFolderIsOpen = Boolean(activeFolder) && !recordType && !tag && !archived && !trash && !debounced;
+
+  const [newTag, setNewTag] = useState("");
+  const [addingTag, setAddingTag] = useState(false);
+
+  const addTag = useMutation({
+    mutationFn: async (name: string) => {
+      if (!activeVaultId) {
+        await api.createTag({ name, color: "#b8a4ed" });
+        return;
+      }
+      await api.tagFolder(activeVaultId, { name });
+    },
+    onSuccess: async () => {
+      setNewTag("");
+      setAddingTag(false);
+      notify(activeVaultId ? "Tag added to folder" : "Tag created");
+      await client.invalidateQueries({ queryKey: ["tags"] });
+      await client.invalidateQueries({ queryKey: ["records"] });
+      await client.invalidateQueries({ queryKey: ["vaults"] });
+    },
+  });
+
+  const untagFolder = useMutation({
+    mutationFn: async (tagId: string) => {
+      if (!activeVaultId) return;
+      await api.untagFolder(activeVaultId, tagId);
+    },
+    onSuccess: async () => {
+      notify("Tag removed from folder");
+      await client.invalidateQueries({ queryKey: ["tags"] });
+      await client.invalidateQueries({ queryKey: ["vaults"] });
+      await client.invalidateQueries({ queryKey: ["records"] });
+    },
+  });
+
+  const breadcrumbs = useMemo(() => {
+    if (!activeVaultId || !vaults.data) return [];
+    const vaultMap = new Map(vaults.data.map((v) => [v.id, v]));
+    const path: Array<{ id: string; name: string }> = [];
+    let currentId: string | null = activeVaultId;
+    const seen = new Set<string>();
+    while (currentId && !seen.has(currentId)) {
+      seen.add(currentId);
+      const v = vaultMap.get(currentId);
+      if (!v) break;
+      path.unshift({ id: v.id, name: v.name });
+      currentId = v.parentId;
+    }
+    return path;
+  }, [activeVaultId, vaults.data]);
+
+  const selectVault = (id: string) => {
+    const next = new URLSearchParams(params);
+    if (id) next.set("vault", id); else next.delete("vault");
+    next.delete("tag");
+    setParams(next, { replace: true });
+    setPage(1);
+  };
+
   /**
-   * A collection that is open on its own.
-   *
-   * It says so, because an empty collection is not a filter that hid
-   * something. Nothing has been put in it yet.
+   * The item that is being dragged, so that the folder it is dropped on
+   * knows where it came from.
    */
-  const activeCollection = collections.data?.find((collection) => collection.id === collectionId);
-  const onlyCollectionIsOpen = Boolean(activeCollection) && !recordType && !tag && !archived && !trash && !debounced;
+  const dragging = useRef<string | null>(null);
 
   return <>
     <PageHeader
@@ -234,53 +441,169 @@ export function SavedPage() {
       }
     />
 
-    <div className="grid gap-5 xl:grid-cols-[230px_minmax(0,1fr)]">
+    <div className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
       <aside className="space-y-4">
         <FilterRail
           views={views.data ?? []}
+          activeViewId={activeViewId}
           onApplyView={applyView}
-          onSaveView={storeView}
+          onSaveView={() => setSaveViewOpen(true)}
           onRemoveView={(id) => removeView.mutate(id)}
-          vaults={vaults.data ?? []}
+          tree={tree}
           activeVaultId={activeVaultId}
-          onVault={(id) => {
-            const next = new URLSearchParams(params);
-            if (id) next.set("vault", id); else next.delete("vault");
-            /**
-             * The collection and the tag belong to the folder that was open.
-             *
-             * They are taken off when the folder changes, because a
-             * collection from one folder does not exist in another, and the
-             * list of tags is different for each folder.
-             */
-            next.delete("collection");
-            next.delete("tag");
-            setParams(next, { replace: true });
-            setPage(1);
+          onVault={selectVault}
+          onCreateFolder={(name, parentId) => createFolder.mutate({ name, parentId })}
+          onRenameFolder={(id, name) => renameFolder.mutate({ id, name })}
+          onDeleteFolder={(id) => {
+            const folder = vaults.data?.find((vault) => vault.id === id);
+            const under = vaults.data?.filter((vault) => vault.parentId === id).length ?? 0;
+            const question = under
+              ? `Remove the folder “${folder?.name ?? ""}” and the ${under} folder${under === 1 ? "" : "s"} inside it? The items in all of them move to the default folder.`
+              : `Remove the folder “${folder?.name ?? ""}”? Its items move to the default folder.`;
+            if (!window.confirm(question)) return;
+            deleteFolder.mutate(id);
           }}
-          collections={collections.data ?? []}
-          activeCollectionId={collectionId}
-          onCollection={(id) => updateFilter("collection", id)}
-          tags={tags.data ?? []}
-          activeTag={tag}
-          onTag={(name) => updateFilter("tag", name)}
+          onMoveItem={(folderId) => {
+            const id = dragging.current;
+            dragging.current = null;
+            if (!id) return;
+            moveRecord.mutate({ id, vaultId: folderId });
+          }}
         />
       </aside>
 
       <section className="panel overflow-hidden">
+        {/* Top Breadcrumb & Folder Hierarchy */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-canvas/40 px-5 py-3">
+          <nav aria-label="Folder hierarchy" className="flex flex-wrap items-center gap-1.5 text-sm">
+            <button
+              onClick={() => selectVault("")}
+              className={`flex items-center gap-1.5 rounded-lg px-2 py-1 transition ${
+                !activeVaultId ? "bg-soft font-semibold text-ink" : "text-muted hover:bg-soft hover:text-ink"
+              }`}
+            >
+              <Library className="size-4 shrink-0 text-muted" />
+              <span>All folders</span>
+            </button>
+
+            {breadcrumbs.map((crumb, idx) => {
+              const isLast = idx === breadcrumbs.length - 1;
+              return (
+                <div key={crumb.id} className="flex items-center gap-1.5">
+                  <span className="text-muted/60 select-none text-xs">→</span>
+                  <button
+                    onClick={() => selectVault(crumb.id)}
+                    disabled={isLast}
+                    className={`flex items-center gap-1.5 rounded-lg px-2 py-1 transition ${
+                      isLast
+                        ? "bg-deep text-white font-medium shadow-2xs cursor-default"
+                        : "text-muted hover:bg-soft hover:text-ink"
+                    }`}
+                  >
+                    <Folder className={`size-3.5 shrink-0 ${isLast ? "text-white" : "text-muted"}`} />
+                    <span>{crumb.name}</span>
+                  </button>
+                </div>
+              );
+            })}
+          </nav>
+
+          {/* Folder Tags Display */}
+          {activeFolder?.tags && activeFolder.tags.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {activeFolder.tags.map((t) => (
+                <span
+                  key={t.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-line bg-surface px-2.5 py-0.5 text-xs text-ink shadow-2xs"
+                >
+                  <Tag className="size-3 text-muted" />
+                  <span>#{t.name}</span>
+                  <button
+                    onClick={() => untagFolder.mutate(t.id)}
+                    title={`Remove #${t.name} from ${activeFolder.name}`}
+                    aria-label={`Remove #${t.name} from ${activeFolder.name}`}
+                    className="grid size-3.5 place-items-center rounded-full text-muted hover:bg-soft hover:text-ink"
+                  >
+                    <X className="size-2.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Toolbar Bar */}
         <div className="flex flex-col gap-3 border-b border-line p-4 lg:flex-row lg:items-center">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 size-4 text-muted" />
             <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search titles, saved text, or websites…" />
           </div>
+
           <select aria-label="Type" value={recordType} onChange={(event) => updateFilter("type", event.target.value)} className="h-11 rounded-xl border border-line bg-surface px-3 text-sm">
             <option value="">All types</option>
             {RECORD_TYPES.map((type) => <option key={type} value={type}>{recordTypeLabel(type)}</option>)}
           </select>
+
+          {/* Tags Filter Selector */}
+          <select
+            aria-label="Filter by tag"
+            value={tag}
+            onChange={(event) => updateFilter("tag", event.target.value)}
+            className={`h-11 rounded-xl border border-line bg-surface px-3 text-sm ${tag ? "font-semibold text-ink" : "text-strong"}`}
+          >
+            <option value="">All tags</option>
+            {tags.data?.map((t) => (
+              <option key={t.id} value={t.name}>
+                #{t.name}{typeof t.itemCount === "number" ? ` (${t.itemCount})` : ""}
+              </option>
+            ))}
+          </select>
+
+          {/* Add Tag Section */}
+          {addingTag ? (
+            <div className="flex items-center gap-1.5 rounded-xl border border-line bg-surface p-1 shadow-2xs">
+              <input
+                autoFocus
+                value={newTag}
+                maxLength={80}
+                placeholder={activeFolder ? `Tag for ${activeFolder.name}` : "Tag name"}
+                aria-label="Name of the tag"
+                onChange={(event) => setNewTag(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") { event.preventDefault(); if (newTag.trim()) addTag.mutate(newTag.trim()); }
+                  if (event.key === "Escape") { event.preventDefault(); setAddingTag(false); }
+                }}
+                className="h-8 min-w-32 rounded-lg border border-line bg-surface px-2.5 text-xs text-ink placeholder:text-muted outline-none transition focus:border-muted"
+              />
+              <Button size="sm" className="h-8 px-2.5 text-xs" onClick={() => { if (newTag.trim()) addTag.mutate(newTag.trim()); }} disabled={!newTag.trim() || addTag.isPending}>
+                Add
+              </Button>
+              <button
+                onClick={() => setAddingTag(false)}
+                title="Cancel"
+                aria-label="Cancel"
+                className="grid size-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-soft"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          ) : (
+            <Button
+              variant="secondary"
+              onClick={() => setAddingTag(true)}
+              className="gap-1.5"
+              title={activeFolder ? `Add a tag to ${activeFolder.name}` : "Add a tag"}
+            >
+              <Tag className="size-4" />
+              <span>Add tag</span>
+            </Button>
+          )}
+
           <Button variant={archived ? "primary" : "secondary"} onClick={() => updateFilter("archived", archived ? "" : "true")}>
             {archived ? <RotateCcw className="size-4" /> : <Archive className="size-4" />}
             {archived ? "Archived" : "Archive"}
           </Button>
+
           <Button variant={trash ? "primary" : "secondary"} onClick={() => updateFilter("trash", trash ? "" : "true")}>
             <Trash2 className="size-4" />
             {trash ? "Trash" : "View Trash"}
@@ -294,7 +617,7 @@ export function SavedPage() {
           </div>
         ) : null}
 
-        <QueryState loading={query.isLoading} error={query.error} onRetry={() => query.refetch()} />
+        <QueryState loading={query.isLoading} error={query.error} onRetry={() => void query.refetch()} />
 
         {!query.isLoading && !query.error && !hasItems ? (
           onlyFolderIsOpen ? (
@@ -302,12 +625,6 @@ export function SavedPage() {
               title="This folder is empty"
               description={`Nothing has been saved into “${activeFolder?.name}” yet. Save something and it lands in this folder, the same folder the browser extension uses.`}
               action={<Button onClick={() => setManualOpen(true)}><Link2 className="size-4" />Save something into this folder</Button>}
-            />
-          ) : onlyCollectionIsOpen ? (
-            <EmptyState
-              title="This collection is empty"
-              description={`Nothing has been put in “${activeCollection?.name}” yet. A collection is a group inside a folder, like a sub-folder. Open an item and use the Organization panel to put it in here.`}
-              action={<Button variant="secondary" onClick={clearFilters}>Show the whole folder</Button>}
             />
           ) : activeFilterCount > 0 || debounced ? (
             <EmptyState
@@ -325,10 +642,54 @@ export function SavedPage() {
         ) : null}
 
         {hasItems ? <>
+          {selectedIds.size > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-deep px-5 py-3 text-white transition-all">
+              <div className="flex items-center gap-2.5">
+                <span className="grid size-6 place-items-center rounded-full bg-white text-xs font-bold text-deep">
+                  {selectedIds.size}
+                </span>
+                <span className="text-sm font-semibold">
+                  {selectedIds.size} {selectedIds.size === 1 ? "item" : "items"} selected
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="secondary" onClick={() => setBulkMoving(true)} disabled={bulkBusy}>
+                  <FolderOpen className="size-3.5" />
+                  Move to folder
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => void handleBulkArchive()} disabled={bulkBusy}>
+                  {archived ? <RotateCcw className="size-3.5" /> : <Archive className="size-3.5" />}
+                  {archived ? "Restore" : "Archive"}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => void handleBulkTrash()} disabled={bulkBusy} className="text-red-600 dark:text-red-400">
+                  <Trash2 className="size-3.5" />
+                  {trash ? "Restore from Trash" : "Move to Trash"}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={handleBulkExportCsv} disabled={bulkBusy}>
+                  <Download className="size-3.5" />
+                  Export CSV
+                </Button>
+                <Button size="sm" variant="ghost" onClick={clearSelection} disabled={bulkBusy} className="text-white/80 hover:bg-white/10 hover:text-white">
+                  <X className="size-3.5" />
+                  Deselect
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[850px] text-left text-sm">
               <thead className="border-b border-line bg-hover text-xs uppercase tracking-wide text-muted">
                 <tr>
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all on this page"
+                      checked={allPageSelected}
+                      onChange={toggleSelectAll}
+                      className="size-4 cursor-pointer rounded border-line accent-ink"
+                    />
+                  </th>
                   <Sortable label="Title" onClick={() => toggleSort("title")} />
                   <th className="px-4 py-3 font-semibold">Saved text</th>
                   <th className="px-4 py-3 font-semibold">Source</th>
@@ -339,12 +700,39 @@ export function SavedPage() {
               </thead>
               <tbody className="divide-y divide-line">
                 {query.data?.items.map((record) => (
-                  <tr key={record.id} className="hover:bg-surface">
+                  <tr key={record.id} className={cn("hover:bg-surface transition-colors", selectedIds.has(record.id) && "bg-soft/75")}>
+                    <td className="w-10 px-4 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${record.title}`}
+                        checked={selectedIds.has(record.id)}
+                        onChange={() => toggleSelect(record.id)}
+                        className="size-4 cursor-pointer rounded border-line accent-ink"
+                      />
+                    </td>
                     <td className="max-w-52 px-4 py-3">
                       <Link to={`/saved/${record.id}`} className="font-semibold hover:underline">{record.title}</Link>
                     </td>
-                    <td className="max-w-64 px-4 py-3">
-                      <span className="block truncate font-mono text-xs text-strong">{record.originalText ?? "—"}</span>
+                    <td
+                      className="max-w-64 px-4 py-3"
+                      draggable
+                      onDragStart={(event) => {
+                        dragging.current = record.id;
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/plain", record.id);
+                      }}
+                      onDragEnd={() => {
+                        dragging.current = null;
+                      }}
+                    >
+                      {/**
+                       * The saved text is the handle that is grabbed, so the
+                       * item can be dragged into a folder.
+                       */}
+                      <span className="flex items-center gap-1.5">
+                        <GripVertical className="size-4 shrink-0 cursor-grab text-muted opacity-60" />
+                        <span className="block truncate font-mono text-xs text-strong">{record.originalText ?? "—"}</span>
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       {record.sourceUrl ? (
@@ -368,6 +756,7 @@ export function SavedPage() {
                           <Button size="sm" variant="ghost" onClick={() => restoreTrash.mutate(record)} disabled={restoreTrash.isPending}>Restore</Button>
                         ) : (
                           <>
+                            <Button size="sm" variant="ghost" onClick={() => setMovingId(record.id)}>Move</Button>
                             <Button size="sm" variant="ghost" onClick={() => archive.mutate(record)} disabled={archive.isPending || remove.isPending}>
                               {record.archivedAt ? "Restore" : "Archive"}
                             </Button>
@@ -386,19 +775,28 @@ export function SavedPage() {
 
           <div className="divide-y divide-line md:hidden">
             {query.data?.items.map((record) => (
-              <Link to={`/saved/${record.id}`} key={record.id} className="block p-4">
-                <div className="flex gap-3">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-soft"><RecordTypeIcon type={record.recordType} /></span>
+              <div key={record.id} className={cn("block p-4 transition-colors", selectedIds.has(record.id) && "bg-soft/75")}>
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${record.title}`}
+                    checked={selectedIds.has(record.id)}
+                    onChange={() => toggleSelect(record.id)}
+                    className="mt-2.5 size-4 cursor-pointer rounded border-line accent-ink"
+                  />
+                  <Link to={`/saved/${record.id}`} className="grid size-9 shrink-0 place-items-center rounded-xl bg-soft">
+                    <RecordTypeIcon type={record.recordType} />
+                  </Link>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="truncate font-semibold">{record.title}</p>
+                      <Link to={`/saved/${record.id}`} className="truncate font-semibold">{record.title}</Link>
                       <Badge tone="teal">{recordTypeLabel(record.recordType)}</Badge>
                     </div>
                     <p className="mt-1 truncate font-mono text-xs text-muted">{record.originalText ?? record.sourceDomain ?? "Saved item"}</p>
                     <p className="mt-2 text-xs text-muted">{record.sourceDomain ?? "No source"} · {format(new Date(record.capturedAt ?? record.createdAt), "dd MMM yyyy")}</p>
                   </div>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         </> : null}
@@ -415,9 +813,30 @@ export function SavedPage() {
       </section>
     </div>
 
+    <MoveDialog
+      open={Boolean(movingId)}
+      onClose={() => setMovingId(null)}
+      folders={flattenFolders(tree)}
+      onMove={(folderId) => {
+        if (!movingId) return;
+        moveRecord.mutate({ id: movingId, vaultId: folderId });
+        setMovingId(null);
+      }}
+    />
+
+    <MoveDialog
+      open={bulkMoving}
+      onClose={() => setBulkMoving(false)}
+      folders={flattenFolders(tree)}
+      onMove={(folderId) => {
+        void handleBulkMove(folderId);
+      }}
+    />
+
     <ManualSaveModal
       open={manualOpen}
       onClose={() => setManualOpen(false)}
+      folders={flattenFolders(tree)}
       vaults={vaults.data ?? []}
       initialVaultId={activeVaultId}
       onSaved={async () => {
@@ -426,54 +845,88 @@ export function SavedPage() {
         await client.invalidateQueries({ queryKey: ["records"] });
         await client.invalidateQueries({ queryKey: ["vaults"] });
         await client.invalidateQueries({ queryKey: ["tags"] });
-        await client.invalidateQueries({ queryKey: ["collections"] });
       }}
+    />
+
+    <SaveViewModal
+      open={saveViewOpen}
+      onClose={() => setSaveViewOpen(false)}
+      onSave={(name) => saveView.mutate(name)}
+      isPending={saveView.isPending}
+      error={saveView.error}
+      filters={{
+        folderName: activeFolder?.name ?? "All folders",
+        search: debounced,
+        recordType,
+        tag,
+        archived,
+        trash,
+        sort,
+        direction,
+      }}
+      totalMatches={query.data?.total}
     />
   </>;
 }
 
 function FilterRail({
-  vaults, activeVaultId, onVault, collections, activeCollectionId, onCollection, tags, activeTag, onTag,
-  views, onApplyView, onSaveView, onRemoveView,
+  views, activeViewId, onApplyView, onSaveView, onRemoveView,
+  tree, activeVaultId, onVault, onCreateFolder, onRenameFolder, onDeleteFolder, onMoveItem,
 }: {
-  vaults: { id: string; name: string; itemCount?: number }[];
-  activeVaultId: string;
-  onVault: (id: string) => void;
-  collections: { id: string; name: string; color: string; itemCount?: number }[];
-  activeCollectionId: string;
-  onCollection: (id: string) => void;
-  tags: { id: string; name: string; color: string; itemCount?: number }[];
-  activeTag: string;
-  onTag: (name: string) => void;
   views: Record<string, unknown>[];
+  activeViewId?: string | undefined;
   onApplyView: (view: Record<string, unknown>) => void;
   onSaveView: () => void;
   onRemoveView: (id: string) => void;
+  tree: ReturnType<typeof folderTree>;
+  activeVaultId: string;
+  onVault: (id: string) => void;
+  onCreateFolder: (name: string, parentId: string | null) => void;
+  onRenameFolder: (id: string, name: string) => void;
+  onDeleteFolder: (id: string) => void;
+  onMoveItem: (folderId: string) => void;
 }) {
   return (
     <div className="space-y-4">
       <section className="panel p-3">
         <div className="flex items-center justify-between px-2 pb-2">
           <p className="text-xs font-semibold uppercase tracking-[.14em] text-muted">Views</p>
-          <button onClick={onSaveView} className="text-xs underline">Save this view</button>
+          <button
+            type="button"
+            onClick={onSaveView}
+            className="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-ink transition underline-offset-2 hover:underline"
+            title="Save current filters as a view"
+          >
+            <BookmarkPlus className="size-3.5" />
+            <span>Save this view</span>
+          </button>
         </div>
         {views.length ? (
           <div className="space-y-0.5">
-            {views.map((view) => (
-              <div key={String(view.id)} className="flex items-center gap-1">
-                <button onClick={() => onApplyView(view)} className="min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-left text-sm hover:bg-soft">
-                  {String(view.name ?? "View")}
-                </button>
-                <button
-                  onClick={() => onRemoveView(String(view.id))}
-                  title="Remove this view"
-                  aria-label={`Remove the view ${String(view.name ?? "")}`}
-                  className="grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-soft hover:text-red-700 dark:text-red-300"
-                >
-                  <X className="size-3.5" />
-                </button>
-              </div>
-            ))}
+            {views.map((view) => {
+              const isActive = activeViewId === String(view.id);
+              return (
+                <div key={String(view.id)} className="flex items-center gap-1">
+                  <button
+                    onClick={() => onApplyView(view)}
+                    className={`flex min-w-0 flex-1 items-center gap-2 truncate rounded-lg px-2 py-1.5 text-left text-sm transition ${
+                      isActive ? "bg-soft font-semibold text-ink" : "text-strong hover:bg-soft hover:text-ink"
+                    }`}
+                  >
+                    <Bookmark className={`size-3.5 shrink-0 ${isActive ? "text-ink" : "text-muted"}`} />
+                    <span className="truncate">{String(view.name ?? "View")}</span>
+                  </button>
+                  <button
+                    onClick={() => onRemoveView(String(view.id))}
+                    title="Remove this view"
+                    aria-label={`Remove the view ${String(view.name ?? "")}`}
+                    className="grid size-7 shrink-0 place-items-center rounded-lg text-muted hover:bg-soft hover:text-red-700 dark:text-red-300"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <p className="px-2 pb-1 text-xs leading-5 text-muted">A view keeps the filters that are on the screen, so the same search is one click away.</p>
@@ -489,89 +942,58 @@ function FilterRail({
           <Library className="size-4" />
           <span className="truncate">All folders</span>
         </button>
-        {vaults.map((vault) => (
-          <button
-            key={vault.id}
-            onClick={() => onVault(vault.id)}
-            className={`mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm ${activeVaultId === vault.id ? "bg-deep text-white" : "hover:bg-soft"}`}
-          >
-            <FolderOpen className="size-4" />
-            <span className="truncate">{vault.name}</span>
-            <span className="ml-auto text-xs opacity-70">{vault.itemCount ?? 0}</span>
-          </button>
-        ))}
-        {vaults.length === 0 ? <p className="px-3 py-2 text-sm text-muted">No folders yet.</p> : null}
+        <FolderTree
+          tree={tree}
+          activeId={activeVaultId}
+          onSelect={onVault}
+          onMoveItem={onMoveItem}
+          onCreate={onCreateFolder}
+          onRename={onRenameFolder}
+          onDelete={onDeleteFolder}
+          dropHint="Drop the item here to move it into this folder"
+          emptyHint="No folders yet."
+        />
         <p className="px-3 pb-1 pt-2 text-xs leading-5 text-muted">
-          Every saved item lives in one folder. Pick the folder you want to look at, or save new items straight into it.
-        </p>
-        <p className="mt-2 border-t border-line px-2 pt-3 text-xs text-muted">
-          Manage folders, collections, and tags in <Link to="/organize" className="font-semibold text-ink underline">Organize</Link>.
-        </p>
-      </section>
-
-      <section className="panel p-3">
-        <div className="flex items-center justify-between px-2 pb-2">
-          <p className="text-xs font-semibold uppercase tracking-[.14em] text-muted">Collections</p>
-          <button className="text-xs underline" onClick={() => onCollection("")}>All</button>
-        </div>
-        {collections.map((collection) => (
-          <button
-            key={collection.id}
-            onClick={() => onCollection(collection.id)}
-            className={`mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm ${activeCollectionId === collection.id ? "bg-soft font-semibold" : "hover:bg-soft"}`}
-          >
-            <span className="size-2 rounded-full" style={{ backgroundColor: collection.color }} />
-            {collection.name}
-            <span className="ml-auto text-xs text-muted">{collection.itemCount}</span>
-          </button>
-        ))}
-        {collections.length === 0 ? (
-          <p className="px-3 py-2 text-sm leading-6 text-muted">
-            {activeVaultId
-              ? "No collections in this folder yet."
-              : "Pick a folder to see the collections inside it."}
-          </p>
-        ) : collections.every((collection) => !collection.itemCount) ? (
-          <p className="px-3 py-2 text-sm leading-6 text-muted">
-            These collections are empty. Open an item and use the Organization panel to put it in one.
-          </p>
-        ) : null}
-        <p className="px-3 pb-1 pt-2 text-xs leading-5 text-muted">
-          A collection is a group inside a folder, like a sub-folder. An item can be in more than one.
-        </p>
-      </section>
-
-      <section className="panel p-3">
-        <div className="flex items-center justify-between px-2 pb-2">
-          <p className="text-xs font-semibold uppercase tracking-[.14em] text-muted">Tags</p>
-          <button className="text-xs underline" onClick={() => onTag("")}>All</button>
-        </div>
-        <div className="flex flex-wrap gap-1">
-          {tags.map((tag) => (
-            <button
-              key={tag.id}
-              onClick={() => onTag(tag.name)}
-              title={`${tag.itemCount ?? 0} ${tag.itemCount === 1 ? "item" : "items"} with this tag`}
-              className={`rounded-full px-2 py-1 text-xs ${activeTag === tag.name ? "bg-deep text-white" : "bg-soft"}`}
-            >
-              #{tag.name}
-            </button>
-          ))}
-        </div>
-        {tags.length === 0 ? (
-          <p className="px-3 py-2 text-sm leading-6 text-muted">
-            {activeVaultId ? "No tags are used in this folder yet." : "No tags yet."}
-          </p>
-        ) : (
-          <p className="px-3 py-2 text-sm leading-6 text-muted">
-            {activeVaultId ? "The tags used in this folder." : "Every tag in the workspace."}
-          </p>
-        )}
-        <p className="px-3 pb-1 pt-2 text-xs leading-5 text-muted">
-          A tag is a label that works across every folder, so one item can have several.
+          Every saved item lives in one folder. Drag the saved text onto a folder to move the item into it, or make a
+          sub-folder inside any of them.
         </p>
       </section>
     </div>
+  );
+}
+
+/**
+ * The box for putting an item into another folder.
+ *
+ * A screen without a mouse cannot drag, so the same thing can be done by
+ * choosing the folder from a list.
+ */
+function MoveDialog({
+  open, onClose, folders, onMove,
+}: {
+  open: boolean;
+  onClose: () => void;
+  folders: ReturnType<typeof flattenFolders>;
+  onMove: (folderId: string) => void;
+}) {
+  return (
+    <Modal open={open} onClose={onClose} title="Move to a folder">
+      <div className="space-y-1">
+        {folders.map((folder) => (
+          <button
+            key={folder.id}
+            onClick={() => onMove(folder.id)}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-soft"
+            style={{ paddingLeft: `${folder.depth * 14 + 12}px` }}
+          >
+            <FolderOpen className="size-4 shrink-0" />
+            <span className="truncate">{folder.name}</span>
+            <span className="ml-auto text-xs text-muted">{folder.itemCount ?? 0}</span>
+          </button>
+        ))}
+      </div>
+      {folders.length === 0 ? <p className="text-sm text-muted">There are no folders yet.</p> : null}
+    </Modal>
   );
 }
 
@@ -584,10 +1006,11 @@ function FilterRail({
  * when no folder was open, so there was no way to choose.
  */
 function ManualSaveModal({
-  open, onClose, vaults, initialVaultId, onSaved,
+  open, onClose, folders, vaults, initialVaultId, onSaved,
 }: {
   open: boolean;
   onClose: () => void;
+  folders: ReturnType<typeof flattenFolders>;
   vaults: { id: string; name: string; isDefault?: boolean }[];
   initialVaultId: string;
   onSaved: () => void | Promise<void>;
@@ -598,7 +1021,6 @@ function ManualSaveModal({
   const [url, setUrl] = useState("");
   const [recordType, setRecordType] = useState<string>("note");
   const [vaultId, setVaultId] = useState("");
-  const [collectionId, setCollectionId] = useState("");
   const [tags, setTags] = useState("");
 
   /**
@@ -612,22 +1034,11 @@ function ManualSaveModal({
 
   useEffect(() => {
     if (!open) {
-      setTitle(""); setText(""); setUrl(""); setRecordType("note"); setCollectionId(""); setTags("");
+      setTitle(""); setText(""); setUrl(""); setRecordType("note"); setTags("");
       return;
     }
     setVaultId(defaultFolderId);
-    setCollectionId("");
   }, [open, defaultFolderId]);
-
-  /**
-   * The collections belong to the folder that is chosen, so they are read
-   * again whenever the folder changes.
-   */
-  const collections = useQuery({
-    queryKey: ["collections", vaultId],
-    queryFn: () => api.listCollections(vaultId),
-    enabled: open && Boolean(vaultId),
-  });
 
   const save = useMutation({
     mutationFn: async () => {
@@ -647,7 +1058,6 @@ function ManualSaveModal({
         reviewStatus: "inbox",
         privacyLevel: "private",
         metadata: {},
-        collectionIds: collectionId ? [collectionId] : [],
       });
       const tagNames = tags.split(",").map((tag) => tag.trim()).filter(Boolean);
       if (tagNames.length) {
@@ -686,23 +1096,14 @@ function ManualSaveModal({
               id="manual-folder"
               className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm"
               value={vaultId}
-              onChange={(event) => { setVaultId(event.target.value); setCollectionId(""); }}
+              onChange={(event) => setVaultId(event.target.value)}
             >
-              {vaults.length ? vaults.map((vault) => <option key={vault.id} value={vault.id}>{vault.name}</option>) : <option value="">The default folder</option>}
+              {folders.length ? folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>{`${"— ".repeat(folder.depth)}${folder.name}`}</option>
+              )) : <option value="">The default folder</option>}
             </select>
             <p className="mt-1 text-xs leading-5 text-muted">The folder this item is saved into. It is the same folder you see on the left.</p>
           </div>
-        </div>
-        <div>
-          {collections.data?.length ? (
-            <>
-              <Label htmlFor="manual-collection">Collection <span className="font-normal text-muted">(optional)</span></Label>
-              <select id="manual-collection" className="h-11 w-full rounded-xl border border-line bg-surface px-3 text-sm" value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
-                <option value="">None</option>
-                {(collections.data ?? []).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
-              </select>
-            </>
-          ) : null}
         </div>
         <div>
           <Label htmlFor="manual-tags">Tags <span className="font-normal text-muted">(separate with commas)</span></Label>
@@ -721,5 +1122,5 @@ function ManualSaveModal({
 }
 
 function Sortable({ label, onClick }: { label: string; onClick: () => void }) {
-  return <th className="px-4 py-3 font-semibold"><button className="flex items-center gap-1" onClick={onClick}>{label}<ArrowDownUp className="size-3" /></button></th>;
+  return <th className="px-4 py-3 font-semibold"><button onClick={onClick} className="flex items-center gap-1">{label}<ArrowDownUp className="size-3" /></button></th>;
 }

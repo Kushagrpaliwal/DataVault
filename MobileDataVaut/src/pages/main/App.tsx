@@ -15,7 +15,7 @@ type View = 'home' | 'vault' | 'capture' | 'settings'
 
 export function App(props: { onMounted?: () => void } = {}) {
   const { loading, session, organization } = useSession()
-  const { theme } = useTheme()
+  const { resolved } = useTheme()
   const [view, setView] = useState<View>('home')
   const [recordId, setRecordId] = useState<string | null>(null)
 
@@ -23,7 +23,13 @@ export function App(props: { onMounted?: () => void } = {}) {
     props.onMounted?.()
   }, [props.onMounted])
 
-  const shell = theme === 'dark' ? 'app-shell theme-dark' : 'app-shell'
+  /**
+   * The theme that is on the screen, put on the shell of the app.
+   *
+   * It used to be put on from a copy of the theme that the app kept to
+   * itself, so a change made in the settings never reached the screen.
+   */
+  const shell = resolved === 'dark' ? 'app-shell theme-dark' : 'app-shell theme-light'
 
   if (loading) return <view className={shell}><LoadingState label="Opening DataVault..." /></view>
   if (!session) return <view className={shell}><AuthScreen /></view>

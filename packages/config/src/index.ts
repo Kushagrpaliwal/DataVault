@@ -90,7 +90,7 @@ const serverEnvironmentSchema = z.object({
   AI_USER_DAILY_CREDITS: z.coerce.number().int().min(0).default(20),
   AI_USER_MINUTE_REQUESTS: z.coerce.number().int().min(0).default(5),
   AI_MAX_INPUT_TOKENS: z.coerce.number().int().min(256).default(4_000),
-  AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(64).default(400),
+  AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(64).default(8_192),
   /**
    * The key that encrypts the keys people bring themselves.
    *
@@ -116,7 +116,7 @@ const serverEnvironmentSchema = z.object({
    * than the ones the shared key has.
    */
   AI_BYO_MAX_INPUT_TOKENS: z.coerce.number().int().min(256).default(32_000),
-  AI_BYO_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(64).default(4_000),
+  AI_BYO_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(64).default(8_192),
   /** Free-tier Gemini may use submitted content to improve Google's products. */
   AI_FREE_TIER_CONTENT_NOTICE: z.enum(["true", "false"]).default("true"),
 });

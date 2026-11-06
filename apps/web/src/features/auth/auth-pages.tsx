@@ -12,9 +12,25 @@ import type { z } from "zod";
 import type { AuthSession } from "@data-vault/types";
 import { useAuth } from "../../lib/auth";
 import { ErrorMessage } from "../../components/feedback";
+import { ThemePicker } from "../../components/theme-picker";
 
 function AuthFrame({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
-  return <main className="grid min-h-screen bg-canvas lg:grid-cols-[1fr_1.05fr]"><section className="flex items-center justify-center p-6 md:p-12"><div className="w-full max-w-md"><NavLink to="/" className="mb-12 flex items-center gap-2 text-lg font-semibold"><span className="grid size-9 place-items-center rounded-xl bg-black text-white">D</span>DataVault</NavLink><h1 className="display text-4xl">{title}</h1><p className="mt-3 text-muted">{description}</p><div className="mt-8">{children}</div></div></section><aside className="relative hidden overflow-hidden bg-deep p-12 text-white lg:block"><div className="relative z-10 flex h-full flex-col justify-between"><p className="text-xs font-semibold uppercase tracking-[.18em] text-[#a4d4c5]">Save anything from the web</p><div className="grid items-center gap-6 xl:grid-cols-[1fr_.75fr]"><div><p className="display max-w-xl text-5xl">The detail you saved yesterday is the answer you need today.</p><p className="mt-6 max-w-lg text-lg text-white/75">Save text from any webpage, keep the link it came from, and find it again in seconds.</p></div><img src="/data-vault-clay.png" alt="Illustration of a vault holding saved items" className="mx-auto w-full max-w-sm drop-shadow-2xl"/></div><div className="grid grid-cols-3 gap-3"><div className="h-20 rounded-3xl bg-[#ff4d8b]"/><div className="mt-5 h-20 rounded-3xl bg-[#b8a4ed]"/><div className="h-20 rounded-3xl bg-[#e8b94a]"/></div></div></aside></main>;
+  return (
+    <main className="grid min-h-screen bg-canvas lg:grid-cols-[1fr_1.05fr]">
+      <section className="relative flex items-center justify-center p-6 md:p-12">
+        <div className="absolute right-5 top-5 z-10">
+          <ThemePicker />
+        </div>
+        <div className="w-full max-w-md">
+          <NavLink to="/" className="mb-12 flex items-center gap-2 text-lg font-semibold"><span className="grid size-9 place-items-center rounded-xl bg-ink text-canvas">D</span>DataVault</NavLink>
+          <h1 className="display text-4xl">{title}</h1>
+          <p className="mt-3 text-muted">{description}</p>
+          <div className="mt-8">{children}</div>
+        </div>
+      </section>
+      <aside className="relative hidden overflow-hidden bg-deep p-12 text-white lg:block"><div className="relative z-10 flex h-full flex-col justify-between"><p className="text-xs font-semibold uppercase tracking-[.18em] text-[#a4d4c5]">Save anything from the web</p><div className="grid items-center gap-6 xl:grid-cols-[1fr_.75fr]"><div><p className="display max-w-xl text-5xl">The detail you saved yesterday is the answer you need today.</p><p className="mt-6 max-w-lg text-lg text-white/75">Save text from any webpage, keep the link it came from, and find it again in seconds.</p></div><img src="/data-vault-clay.png" alt="Illustration of a vault holding saved items" className="mx-auto w-full max-w-sm drop-shadow-2xl"/></div><div className="grid grid-cols-3 gap-3"><div className="h-20 rounded-3xl bg-[#ff4d8b]"/><div className="mt-5 h-20 rounded-3xl bg-[#b8a4ed]"/><div className="h-20 rounded-3xl bg-[#e8b94a]"/></div></div></aside>
+    </main>
+  );
 }
 
 function authDestination(location: ReturnType<typeof useLocation>, fallback: string) {
@@ -152,7 +168,7 @@ export function RegisterPage() {
         <Button className="w-full" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Creating…" : "Create account"}</Button>
         <p className="text-center text-sm text-muted">Already registered? <NavLink to="/login" state={location.state} className="font-semibold text-ink underline">Sign in</NavLink></p>
         <p className="rounded-xl bg-soft p-3 text-xs leading-5 text-muted">
-          We will email you a confirmation link. You can use DataVault straight away, but you need to confirm your address before AI credits unlock.
+          We will email you a confirmation link. You can use DataVault straight away, but please confirm your address to secure your account.
         </p>
       </form>
     </AuthFrame>
@@ -299,19 +315,19 @@ export function VerifiedPage() {
   const confirmed = session?.user.emailVerified ?? false;
 
   return (
-    <AuthFrame title={confirmed ? "Email confirmed" : "Almost there"} description={confirmed ? "Your free AI credits are now unlocked." : "We could not confirm that address just now."}>
+    <AuthFrame title={confirmed ? "Email confirmed" : "Almost there"} description={confirmed ? "Your email address has been confirmed." : "We could not confirm that address just now."}>
       {confirmed ? (
         <>
           <div className="rounded-2xl bg-[#a4d4c5] p-5">
-            <p className="font-semibold">Your AI credits are ready</p>
-            <p className="mt-1 text-sm">You can now use the AI actions on any saved item.</p>
+            <p className="font-semibold">Account verified</p>
+            <p className="mt-1 text-sm">Your email address is confirmed. You can now use all DataVault features.</p>
           </div>
           <NavLink to="/" className="mt-5 block w-full"><Button className="w-full">Go to DataVault</Button></NavLink>
         </>
       ) : (
         <>
           <p className="text-sm leading-6 text-strong">
-            If the link has expired, request a new one from Settings. You can keep using DataVault either way, and your credits unlock as soon as the address is confirmed.
+            If the link has expired, request a new one from Settings. You can keep using DataVault either way.
           </p>
           <NavLink to="/settings" className="mt-5 block w-full"><Button className="w-full" variant="secondary">Open settings</Button></NavLink>
         </>

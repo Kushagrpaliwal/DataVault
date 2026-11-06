@@ -37,9 +37,11 @@ export interface CreditStatus {
    * The provider of the user, when they have connected one.
    *
    * Their own key is used instead of the shared one, so the words about
-   * credits and about Google do not apply to them.
+   * credits and about Google do not apply to them. Whether the key can be
+   * read is said as well, because a key that cannot be read is not used, and
+   * the person must be told rather than left to think it is.
    */
-  ownConnection: { label: string; preset: string; model: string } | null;
+  ownConnection: { label: string; preset: string; model: string; keyReadable: boolean } | null;
 }
 
 /**
@@ -190,7 +192,7 @@ export async function readCreditStatus(env: ServerEnvironment, context: CreditCo
     consented: Boolean(consent),
     available,
     reason,
-    ownConnection: await ownConnectionSummary(context.userId).catch(() => null),
+    ownConnection: await ownConnectionSummary(env, context.userId).catch(() => null),
   };
 }
 
@@ -375,6 +377,7 @@ export async function refundCredit(reservation: CreditReservation, reason: strin
       ))
       .limit(1)
       .for("update");
+    const firstRequestRefunded = period?.used === 1;
     if (period && period.used > 0) {
       await tx.update(aiCreditPeriods)
         .set({ used: period.used - 1, updatedAt: new Date() })
@@ -391,6 +394,14 @@ export async function refundCredit(reservation: CreditReservation, reason: strin
       reason,
       requestId: `${reservation.requestId}:refund`,
     });
+    await tx.update(aiGlobalCounters)
+      .set({ value: sql`greatest(0, ${aiGlobalCounters.value} - 1)`, updatedAt: new Date() })
+      .where(and(eq(aiGlobalCounters.key, "requests"), eq(aiGlobalCounters.periodStart, reservation.periodStart)));
+    if (firstRequestRefunded) {
+      await tx.update(aiGlobalCounters)
+        .set({ value: sql`greatest(0, ${aiGlobalCounters.value} - 1)`, updatedAt: new Date() })
+        .where(and(eq(aiGlobalCounters.key, "users"), eq(aiGlobalCounters.periodStart, reservation.periodStart)));
+    }
   });
 }
 

@@ -69,8 +69,8 @@ describe("DataVault API integration", () => {
     const defaultVault = (vaultList.payload.data as unknown as Record<string, unknown>[]).find((vault) => vault.isDefault === true);
     expect(defaultVault).toBeTruthy();
     const vaultId = String(defaultVault!.id);
-    const researchCollection = await call("/api/v1/collections", { method: "POST", session: admin, organizationId: orgA, body: { vaultId, name: `Research ${suffix}`, color: "#b8a4ed" } });
-    expect(researchCollection.response.status).toBe(201);
+    const researchFolder = await call("/api/v1/vaults", { method: "POST", session: admin, organizationId: orgA, body: { name: `Research ${suffix}`, parentId: vaultId, kind: "workspace", color: "#b8a4ed" } });
+    expect(researchFolder.response.status).toBe(201);
     const tag = await call("/api/v1/tags", { method: "POST", session: admin, organizationId: orgA, body: { name: `reading-${suffix}`, color: "#b8a4ed" } });
     expect(tag.response.status).toBe(201);
 
@@ -85,10 +85,17 @@ describe("DataVault API integration", () => {
     const captureDetail = await call(`/api/v1/saved-records/${captureRecordId}`, { session: admin, organizationId: orgA });
     expect((captureDetail.payload.data.evidence as Record<string, unknown>[]).length).toBe(1);
     expect((captureDetail.payload.data.tags as Record<string, unknown>[]).some((item) => item.name === `reading-${suffix}`)).toBe(true);
-    const organizedCapture = await call(`/api/v1/saved-records/${captureRecordId}/organization`, { method: "PUT", session: admin, organizationId: orgA, body: { collectionIds: [String(researchCollection.payload.data.id)], reviewStatus: "reviewed" } });
+    const organizedCapture = await call(`/api/v1/saved-records/${captureRecordId}/organization`, { method: "PUT", session: admin, organizationId: orgA, body: { vaultId: String(researchFolder.payload.data.id), reviewStatus: "reviewed" } });
     expect(organizedCapture.response.status).toBe(200);
-    const vaultFiltered = await call(`/api/v1/saved-records?vaultId=${vaultId}&collectionId=${String(researchCollection.payload.data.id)}&tag=reading-${suffix}`, { session: admin, organizationId: orgA });
-    expect(vaultFiltered.payload.data.total).toBe(1);
+    /**
+     * The folder shows the items of the folders under it, so the item that
+     * was moved into the sub-folder is found through the folder it was in as
+     * well as through the one it is in now.
+     */
+    const vaultFiltered = await call(`/api/v1/saved-records?vaultId=${vaultId}&tag=reading-${suffix}`, { session: admin, organizationId: orgA });
+    expect(vaultFiltered.payload.data.total).toBe(2);
+    const subfolderFiltered = await call(`/api/v1/saved-records?vaultId=${String(researchFolder.payload.data.id)}&tag=reading-${suffix}`, { session: admin, organizationId: orgA });
+    expect(subfolderFiltered.payload.data.total).toBe(1);
     const searchA = await call(`/api/v1/search?q=CAP-${suffix}`, { session: admin, organizationId: orgA });
     const searchB = await call(`/api/v1/search?q=CAP-${suffix}`, { session: admin, organizationId: orgB });
     expect(searchA.payload.data.total).toBe(2);
@@ -474,17 +481,36 @@ describe("DataVault API integration", () => {
     expect(crossTenant.response.status).toBe(404);
   }, 30_000);
 
-  test("writing a doc up needs something to write from", async () => {
-    const admin = await register("Write Up Admin", `writeup-${suffix}@example.com`);
+  test("turning a doc into notes needs something to work from", async () => {
+    const admin = await register("Notes Admin", `notes-${suffix}@example.com`);
     const orgs = await call("/api/v1/organizations", { session: admin });
     const organizationId = String((orgs.payload.data as unknown as { id: string }[])[0]!.id);
 
-    const created = await call("/api/v1/notes", { method: "POST", session: admin, organizationId, idempotencyKey: `writeup-note-${suffix}`, body: { title: "Empty doc" } });
+    const created = await call("/api/v1/notes", { method: "POST", session: admin, organizationId, idempotencyKey: `notes-note-${suffix}`, body: { title: "Empty doc" } });
     const noteId = String(created.payload.data.id);
 
-    const result = await call(`/api/v1/notes/${noteId}/write-up`, { method: "POST", session: admin, organizationId, body: {} });
+    const result = await call(`/api/v1/notes/${noteId}/notes`, { method: "POST", session: admin, organizationId, body: {} });
     expect(result.response.status).toBe(400);
-    expect(result.payload.error?.code).toBe("NOTHING_TO_WRITE");
+    expect(result.payload.error?.code).toBe("NOTHING_TO_NOTE");
+  }, 30_000);
+
+  test("a doc can sit inside another doc", async () => {
+    const admin = await register("Subpage Admin", `subpage-${suffix}@example.com`);
+    const orgs = await call("/api/v1/organizations", { session: admin });
+    const organizationId = String((orgs.payload.data as unknown as { id: string }[])[0]!.id);
+
+    const parent = await call("/api/v1/notes", { method: "POST", session: admin, organizationId, idempotencyKey: `subpage-parent-${suffix}`, body: { title: "Parent doc" } });
+    const parentId = String(parent.payload.data.id);
+
+    const child = await call("/api/v1/notes", { method: "POST", session: admin, organizationId, idempotencyKey: `subpage-child-${suffix}`, body: { title: "A doc inside it", parentId } });
+    expect(child.response.status).toBe(201);
+    expect((child.payload.data as { parentId: string | null }).parentId).toBe(parentId);
+
+    /**
+     * The docs inside a doc are found by asking for them.
+     */
+    const inside = await call(`/api/v1/notes?parentId=${parentId}`, { session: admin, organizationId });
+    expect((inside.payload.data as unknown as { id: string }[]).map((entry) => entry.id)).toEqual([String(child.payload.data.id)]);
   }, 30_000);
 
   test("a doc can be chosen as the current one, and the choice is kept", async () => {    const admin = await register("Current Admin", `current-${suffix}@example.com`);

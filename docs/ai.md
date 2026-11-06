@@ -16,7 +16,7 @@ That means the credit system is not really about the user's own allowance. It is
 | `AI_USER_DAILY_CREDITS` | 20 | How many credits one user gets per day. |
 | `AI_USER_MINUTE_REQUESTS` | 5 | How many requests one user can make per minute. |
 | `AI_MAX_INPUT_TOKENS` | 4000 | The largest amount of text sent to the model. |
-| `AI_MAX_OUTPUT_TOKENS` | 400 | The largest answer accepted back. |
+| `AI_MAX_OUTPUT_TOKENS` | 1600 | The largest answer accepted back. A credit is one request, so a longer answer costs the same as a short one. |
 | `GEMINI_MODEL` | `gemini-3.1-flash-lite` | The model to use. Must be free-tier eligible. |
 | `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-2` | The model that turns text into numbers. It is a different model from the one that writes, and its name is a setting because the old one was switched off by Google on 2026-01-14. |
 
@@ -38,13 +38,17 @@ Every active user always keeps at least one request, and the rest of the budget 
 
 ## What a credit buys
 
-One credit is one request to the model. There are three features:
+One credit is one request to the model. The AI features that spend credits are:
 
 | Feature | What it does |
 | --- | --- |
 | `summarize` | A short summary, key points, and a suggested title. |
 | `classify` | A suggested record type, tags, and a confidence. |
 | `extract` | Structured fields: the author, the publication date, the claim the passage makes, and any figure it quotes. |
+| `notes-doc` | Turn a whole doc into notes: a heading for each topic, with the points under it. |
+| `doc-summary` | A detailed summary of a doc: what it is about, what each part says, the key points, and what is still open. |
+| `doc-chat` | Answer a question about a doc, from the doc and nothing else. |
+| `selection` | Do something with a selection in a doc (arrange, table, list, checklist, summarize, complete, clean up, translate, custom). |
 
 Answers are cached against a hash of the exact request, so asking the same question twice costs one credit, not two. With a quota this small, that is the single biggest saving available.
 
@@ -79,6 +83,7 @@ Only the text the user asked about is sent. The whole library is never sent, and
 | Making every request expensive | Input and output token caps, and truncation before the request is sent. |
 | Stealing the Gemini key | The key is only ever read from the environment inside the API. It never reaches a response, a log, or a client bundle. |
 | The key of a person being read by another | The key is encrypted with a key the server has, and it is tied to the person and the connection it belongs to. A ciphertext that is moved to another row cannot be read, and the rule on the table hides the row from anybody else. |
+| A stolen session taking the key of a person | The key is tied to the host it was given for, so it does not open for another address and is never sent to one. Moving a connection to another address needs the key again. |
 | The key of a person being read back | It is write-only. It never comes back in an answer, and only the last four of it are kept. |
 | The server being pointed at something inside | The address of a provider is checked before it is called: it must use https, it must not be on the local network, and the name is looked up as well. A redirect is not followed. |
 | The model writing a link into a doc | The answer is a list of blocks and never markup. Only bold and italic are written, so there is nothing to click. |
@@ -87,7 +92,7 @@ Only the text the user asked about is sent. The whole library is never sent, and
 | Reaching another workspace's content | The context is scoped to the caller's workspace, and the `ai.use` permission is required. |
 | Prompt injection through saved content | Saved text is passed as delimited data. The system instructions live server-side and the model is told to ignore instructions found in the text. |
 | Being charged twice for one request | The `Idempotency-Key` header is recorded with a unique index, so a retry replays instead of charging again. The key is scoped to the account that sent it, and a key that another account has used is refused. |
-| Being charged for a failed request | Credits are debited only on a successful response, and refunded otherwise. |
+| Being charged for a failed request | Credits are debited only on a successful response, and refunded otherwise. The answer is read inside the credit, so an answer that cannot be read gives the credit back. |
 | Paying twice for one suggestion | The suggestion is kept on the server between the preview and the moment it is applied, so applying it asks the model nothing further and costs no second credit. |
 | Reaching another workspace's content | The context is scoped to the caller's workspace, and the `ai.use` permission is required. |
 | Reading other tenants' data | Every query is scoped by organization, and the tenant context is resolved from the membership on every request. The row-level security rules are forced, so they apply to the owner of the table as well. |
@@ -105,9 +110,23 @@ A person may have a subscription of their own, or a model on their own machine. 
 | `AI_BYO_MAX_INPUT_TOKENS` | 32000 | The largest amount of text sent with a key of their own. |
 | `AI_BYO_MAX_OUTPUT_TOKENS` | 4000 | The largest answer accepted back with a key of their own. |
 
-The key of a person is encrypted with AES-256-GCM before it is written down, with a fresh nonce each time, and it is tied to the person and the connection it belongs to. A ciphertext that is moved to another row cannot be read. The key is write-only: it is never sent back to the browser, and only the last four of it are kept, which is enough to tell two keys apart.
+The key of a person is encrypted with AES-256-GCM before it is written down, with a fresh nonce each time, and it is tied to the person, the connection it belongs to, and the host it was given for. A ciphertext that is moved to another row cannot be read, and a key that was given for one provider cannot be read for another. The key is write-only: it is never sent back to the browser, and only the last four of it are kept, which is enough to tell two keys apart.
+
+Because the key is tied to its host, the address of a connection that holds a key cannot be changed without the key being given again. Without that, a session that was stolen could point a connection at a server of its own and read the key out of the header of the request.
 
 A request that is paid for by the person spends no credit and no part of the shared budget. The tokens are still recorded, so that a person can see what their key was used for.
+
+### Checking a key
+
+The **Check the key** button asks the provider whether the key is accepted, and which models it offers. The answer opens in a panel of its own, because it is the answer to a question the person asked and it deserves to be looked at rather than flashed past.
+
+- The panel says **Your key works**, or **That key was not accepted**, and says why.
+- When the key works, the model is chosen from the list the provider gave, and the connection is saved with it.
+- When a connection is already saved, the same panel opens, and the model can be changed from the list without the key being typed again, because the key is not needed to change which model is asked.
+
+The address of a provider is part of the provider, so it is not asked for again. Only a provider that is not on the list has an address of its own.
+
+A key that cannot be read — because the server cannot hold keys, or because the ciphertext does not open — is never quietly replaced by the shared one. The request fails and says that the key has to be entered again.
 
 ### The address the server calls
 
@@ -117,10 +136,12 @@ The base address of a provider is written by a person, so the server ends up cal
 
 | Preset | How it is talked to |
 | --- | --- |
-| OpenAI, OpenRouter, Groq, DeepSeek, Mistral, Together | The OpenAI language: `POST {base}/chat/completions`, with the shape asked for in `response_format`. A provider that refuses that is asked again in a simpler way, and the JSON is taken out of the words it wrote. |
+| OpenAI, OpenRouter, Groq, DeepSeek, Mistral, Together | The OpenAI language: `POST {base}/chat/completions`, with the shape asked for in `response_format`. The shape is written the way a strict shape has to be written — every object says that it takes nothing else, and every property is one that is required — because a provider in strict mode refuses anything else. A provider that refuses the shape is asked again by name for JSON, and then in the words of the model itself. |
 | Ollama, LM Studio, Custom | The same, with an address of your own. |
 | Anthropic | `POST /v1/messages` with a single forced tool whose input schema is the shape that is asked for, which works on every Claude model. |
 | Google | The same request the shared key makes, with the key and the model of the person. |
+
+The newer models of OpenAI do not take `max_tokens` and ask for `max_completion_tokens` instead. The request is made again with that name when the provider says so, rather than dropping to a plainer request that would lose the shape of the answer.
 
 Every answer is read with a schema, so a model that answers in the wrong shape is refused rather than written into a doc.
 
@@ -129,6 +150,10 @@ Every answer is read with a schema, so a model that answers in the wrong shape i
 The first feature that uses a key of their own is in the Docs editor: select something, and the AI arranges it, makes a table out of it, summarises it, finishes it, tidies it, translates it, or does what the instruction says. The answer is shown before anything is written, and it is a list of blocks and never markup, so a model cannot write a link or a picture into a doc.
 
 The person chooses how much the AI may use each time: only the selection, the selection and the model's own knowledge, or the selection and the saved items they pick. The saved items are read in the workspace of the person, so an item of another workspace can never be sent. The line under the buttons says what will be sent, and to whom.
+
+On an empty line there are no words to work from, so the panel asks for an instruction instead and the AI writes from that. The answer is inserted below the line, and the words of the person are not touched.
+
+After the answer, the panel says who gave it: a provider of the person's own, or the free credits.
 
 ## Endpoints
 
@@ -144,9 +169,12 @@ The person chooses how much the AI may use each time: only the selection, the se
 | `POST` | `/api/v1/search/semantic/reindex` | Make the numbers of every item again. |
 | `GET` | `/api/v1/ai/connections` | The providers the person has connected. The key is never in it. |
 | `POST` | `/api/v1/ai/connections` | Connect a provider. |
-| `PATCH` | `/api/v1/ai/connections/:id` | Change the name, the model, or the key, or make it the one in use. |
+| `PATCH` | `/api/v1/ai/connections/:id` | Change the name, the model, or the key, or make it the one in use. Moving it to another address needs the key again. |
 | `DELETE` | `/api/v1/ai/connections/:id` | Remove a connection. The key goes with it. |
-| `POST` | `/api/v1/ai/connections/test` | Try a provider and ask it which models it has. |
+| `POST` | `/api/v1/ai/connections/test` | Try a provider and ask it which models it has, and whether the model that is chosen answers. |
+| `POST` | `/api/v1/notes/:id/notes` | Turn the whole doc into notes. Without `apply` the notes are proposed and kept on the server. With `{ apply: true, previewId, target }` the notes that were shown are written, either into the doc itself (`target: "replace"`) or into a new doc inside it (`target: "subpage"`). |
+| `POST` | `/api/v1/notes/:id/summary` | A detailed summary of the doc: what it is about, what each part says, the key points, and the questions it leaves open. |
+| `POST` | `/api/v1/notes/:id/ai/chat` | Ask a question about the doc. The answer is a list of blocks, and it is not written into the doc. |
 | `POST` | `/api/v1/notes/:id/ai/selection` | Do something with a selection of a doc. The answer is a list of blocks, and it is not written into the doc. |
 
 All three AI routes require the `ai.use` permission, a confirmed email address, a recorded consent, and an available credit. The search by meaning asks for the same three things, and a budget of its own besides. The routes for the connections need the `ai.use` permission and the agreement that goes with them.

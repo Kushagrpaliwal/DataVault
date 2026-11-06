@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import { noteAiRequestSchema, noteAiSelectionSchema, noteClipSchema, noteCreateSchema, noteCurrentSchema, noteListQuerySchema, notePatchSchema, uuidSchema } from "@data-vault/schemas";
+import { noteAiSelectionSchema, noteChatSchema, noteClipSchema, noteCreateSchema, noteCurrentSchema, noteListQuerySchema, noteNotesRequestSchema, notePatchSchema, uuidSchema } from "@data-vault/schemas";
 import type { ServerEnvironment } from "@data-vault/config";
 import type { DataVaultAuth } from "../auth/better-auth";
 import { getTenantContext } from "../auth/context";
@@ -7,11 +7,11 @@ import { requireCsrf } from "../auth/csrf";
 import { success } from "../lib/http";
 import { enforceRateLimit, RATE_LIMITS } from "../lib/rate-limit-policies";
 import {
-  addClip, addCurrentClip, createNote, duplicateNote, getCurrentNote, getNote, listNotes, listRevisions,
+  addClip, addCurrentClip, createNote, deleteNotePermanent, duplicateNote, getCurrentNote, getNote, listNotes, listRevisions,
   rearrangeNote, removeClipById, restoreNote, restoreRevision, setCurrentNote, trashNote, updateNote,
 } from "../services/notes";
 import { runIdempotent } from "../services/idempotency";
-import { organizeNote, selectionAssist, writeUpNote } from "../services/notes-ai";
+import { askDoc, notesFromDoc, selectionAssist, summarizeDoc } from "../services/notes-ai";
 
 export function createNoteRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
   return new Elysia({ name: "note-routes" })
@@ -50,9 +50,12 @@ export function createNoteRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
       const context = await getTenantContext(request, auth, env, "captures.update");
       return success(await updateNote(context, request, uuidSchema.parse(params.id), notePatchSchema.parse(body)));
     })
-    .delete("/api/v1/notes/:id", async ({ params, request }) => {
+    .delete("/api/v1/notes/:id", async ({ params, query, request }) => {
       await requireCsrf(request, auth, env);
       const context = await getTenantContext(request, auth, env, "captures.delete");
+      if ((query as { permanent?: string })?.permanent === "true") {
+        return success(await deleteNotePermanent(context, request, uuidSchema.parse(params.id)));
+      }
       return success(await trashNote(context, request, uuidSchema.parse(params.id)));
     })
     .post("/api/v1/notes/:id/restore", async ({ params, request }) => {
@@ -89,18 +92,32 @@ export function createNoteRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
       return success(await rearrangeNote(context, request, uuidSchema.parse(params.id)));
     })
 
-    /** Turn the pieces into writing, with sentences that follow each other. */
-    .post("/api/v1/notes/:id/write-up", async ({ body, params, request }) => {
+    /**
+     * Turn the whole doc into notes.
+     *
+     * Without `apply` the notes are proposed and kept on the server. With
+     * `{ apply: true, previewId, target }` the notes that were shown are
+     * written, either into the doc itself or into a new doc inside it.
+     */
+    .post("/api/v1/notes/:id/notes", async ({ body, params, request }) => {
       await requireCsrf(request, auth, env);
       const context = await getTenantContext(request, auth, env, "captures.update");
-      return success(await writeUpNote(env, context, request, uuidSchema.parse(params.id), noteAiRequestSchema.parse(body ?? {})));
+      return success(await notesFromDoc(env, context, request, uuidSchema.parse(params.id), noteNotesRequestSchema.parse(body ?? {})));
     })
 
-    /** Let the AI sort the doc into topics. */
-    .post("/api/v1/notes/:id/organize", async ({ body, params, request }) => {
+    /** A detailed summary of the doc. */
+    .post("/api/v1/notes/:id/summary", async ({ params, request }) => {
       await requireCsrf(request, auth, env);
       const context = await getTenantContext(request, auth, env, "captures.update");
-      return success(await organizeNote(env, context, request, uuidSchema.parse(params.id), noteAiRequestSchema.parse(body ?? {})));
+      return success(await summarizeDoc(env, context, request, uuidSchema.parse(params.id)));
+    })
+
+    /** Ask a question about the doc. */
+    .post("/api/v1/notes/:id/ai/chat", async ({ body, params, request }) => {
+      await requireCsrf(request, auth, env);
+      await enforceRateLimit(request, env, RATE_LIMITS.aiSelection);
+      const context = await getTenantContext(request, auth, env, "captures.update");
+      return success(await askDoc(env, context, request, uuidSchema.parse(params.id), noteChatSchema.parse(body)));
     })
 
     /**

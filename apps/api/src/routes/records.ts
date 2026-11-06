@@ -5,7 +5,7 @@ import type { DataVaultAuth } from "../auth/better-auth";
 import { getTenantContext } from "../auth/context";
 import { requireCsrf } from "../auth/csrf";
 import { success } from "../lib/http";
-import { createSavedRecord, createSavedView, deleteSavedView, getPageSnapshot, getSavedRecord, listSavedRecords, listSavedViews, restoreTrashedRecord, setRecordArchived, trashSavedRecord, updateSavedRecord } from "../services/records";
+import { createSavedRecord, createSavedView, deleteSavedRecordPermanent, deleteSavedView, getPageSnapshot, getSavedRecord, listSavedRecords, listSavedViews, restoreTrashedRecord, setRecordArchived, trashSavedRecord, updateSavedRecord } from "../services/records";
 import { runIdempotent } from "../services/idempotency";
 import { AppError } from "../lib/errors";
 
@@ -34,7 +34,14 @@ export function createRecordRoutes(auth: DataVaultAuth, env: ServerEnvironment) 
     .post("/api/v1/saved-records/:id/archive", async ({ params, request }) => { await requireCsrf(request, auth, env); const context = await getTenantContext(request, auth, env, "captures.update"); return success(await setRecordArchived(context, request, uuidSchema.parse(params.id), true)); })
     .post("/api/v1/saved-records/:id/restore", async ({ params, request }) => { await requireCsrf(request, auth, env); const context = await getTenantContext(request, auth, env, "captures.update"); return success(await setRecordArchived(context, request, uuidSchema.parse(params.id), false)); })
     .post("/api/v1/saved-records/:id/trash/restore", async ({ params, request }) => { await requireCsrf(request, auth, env); const context = await getTenantContext(request, auth, env, "captures.update"); return success(await restoreTrashedRecord(context, request, uuidSchema.parse(params.id))); })
-    .delete("/api/v1/saved-records/:id", async ({ params, request }) => { await requireCsrf(request, auth, env); const context = await getTenantContext(request, auth, env, "captures.delete"); return success(await trashSavedRecord(context, request, uuidSchema.parse(params.id))); })
+    .delete("/api/v1/saved-records/:id", async ({ params, query, request }) => {
+      await requireCsrf(request, auth, env);
+      const context = await getTenantContext(request, auth, env, "captures.delete");
+      if ((query as { permanent?: string })?.permanent === "true") {
+        return success(await deleteSavedRecordPermanent(context, request, uuidSchema.parse(params.id)));
+      }
+      return success(await trashSavedRecord(context, request, uuidSchema.parse(params.id)));
+    })
     .get("/api/v1/saved-views", async ({ request }) => success(await listSavedViews(await getTenantContext(request, auth, env, "captures.read"))))
     .post("/api/v1/saved-views", async ({ body, request, set }) => { await requireCsrf(request, auth, env); set.status = 201; return success(await createSavedView(await getTenantContext(request, auth, env, "captures.read"), savedRecordViewSchema.parse(body))); })
     .delete("/api/v1/saved-views/:id", async ({ params, request }) => { await requireCsrf(request, auth, env); return success(await deleteSavedView(await getTenantContext(request, auth, env, "captures.read"), uuidSchema.parse(params.id))); });

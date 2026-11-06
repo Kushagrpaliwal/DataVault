@@ -187,7 +187,7 @@ export const noteAiPreviews = pgTable("note_ai_previews", {
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
   noteId: uuid("note_id").notNull().references(() => notes.id, { onDelete: "cascade" }),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  /** organize | write-up */
+  /** notes */
   feature: text("feature").notNull(),
   /** The version of the doc the answer was made from. */
   baseVersion: integer("base_version").notNull(),

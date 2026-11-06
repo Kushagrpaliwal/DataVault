@@ -73,4 +73,28 @@ describe("the answer of the AI", () => {
     ], new Map());
     expect(JSON.stringify(content)).toContain("added");
   });
+
+  test("a heading of a level the editor does not have becomes one that it does", () => {
+    const content = aiBlocksToContent([
+      { type: "heading", level: 4, text: "The tides" },
+    ], new Map());
+    const heading = (content.content as JSONContent[])[0]!;
+    /**
+     * The editor has three levels. A fourth one would be drawn as the
+     * biggest heading of all, because that is the one it falls back to.
+     */
+    expect((heading.attrs as { level: number }).level).toBe(3);
+  });
+
+  test("a piece that the editor would refuse is not written", () => {
+    /**
+     * A block of a kind the editor does not know is left out, so the answer
+     * is made of blocks that are known. The one that is not known is the
+     * kind of thing that the check is for.
+     */
+    const content = aiBlocksToContent([
+      { type: "paragraph", text: "A piece about the water." },
+    ], new Map());
+    expect(validateDoc(content).valid).toBe(true);
+  });
 });

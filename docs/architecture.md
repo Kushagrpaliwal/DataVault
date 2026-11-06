@@ -54,13 +54,14 @@ The heading above a piece names its source, so the link is written once, at the 
 
 ## Organizing saved items
 
-Three layers of grouping sit on top of a saved item, and each one is used for a different thing:
+Two layers of grouping sit on top of a saved item, and each one is used for a different thing:
 
 - A **folder** (`vaults`) holds the item. Every saved item has exactly one, because the column is not allowed to be empty. Every workspace has a default folder, and the extension can be pointed at another one inside the workspace it was signed in for.
-- A **collection** belongs to one folder and groups items inside it. It is for the finer grouping a folder sometimes needs.
 - A **tag** works across every folder, so one item can carry many of them.
 
-The three are managed on the Organize page, but they can also be changed on the item itself, so a name that was spelled wrong can be put right. Removing a folder moves its items to the default folder first, and removing a collection or a tag only takes the mark off the items that had it.
+The folders are a tree. A folder has a `parent_id`, so a folder can sit inside another folder, and the folders under it are part of it: opening a folder shows what is in it and what is in the folders under it, and the number beside its name says how much is there altogether. A folder cannot be moved inside itself, and a folder cannot be moved into a folder that is under it.
+
+The folders and the tags are managed in the rail beside the saved list, where an item is moved into a folder by dragging its saved text onto the folder. They can also be changed on the item itself, so a name that was spelled wrong can be put right. Removing a folder removes the folders under it as well, and their items are moved to the default folder first, so nothing is lost. Removing a tag only takes the mark off the items that had it.
 
 ## Multi-tenancy
 
@@ -69,6 +70,14 @@ Every business record has `organization_id`. The backend ignores organization ID
 The rules are forced, so they apply to the owner of the table as well, and the application connects as a role of its own so that PostgreSQL enforces them as a second boundary. The migrations run as a separate administrative role, which is the only role that may create and change the tables. The credit tables follow the person rather than the workspace, because the allowance belongs to the person, and they read `app.user_id` for the same reason.
 
 Every account is given a personal workspace when it signs up, and every workspace has a default folder in it. The workspace list is ordered so a real workspace comes first and the personal one comes last, because the first entry is what the interface falls back to when nothing has been chosen yet. Without that order the personal bucket was first for everyone, so every capture landed in it. The order is fixed rather than left to the database, so the fallback does not change from one request to the next.
+
+## The theme
+
+The interface is light, dark, or the same as the system. The choice is kept in the browser and is offered in the header of every page, so it does not have to be looked for in the settings.
+
+The colours are named rather than written out. Every surface takes its colour from a named variable, and the dark theme is the same names with different colours behind them, so a new surface is written once and reads in both. The page is turned over by a class on the root element, and that class is the only thing that decides the colours: the system is asked only when the choice is to follow it, so a person on a dark system can still ask for the light theme.
+
+The choice is put on before the page is drawn, so the colours do not change in front of the reader.
 
 ## Consistency
 

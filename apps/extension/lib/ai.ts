@@ -51,11 +51,11 @@ export function describeAiFailure(error: unknown): AiFailure {
       case "AI_NOT_AVAILABLE":
         return { reason: "unavailable", message: "AI features are not switched on for this server yet.", needsWebsite: false };
       case "EMAIL_NOT_VERIFIED":
-        return { reason: "unverified", message: "Confirm your email address on the DataVault website to unlock AI credits.", needsWebsite: true };
+        return { reason: "unverified", message: "Confirm your email address on the DataVault website.", needsWebsite: true };
       case "AI_CONSENT_REQUIRED":
         return { reason: "consent", message: "Agree to send content to Google before using AI features.", needsWebsite: true };
       case "NO_CREDITS_REMAINING":
-        return { reason: "no-credits", message: "You have used all of today's free AI credits. They come back when the day rolls over.", needsWebsite: false };
+        return { reason: "no-credits", message: "Configure your API key in DataVault Settings (BYOK).", needsWebsite: true };
       case "AI_BUDGET_EXHAUSTED":
         return { reason: "busy", message: "The free AI allowance for today has been used up. Please try again tomorrow.", needsWebsite: false };
       case "AI_RATE_LIMITED":

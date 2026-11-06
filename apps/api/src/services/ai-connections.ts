@@ -2,12 +2,13 @@ import { and, eq } from "drizzle-orm";
 import { aiConnections, aiConsents, withAccount, withUser } from "@data-vault/database";
 import type { ServerEnvironment } from "@data-vault/config";
 import type { z } from "zod";
+import { detectProviderFromKey } from "@data-vault/schemas";
 import type { aiConnectionCreateSchema, aiConnectionPatchSchema, aiConnectionTestSchema } from "@data-vault/schemas";
 import type { TenantContext } from "../auth/context";
 import { AppError } from "../lib/errors";
 import { keyHint, openSecret, sealSecret } from "../lib/secret-box";
 import { writeAudit } from "./audit";
-import { listModels, type AiTarget } from "./ai-provider";
+import { listModels, normalizeBaseUrl, probeModel, type AiTarget } from "./ai-provider";
 
 type CreateInput = z.infer<typeof aiConnectionCreateSchema>;
 type PatchInput = z.infer<typeof aiConnectionPatchSchema>;
@@ -81,13 +82,37 @@ export async function defaultConnection(userId: string): Promise<typeof aiConnec
 /**
  * The provider of the person, for the interface.
  *
- * The key is not read, because the interface only needs to say which
- * provider is in use.
+ * The key is not returned, because the interface only needs to say which
+ * provider is in use. Whether the key can actually be read is said though,
+ * because a provider that is listed but whose key cannot be opened would
+ * quietly answer from the shared one instead, and the person would think
+ * their own key was being used.
  */
-export async function ownConnectionSummary(userId: string): Promise<{ label: string; preset: string; model: string } | null> {
+export async function ownConnectionSummary(env: ServerEnvironment, userId: string): Promise<{ label: string; preset: string; model: string; keyReadable: boolean } | null> {
   const connection = await defaultConnection(userId).catch(() => undefined);
   if (!connection) return null;
-  return { label: connection.label, preset: connection.preset, model: connection.model };
+  if (!connection.encryptedKey) return { label: connection.label, preset: connection.preset, model: connection.model, keyReadable: true };
+  try {
+    await connectionKey(env, userId, connection);
+    return { label: connection.label, preset: connection.preset, model: connection.model, keyReadable: true };
+  } catch {
+    return { label: connection.label, preset: connection.preset, model: connection.model, keyReadable: false };
+  }
+}
+
+/**
+ * The host a provider is called at.
+ *
+ * The key of a provider belongs to that provider, so the host is part of
+ * what the key is tied to. A key that was given for one host will not open
+ * for another, and so it is never sent to one.
+ */
+export function hostOf(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host.toLowerCase();
+  } catch {
+    return baseUrl.trim().toLowerCase();
+  }
 }
 
 /**
@@ -99,7 +124,7 @@ export async function ownConnectionSummary(userId: string): Promise<{ label: str
 export async function connectionKey(env: ServerEnvironment, userId: string, connection: typeof aiConnections.$inferSelect): Promise<string> {
   if (!connection.encryptedKey) return "";
   if (!env.aiKeyEncryptionKey) throw new AppError(500, "AI_KEYS_UNAVAILABLE", "The server cannot hold the keys of the users right now.");
-  return openSecret(env.aiKeyEncryptionKey, userId, connection.id, connection.encryptedKey);
+  return openSecret(env.aiKeyEncryptionKey, userId, connection.id, connection.encryptedKey, hostOf(connection.baseUrl));
 }
 
 /**
@@ -131,8 +156,9 @@ export async function createConnection(
     throw new AppError(503, "AI_KEYS_UNAVAILABLE", "The server cannot hold the keys of the users right now.");
   }
   const id = crypto.randomUUID();
+  const baseUrl = normalizeBaseUrl(input.baseUrl);
   const encryptedKey = input.apiKey && env.aiKeyEncryptionKey
-    ? await sealSecret(env.aiKeyEncryptionKey, context.userId, id, input.apiKey)
+    ? await sealSecret(env.aiKeyEncryptionKey, context.userId, id, input.apiKey, hostOf(baseUrl))
     : null;
   const row = await withUser(context.userId, context.organizationId, async (tx) => {
     if (input.isDefault) {
@@ -144,7 +170,7 @@ export async function createConnection(
       label: input.label,
       kind: input.kind,
       preset: input.preset,
-      baseUrl: input.baseUrl.replace(/\/+$/, ""),
+      baseUrl,
       model: input.model,
       encryptedKey,
       keyHint: input.apiKey ? keyHint(input.apiKey) : null,
@@ -167,6 +193,13 @@ export async function createConnection(
  *
  * The key may be replaced, and it is encrypted again when it is. The key
  * itself is never sent back to the browser.
+ *
+ * The address of a connection that holds a key cannot be changed without
+ * the key being given again. The address is written by the person, and the
+ * key is sent to the address in the header of every request, so a session
+ * that was stolen could point a connection at a server of its own and read
+ * the key out of the request. The key is tied to the host it was given for
+ * as well, so it will not open for another one.
  */
 export async function patchConnection(
   env: ServerEnvironment,
@@ -181,13 +214,29 @@ export async function patchConnection(
     if (input.isDefault) {
       await tx.update(aiConnections).set({ isDefault: false, updatedAt: new Date() }).where(eq(aiConnections.userId, context.userId));
     }
+    const baseUrl = input.baseUrl ? normalizeBaseUrl(input.baseUrl) : existing.baseUrl;
+    /**
+     * A key that is given for one host is not given for another, so moving
+     * a connection to another host means giving the key again.
+     */
+    if (existing.encryptedKey && hostOf(baseUrl) !== hostOf(existing.baseUrl) && !input.apiKey) {
+      throw new AppError(400, "AI_KEY_REQUIRED_FOR_NEW_ADDRESS", "Enter the key again to move this connection to another address.");
+    }
+    /**
+     * A key that cannot be held is not taken. The old one is kept and the
+     * last four of it are not changed either, so that what is shown is
+     * always the key that is actually there.
+     */
+    if (input.apiKey && !env.aiKeyEncryptionKey) {
+      throw new AppError(503, "AI_KEYS_UNAVAILABLE", "The server cannot hold the keys of the users right now.");
+    }
     const encryptedKey = input.apiKey
-      ? (env.aiKeyEncryptionKey ? await sealSecret(env.aiKeyEncryptionKey, context.userId, id, input.apiKey) : existing.encryptedKey)
+      ? await sealSecret(env.aiKeyEncryptionKey!, context.userId, id, input.apiKey, hostOf(baseUrl))
       : existing.encryptedKey;
     const [updated] = await tx.update(aiConnections).set({
       ...(input.label ? { label: input.label } : {}),
       ...(input.model ? { model: input.model } : {}),
-      ...(input.baseUrl ? { baseUrl: input.baseUrl.replace(/\/+$/, "") } : {}),
+      ...(input.baseUrl ? { baseUrl } : {}),
       ...(input.isDefault !== undefined ? { isDefault: input.isDefault } : {}),
       ...(input.apiKey ? { encryptedKey, keyHint: keyHint(input.apiKey) } : {}),
       updatedAt: new Date(),
@@ -212,12 +261,37 @@ export async function deleteConnection(context: TenantContext, id: string): Prom
 }
 
 /**
+ * What a check of a provider says.
+ *
+ * The key and the model are two different things. A provider may accept the
+ * key and still not have the model, and the person needs to know which of
+ * the two is the problem.
+ */
+export interface AiConnectionCheck {
+  /** True when the provider accepted the key. */
+  keyAccepted: boolean;
+  /** The models the provider offers. */
+  models: string[];
+  /** The model that will be used. */
+  model: string | null;
+  /** True when that model answered when it was asked. Null when none was asked. */
+  modelAnswered: boolean | null;
+  /** What to say about it, in words. */
+  detail: string;
+}
+
+/**
  * Try a provider, and ask it which models it has.
  *
  * The provider may be one that is already saved, or one that is being set
  * up, so that a person can see whether it works before they keep it.
+ *
+ * The answer says whether the key was accepted and which models the
+ * provider offers, and whether the model that is chosen answers. A key that
+ * was refused is said as such, because that is the thing the person can do
+ * something about.
  */
-export async function testConnection(env: ServerEnvironment, context: TenantContext, input: TestInput): Promise<{ models: string[]; model: string | null }> {
+export async function testConnection(env: ServerEnvironment, context: TenantContext, input: TestInput): Promise<AiConnectionCheck> {
   const id = input.id;
   if (id) {
     const rows = await withAccount(context.userId, (tx) => tx
@@ -227,21 +301,91 @@ export async function testConnection(env: ServerEnvironment, context: TenantCont
       .limit(1));
     const connection = rows[0];
     if (!connection) throw new AppError(404, "NOT_FOUND", "That connection could not be found.");
-    const models = await listModels(env, await targetFor(env, context.userId, connection));
-    await withUser(context.userId, context.organizationId, (tx) => tx
-      .update(aiConnections)
-      .set({ lastVerifiedAt: new Date(), updatedAt: new Date() })
-      .where(eq(aiConnections.id, connection.id)));
-    return { models, model: connection.model };
+    const target = await targetFor(env, context.userId, connection);
+    const models = await listModels(env, target);
+    /**
+     * The model that is in use is asked to say one word, so that a model the
+     * key cannot use is found out here.
+     */
+    const model = connection.model || models[0] || "";
+    let probe = model ? await probeModel(env, { ...target, model }) : { answered: false, detail: "that provider has no models to show." };
+    if (!probe.answered && models.length > 1) {
+      for (const alt of models) {
+        if (alt === model) continue;
+        const altProbe = await probeModel(env, { ...target, model: alt });
+        if (altProbe.answered) {
+          probe = { answered: false, detail: `model “${model}” did not answer, but “${alt}” is working and available to use.` };
+          break;
+        }
+      }
+    }
+    if (probe.answered) {
+      await withUser(context.userId, context.organizationId, (tx) => tx
+        .update(aiConnections)
+        .set({ lastVerifiedAt: new Date(), updatedAt: new Date() })
+        .where(eq(aiConnections.id, connection.id)));
+    }
+    return {
+      keyAccepted: true,
+      models,
+      model: model || null,
+      modelAnswered: probe.answered,
+      detail: probe.answered
+        ? `Your key works. ${models.length} model${models.length === 1 ? " is" : "s are"} available.`
+        : `Your key works, but ${probe.detail}`,
+    };
   }
-  if (!input.baseUrl) throw new AppError(400, "AI_ENDPOINT_INVALID", "Say where the provider is.");
-  const models = await listModels(env, {
-    kind: input.kind ?? "openai-compatible",
-    baseUrl: input.baseUrl,
+  let rawUrl = input.baseUrl;
+  let kind = input.kind;
+  let defaultModel = input.model ?? "";
+  if (!rawUrl && input.apiKey) {
+    const detected = detectProviderFromKey(input.apiKey);
+    if (detected) {
+      rawUrl = detected.baseUrl;
+      kind = kind ?? detected.kind;
+      defaultModel = defaultModel || detected.model;
+    }
+  }
+  if (!rawUrl) throw new AppError(400, "AI_ENDPOINT_INVALID", "Say where the provider is or paste an API key.");
+  const baseUrl = normalizeBaseUrl(rawUrl);
+  const target = {
+    kind: kind ?? "openai-compatible",
+    baseUrl,
     apiKey: input.apiKey ?? "",
-    model: input.model ?? "",
-  });
-  return { models, model: input.model ?? null };
+    model: defaultModel,
+  };
+  const models = await listModels(env, target);
+  /**
+   * Determine candidate model: user's requested model, target preset model if in list,
+   * or the first available model.
+   */
+  let candidateModel = (input.model && models.includes(input.model) ? input.model : "")
+    || (models.includes(target.model) ? target.model : "")
+    || models[0]
+    || "";
+  let probe = candidateModel ? await probeModel(env, { ...target, model: candidateModel }) : null;
+  if (probe && !probe.answered && models.length > 1) {
+    const alts = models.filter((alt) => alt !== candidateModel).slice(0, 3);
+    for (const alt of alts) {
+      const altProbe = await probeModel(env, { ...target, model: alt });
+      if (altProbe.answered) {
+        candidateModel = alt;
+        probe = altProbe;
+        break;
+      }
+    }
+  }
+  return {
+    keyAccepted: true,
+    models,
+    model: candidateModel || null,
+    modelAnswered: probe ? probe.answered : null,
+    detail: probe
+      ? (probe.answered
+        ? `Your key works. ${models.length} model${models.length === 1 ? " is" : "s are"} available.`
+        : `Your key works, but ${probe.detail}`)
+      : `Your key works. ${models.length} model${models.length === 1 ? " is" : "s are"} available.`,
+  };
 }
 
 /**

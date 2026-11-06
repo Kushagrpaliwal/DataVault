@@ -22,13 +22,6 @@ export const savedRecordCreateSchema = z.object({
   captureKind: z.enum(CAPTURE_KINDS).default("note"),
   reviewStatus: z.enum(VAULT_ITEM_STATUSES).default("inbox"),
   privacyLevel: z.enum(PRIVACY_LEVELS).default("private"),
-  /**
-   * The collections the item goes into.
-   *
-   * A collection belongs to one folder, so every collection named here has
-   * to belong to the folder the item is in.
-   */
-  collectionIds: z.array(uuidSchema).max(20).default([]),
 });
 
 export const savedRecordPatchSchema = savedRecordCreateSchema.partial().refine((value) => Object.keys(value).length > 0, "No changes supplied");
@@ -40,7 +33,6 @@ export const savedRecordListQuerySchema = paginationQuerySchema.extend({
   vaultId: uuidSchema.optional(),
   reviewStatus: z.enum(VAULT_ITEM_STATUSES).optional(),
   tag: z.string().trim().max(80).optional(),
-  collectionId: uuidSchema.optional(),
   archived: booleanQuerySchema,
   trash: booleanQuerySchema,
   sort: z.enum(["createdAt", "updatedAt", "title", "recordType"]).default("createdAt"),
@@ -77,26 +69,39 @@ export const savedRecordSchema = z.object({
   reviewStatus: z.enum(VAULT_ITEM_STATUSES),
   privacyLevel: z.enum(PRIVACY_LEVELS),
   deletedAt: z.string().nullable(),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+  tags: z.array(z.object({ id: uuidSchema, name: z.string(), color: z.string() })).default([]),
 });
 
 export const vaultCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
-  slug: z.string().trim().toLowerCase().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(100),
+  slug: z.string().trim().toLowerCase().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(100).optional(),
   description: z.string().trim().max(500).optional(),
   kind: z.enum(["personal", "workspace"]),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#b8a4ed"),
-});
-
-export const collectionCreateSchema = z.object({
-  vaultId: uuidSchema,
-  name: z.string().trim().min(1).max(100),
-  color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#b8a4ed"),
+  /**
+   * The folder this one goes inside.
+   *
+   * A folder with no parent sits at the top.
+   */
+  parentId: uuidSchema.nullable().optional(),
 });
 
 export const tagCreateSchema = z.object({ name: z.string().trim().min(1).max(80), color: z.string().regex(/^#[0-9a-f]{6}$/i).default("#b8a4ed") });
 
 /**
- * The changes that can be made to a folder, a collection or a tag.
+ * A tag that is put on a folder.
+ *
+ * The tag is made in the workspace, and put on the items of the folder, so
+ * that it shows up in the list of the tags of that folder at once.
+ */
+export const folderTagSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+});
+
+/**
+ * The changes that can be made to a folder or a tag.
  *
  * A name is the only thing that is really worth changing, so the colour is
  * there as well and nothing else.
@@ -105,11 +110,12 @@ export const vaultPatchSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
   description: z.string().trim().max(500).optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
-}).refine((value) => Object.keys(value).length > 0, "No changes supplied");
-
-export const collectionPatchSchema = z.object({
-  name: z.string().trim().min(1).max(100).optional(),
-  color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+  /**
+   * The folder this one goes inside.
+   *
+   * It is set to nothing to bring the folder back to the top.
+   */
+  parentId: uuidSchema.nullable().optional(),
 }).refine((value) => Object.keys(value).length > 0, "No changes supplied");
 
 export const tagPatchSchema = z.object({
@@ -119,7 +125,6 @@ export const tagPatchSchema = z.object({
 
 export const itemOrganizationSchema = z.object({
   vaultId: uuidSchema.optional(),
-  collectionIds: z.array(uuidSchema).max(25).optional(),
   tagNames: z.array(z.string().trim().min(1).max(80)).max(50).optional(),
   reviewStatus: z.enum(VAULT_ITEM_STATUSES).optional(),
   privacyLevel: z.enum(PRIVACY_LEVELS).optional(),

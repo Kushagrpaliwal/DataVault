@@ -30,24 +30,23 @@ Protected business calls require `X-Organization-Id`. Cookie-authenticated mutat
 
 ## Organizing
 
-A saved item always sits in one folder. Collections group items inside a folder, and tags work across every folder. A folder, a collection and a tag can all be renamed and removed; removing a folder moves its items to the default folder first.
+A saved item always sits in one folder. A folder can sit inside another folder, so the folders are a tree, and tags work across every folder. A folder and a tag can both be renamed and removed; removing a folder removes the folders under it too, and moves all of their items to the default folder first.
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/vaults` | The folders of the workspace, with how many items each one holds. |
-| `POST` | `/vaults` | Make a folder. |
-| `PATCH` | `/vaults/:id` | Rename a folder, or change its colour. |
-| `DELETE` | `/vaults/:id` | Remove a folder. Its items move to the default folder. The default folder itself cannot be removed. |
-| `GET` | `/vaults/:id/collections` | The collections of one folder, with how many items each one holds. |
-| `POST` | `/collections` | Make a collection in a folder. |
-| `PATCH` | `/collections/:id` | Rename a collection, or change its colour. |
-| `DELETE` | `/collections/:id` | Remove a collection. The items in it are kept. |
+| `GET` | `/vaults` | The folders of the workspace, with the folder each one sits inside (`parentId`) and how many items it holds, counting the folders under it. |
+| `POST` | `/vaults` | Make a folder. The body may name the folder it goes inside (`parentId`). |
+| `PATCH` | `/vaults/:id` | Rename a folder, change its colour, or move it into another folder (`parentId`). A folder cannot be moved inside itself. |
+| `DELETE` | `/vaults/:id` | Remove a folder and the folders under it. Their items move to the default folder. The default folder itself cannot be removed. |
+| `POST` | `/vaults/:id/tags` | Put a tag on a folder. The tag is made in the workspace and put on the items of that folder and the folders under it. |
 | `GET` | `/tags` | The tags of the workspace, with how many items each one holds. |
 | `POST` | `/tags` | Make a tag. |
 | `PATCH` | `/tags/:id` | Rename a tag, or change its colour. |
 | `DELETE` | `/tags/:id` | Remove a tag. The items that had it are kept. |
-| `PUT` | `/saved-records/:id/organization` | Move an item into a folder, put it in collections, and mark it with tags. The body is `{ vaultId?, collectionIds?, tagNames?, reviewStatus?, privacyLevel? }`. A tag that does not exist yet is made. Moving an item to another folder takes off the collections of the old folder. |
-| `POST` | `/captures` | Save a clip. The body may name the folder (`vaultId`) and the collections inside it (`collectionIds`). A collection of another folder is refused. |
+| `PUT` | `/saved-records/:id/organization` | Move an item into a folder and mark it with tags. The body is `{ vaultId?, tagNames?, reviewStatus?, privacyLevel? }`. A tag that does not exist yet is made. |
+| `POST` | `/captures` | Save a clip. The body may name the folder (`vaultId`). A folder of another workspace is refused. |
+
+Listing items with `?vaultId=` shows the items of that folder and of the folders under it.
 
 Critical create requests require an `Idempotency-Key` header (8–200 characters). Reusing a key with the same payload returns the original result; reusing it with another payload returns a conflict.
 
@@ -58,7 +57,7 @@ A doc holds rich text. Its content is the JSON the editor works with, and the pl
 | Method | Path | Notes |
 | --- | --- | --- |
 | `GET` | `/notes?q&parentId&trash` | The list: title, icon, pinned, parent, updated time, clip count and a short excerpt. |
-| `POST` | `/notes` | Create. Needs an `Idempotency-Key`. |
+| `POST` | `/notes` | Create. Needs an `Idempotency-Key`. The body may name the doc it goes inside (`parentId`), which is how a doc inside another doc is made. |
 | `GET` | `/notes/:id` | The whole content and the current version. |
 | `PATCH` | `/notes/:id` | Change the title, icon, content, arrange mode, pinned state or parent. Send `baseVersion`; the server answers `409 NOTE_VERSION_CONFLICT` with the newest doc when the version no longer matches. |
 | `DELETE` | `/notes/:id` | Move to Trash. |
@@ -67,10 +66,11 @@ A doc holds rich text. Its content is the JSON the editor works with, and the pl
 | `POST` | `/notes/:id/clips` | Add a piece of a web page. The body is `{ html?, text, source: { url?, title, domain }, capturedAt? }`. Answers `{ clipId, sectionTitle, duplicate, noteTitle, noteId, version, clipCount }`. |
 | `DELETE` | `/notes/:id/clips/:clipId` | Take a piece back out. |
 | `POST` | `/notes/:id/rearrange` | Sort the pieces again, using the doc's arrange mode. |
-| `POST` | `/notes/:id/write-up` | Write the pieces up as sentences that follow each other, in paragraphs. Without `apply` it proposes the writing and keeps it on the server, answering `{ preview: true, previewId, title, sections }`. With `{ apply: true, previewId }` the proposal that was shown is written into the doc, without asking the model again. |
+| `POST` | `/notes/:id/notes` | Turn the whole doc into notes with the AI. Without `apply` it proposes the notes and keeps them on the server, answering `{ preview: true, previewId, title, sections }`. With `{ apply: true, previewId, target }` the notes that were shown are written, either into the doc itself (`target: "replace"`) or into a new doc inside it (`target: "subpage"`), without asking the model again. |
+| `POST` | `/notes/:id/summary` | A detailed summary of the doc: what it is about, what each part says, the key points, and the questions it leaves open. |
+| `POST` | `/notes/:id/ai/chat` | Ask a question about the doc. The body is `{ question, history?, selection? }`. The answer is a list of blocks and it is not written into the doc: the person sees it and puts it in with one click. |
 | `GET` | `/notes/:id/revisions` | The earlier versions of the doc. |
 | `POST` | `/notes/:id/revisions/:rid/restore` | Go back to an earlier version. |
-| `POST` | `/notes/:id/organize` | Sort the doc into topics with the AI. Without `apply` it proposes the topics and keeps them on the server, answering `{ preview: true, previewId, sections }`. With `{ apply: true, previewId }` the proposal that was shown is written into the doc, without asking the model again. |
 | `POST` | `/notes/:id/ai/selection` | Do something with a selection of the doc. The body is `{ action, instruction?, selection: { markdown, clips }, context: { mode, recordIds? } }`. The answer is a list of blocks and it is not written into the doc: the person sees it and accepts it. |
 | `GET` | `/notes/current` | The doc the keyboard shortcut adds to. |
 | `PUT` | `/notes/current` | Choose the current doc. |

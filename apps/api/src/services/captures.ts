@@ -10,7 +10,7 @@ import { sha256 } from "../lib/crypto";
 import { writeAudit } from "./audit";
 import { mapSavedRecord } from "./records";
 import { indexRecord } from "./semantic";
-import { defaultVaultId, linkCollections } from "./vaults";
+import { defaultVaultId } from "./vaults";
 
 type CaptureInput = z.infer<typeof captureCreateSchema>;
 
@@ -49,11 +49,6 @@ export async function createCapture(context: TenantContext, request: Request, in
       const tagRows = await tx.select({ id: tags.id }).from(tags).where(and(eq(tags.organizationId, context.organizationId), inArray(tags.name, tagNames)));
       if (tagRows.length) await tx.insert(savedRecordTags).values(tagRows.map((tag) => ({ organizationId: context.organizationId, savedRecordId: record.id, tagId: tag.id })));
     }
-    /**
-     * The collections the person chose are put on the item now, so that it
-     * lands in the right place without asking again.
-     */
-    await linkCollections(tx, context, record.id, vaultId, input.collectionIds);
     await tx.insert(processingJobs).values({ organizationId: context.organizationId, savedRecordId: record.id, kind: "capture-index", status: "completed", payload: { captureKind: input.captureKind, sourceDomain: input.source.domain, captureQuality: input.captureQuality ?? null }, completedAt: new Date() });
 
     await writeAudit(tx, context, request, { action: "captured", resourceType: "saved_record", resourceId: record.id, newValues: { recordType, captureKind: input.captureKind, vaultId, sourceDomain: input.source.domain } });

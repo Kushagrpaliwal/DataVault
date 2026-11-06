@@ -1,6 +1,7 @@
 import type { ServerEnvironment } from "@data-vault/config";
 import { AppError } from "../lib/errors";
 import { sha256 } from "../lib/crypto";
+import { guardedFetchOptions } from "../lib/endpoint-guard";
 
 export interface GeminiGenerateInput {
   /** The system instruction. Kept short and fixed by the caller. */
@@ -48,14 +49,96 @@ function modelsEndpoint(base: URL): string {
 }
 
 /**
- * The models Google offers.
+ * The models Google offers for text generation.
+ *
+ * Only models that support generating content (chat/text) and are active are
+ * returned, so embedding models, audio/TTS models, image models, and deprecated
+ * ones that return 404 are excluded.
  */
 export async function listGeminiModels(baseUrl: URL, apiKey: string): Promise<string[]> {
   const endpoint = new URL(`${modelsEndpoint(baseUrl)}`, baseUrl.origin);
-  const response = await fetch(endpoint, { headers: { "x-goog-api-key": apiKey, accept: "application/json" } });
-  if (!response.ok) throw new AppError(502, "AI_PROVIDER_FAILED", "Google did not answer with its list of models.");
-  const payload = await response.json() as { models?: { name?: string }[] };
-  return (payload.models ?? []).map((entry) => entry.name ?? "").filter(Boolean);
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      ...guardedFetchOptions(30_000),
+      headers: { "x-goog-api-key": apiKey, accept: "application/json" },
+    });
+  } catch {
+    throw new AppError(502, "AI_UNREACHABLE", "Google AI service could not be reached. Please check your network connection.");
+  }
+
+  if (response.status === 400 || response.status === 401 || response.status === 403) {
+    const errorBody = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    const msg = errorBody?.error?.message;
+    if (msg && /api key/i.test(msg)) {
+      throw new AppError(502, "AI_PROVIDER_REFUSED", "Google refused the key. Please check your API key.");
+    }
+    throw new AppError(502, "AI_PROVIDER_REFUSED", msg ?? "Google refused the key. Please check it.");
+  }
+  if (response.status === 429) {
+    throw new AppError(429, "AI_RATE_LIMITED", "Google AI is busy right now. Please try again in a few minutes.");
+  }
+  if (!response.ok) {
+    throw new AppError(502, "AI_PROVIDER_FAILED", "Google did not answer with its list of models.");
+  }
+
+  const payload = await response.json() as {
+    models?: Array<{
+      name?: string;
+      supportedGenerationMethods?: string[];
+    }>;
+  };
+
+  const rawModels = payload.models ?? [];
+  const candidates = rawModels.filter((entry) => {
+    const methods = entry.supportedGenerationMethods;
+    if (!methods || !methods.includes("generateContent")) return false;
+    const name = (entry.name ?? "").replace(/^models\//, "").toLowerCase();
+    if (name.includes("-tts") || name.startsWith("lyria") || name.includes("clip-preview")) return false;
+    if (name.includes("-image") || name.includes("banana")) return false;
+    if (name.includes("-transcribe")) return false;
+    if (name.includes("embedding") || name === "aqa") return false;
+    if (name.startsWith("antigravity")) return false;
+    if (/^gemini-(1\.[05]|2\.0|2\.5)/.test(name)) return false;
+    return true;
+  }).map((entry) => (entry.name ?? "").replace(/^models\//, "")).filter(Boolean);
+
+  const priority = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemma-4-26b-a4b-it"];
+  candidates.sort((a, b) => {
+    const idxA = priority.indexOf(a);
+    const idxB = priority.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
+  // Probe each candidate model with a minimal 1-token request in parallel to check if it actually responds
+  const probeResults = await Promise.allSettled(
+    candidates.map(async (model) => {
+      const generateUrl = new URL(`${modelsEndpoint(baseUrl)}/${encodeURIComponent(model)}:generateContent`, baseUrl.origin);
+      const res = await fetch(generateUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: "1" }] }],
+          generationConfig: { maxOutputTokens: 1 },
+        }),
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (res.status === 200) return model;
+      throw new Error(String(res.status));
+    })
+  );
+
+  const verified = probeResults
+    .filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled")
+    .map((r) => r.value);
+
+  // Return only verified working models that responded with 200 OK
+  if (verified.length) return verified;
+
+  return candidates.length ? candidates : rawModels.map((entry) => (entry.name ?? "").replace(/^models\//, "")).filter(Boolean);
 }
 
 /**
@@ -79,7 +162,7 @@ export async function generateJson(env: ServerEnvironment, input: GeminiGenerate
   if (!env.geminiApiKey) throw new AppError(503, "AI_NOT_AVAILABLE", "AI features are not switched on for this server yet.");
   return generateJsonFor({ apiKey: env.geminiApiKey, model: env.GEMINI_MODEL }, {
     ...input,
-    maxOutputTokens: Math.min(input.maxOutputTokens ?? env.AI_MAX_OUTPUT_TOKENS, env.AI_MAX_OUTPUT_TOKENS),
+    maxOutputTokens: Math.min(Math.max(input.maxOutputTokens ?? env.AI_MAX_OUTPUT_TOKENS, env.AI_MAX_OUTPUT_TOKENS), 8_192),
   });
 }
 
@@ -91,7 +174,7 @@ export async function generateJson(env: ServerEnvironment, input: GeminiGenerate
  */
 export async function generateJsonFor(target: GeminiTarget, input: GeminiGenerateInput): Promise<GeminiGenerateResult> {
   const model = target.model;
-  const maxOutputTokens = Math.min(input.maxOutputTokens ?? 400, 8_192);
+  const maxOutputTokens = Math.min(Math.max(input.maxOutputTokens ?? 1600, 1600), 8_192);
   const body: Record<string, unknown> = {
     systemInstruction: { parts: [{ text: input.system }] },
     contents: [{ role: "user", parts: [{ text: input.contents }] }],
@@ -120,8 +203,24 @@ export async function generateJsonFor(target: GeminiTarget, input: GeminiGenerat
     throw new AppError(502, "AI_UNREACHABLE", "The AI service could not be reached. Please try again.");
   }
 
-  if (response.status === 429) {
-    throw new AppError(429, "AI_RATE_LIMITED", "The free AI allowance is busy right now. Please try again in a few minutes.");
+  if (response.status === 429 || response.status === 503) {
+    const errorBody = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    const msg = errorBody?.error?.message;
+    if (msg && /quota/i.test(msg)) {
+      throw new AppError(429, "AI_RATE_LIMITED", "Your Google AI API quota was exceeded for this model. Try another model or check your quota in Google AI Studio.");
+    }
+    if (msg && /high demand|temporarily|unavailable/i.test(msg)) {
+      throw new AppError(429, "AI_RATE_LIMITED", `Model “${model}” is currently experiencing high demand at Google. Try another model or retry in a moment.`);
+    }
+    throw new AppError(429, "AI_RATE_LIMITED", msg ?? "The AI service is busy right now. Please try again in a moment.");
+  }
+  if (response.status === 404) {
+    const detail = await response.text().catch(() => "");
+    console.warn(JSON.stringify({ level: "warn", event: "gemini_model_not_found", status: 404, model, detail: detail.slice(0, 400) }));
+    throw new AppError(404, "AI_MODEL_NOT_FOUND", `Model “${model}” is not available or is not supported by this key.`);
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new AppError(502, "AI_PROVIDER_REFUSED", "Google refused the key. Please check your API key.");
   }
   if (response.status === 400) {
     const detail = await response.text().catch(() => "");
@@ -151,10 +250,97 @@ export async function generateJsonFor(target: GeminiTarget, input: GeminiGenerat
   try {
     data = JSON.parse(text);
   } catch {
-    throw new AppError(502, "AI_INVALID_RESPONSE", "The AI service returned an answer we could not read. Please try again.");
+    const repaired = tryRepairTruncatedJson(text);
+    if (repaired !== null) {
+      data = repaired;
+    } else {
+      /**
+       * An answer that was cut short is not the same as an answer that could
+       * not be read, and the person can do something about the first one.
+       */
+      if (candidate?.finishReason === "MAX_TOKENS") {
+        throw new AppError(502, "AI_ANSWER_TOO_LONG", "The answer was longer than the AI was allowed to write. Try a smaller piece of text.");
+      }
+      throw new AppError(502, "AI_INVALID_RESPONSE", "The AI service returned an answer we could not read. Please try again.");
+    }
   }
 
   return { data, inputTokens, outputTokens, cacheKey: await cacheKeyFor(input, model) };
+}
+
+/**
+ * Attempt to repair a JSON string that was truncated by a token limit,
+ * recovering whatever complete objects and arrays were produced before the cut-off.
+ */
+export function tryRepairTruncatedJson(text: string): unknown {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // Continue below
+  }
+
+  const candidateIndices: number[] = [];
+  for (let i = trimmed.length - 1; i >= 0; i--) {
+    const ch = trimmed[i];
+    if (ch === "}" || ch === "]" || ch === ",") {
+      candidateIndices.push(i);
+      if (candidateIndices.length >= 80) break;
+    }
+  }
+
+  for (const idx of candidateIndices) {
+    const isComma = trimmed[idx] === ",";
+    const prefix = trimmed.slice(0, isComma ? idx : idx + 1).trim();
+    const openDelims: string[] = [];
+    let insideStr = false;
+    let esc = false;
+    let valid = true;
+
+    for (let j = 0; j < prefix.length; j++) {
+      const c = prefix[j];
+      if (esc) {
+        esc = false;
+        continue;
+      }
+      if (c === "\\") {
+        esc = true;
+        continue;
+      }
+      if (c === '"') {
+        insideStr = !insideStr;
+        continue;
+      }
+      if (insideStr) continue;
+
+      if (c === "{") openDelims.push("}");
+      else if (c === "[") openDelims.push("]");
+      else if (c === "}") {
+        if (openDelims.pop() !== "}") { valid = false; break; }
+      } else if (c === "]") {
+        if (openDelims.pop() !== "]") { valid = false; break; }
+      }
+    }
+
+    if (!valid || insideStr) continue;
+
+    let closing = "";
+    while (openDelims.length > 0) {
+      closing += openDelims.pop();
+    }
+
+    try {
+      const parsed = JSON.parse(prefix + closing);
+      if (parsed && typeof parsed === "object") {
+        return parsed;
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return null;
 }
 
 /**

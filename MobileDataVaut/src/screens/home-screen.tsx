@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { useSession } from '../auth/session.js'
 import { RecordRow } from '../components/record-row.js'
+import { ThemeToggle } from '../components/theme-toggle.js'
 import { Button, ErrorState, LoadingState, SectionTitle } from '../components/primitives.js'
 import type { DashboardData, SavedRecord } from '../api/types.js'
 
@@ -29,7 +30,10 @@ export function HomeScreen({ onOpenCapture, onOpenVault, onOpenRecord }: {
             <text className="topbar__eyebrow">{organization?.name ?? 'Personal workspace'}</text>
             <text className="topbar__title">Hello, {firstName}</text>
           </view>
-          <view className="avatar"><text>{firstName.slice(0, 1).toUpperCase()}</text></view>
+          <view className="topbar__actions">
+            <ThemeToggle />
+            <view className="avatar"><text>{firstName.slice(0, 1).toUpperCase()}</text></view>
+          </view>
         </view>
 
         <view className="hero-card hero-card--teal">

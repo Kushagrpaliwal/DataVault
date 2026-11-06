@@ -181,20 +181,99 @@
 }
 
 /**
- * The dark theme.
+ * The theme of the app.
  *
  * The colours are named rather than written out, so the whole app can be
- * turned over at once.
+ * turned over at once. They are put on the shell of the app, so that the
+ * light theme and the dark theme are two sets of the same names.
  */
-.theme-dark {
+.app-shell {
+  --cream: #fffaf0;
+  --paper: #fffdf8;
+  --ink: #17151b;
+  --muted: #766f74;
+  --line: #e7ddd1;
+  --teal: #158b84;
+  --teal-dark: #096962;
+  --peach: #ffb084;
+  --lavender: #b8a4ed;
+  --pink: #f3a8c9;
+  --yellow: #f2d96b;
+  --shadow: 0 12px 26px rgba(45, 34, 28, 0.09);
+  /**
+   * The line around a shape, and the shadow it throws.
+   *
+   * The shapes are drawn as though they were cut out of paper, so they need
+   * a line that is seen against the page. It is the light of the ink in the
+   * light theme, and the light of the paper in the dark one.
+   */
+  --edge: #17151b;
+  /** The softer shadow a shape throws. */
+  --edge-soft: rgba(23, 21, 27, 0.24);
+  /** The words on a shape that is filled with the ink. */
+  --on-ink: #fffdf8;
+  /** The words on a shape that is filled with one of the bright colours. */
+  --on-accent: #17151b;
+  /** The quieter words on such a shape. */
+  --on-accent-muted: #564c50;
+  /** The words on the dark teal. */
+  --on-deep: #fffdf8;
+  /** The bar at the bottom of the screen. */
+  --nav: rgba(255, 250, 240, 0.96);
+  /** The paper a field that is written in sits on. */
+  --field: #fffefa;
+  /** The colours that say something went wrong, and that it worked. */
+  --danger-bg: #ffe1df;
+  --danger-line: #e9b5b7;
+  --danger-ink: #8e3038;
+  --danger-solid: #c95962;
+  --notice-bg: #d9f3ea;
+  --notice-ink: #16675d;
+  --loading-bg: #f6f0ff;
+  --neutral-bg: #ede8df;
+  --accent-bg: #fff4dc;
+  --teal-soft: #c9eee5;
+  --on-teal-soft: #17151b;
+}
+
+/**
+ * The dark theme.
+ *
+ * It is the same set of names with different colours behind them, so that
+ * nothing in the app has to know which theme is on.
+ */
+.app-shell.theme-dark {
   --cream: #14131a;
   --paper: #1e1d25;
   --ink: #f2eef4;
   --muted: #a49da4;
   --line: #33303a;
-  --teal: #3fc0b6;
+  --teal: #1d4f4a;
   --teal-dark: #7bd8cf;
+  --peach: #ffb084;
+  --lavender: #b8a4ed;
+  --pink: #f3a8c9;
+  --yellow: #f2d96b;
   --shadow: 0 12px 26px rgba(0, 0, 0, 0.45);
+  --edge: #f2eef4;
+  --edge-soft: rgba(0, 0, 0, 0.5);
+  --on-ink: #17151b;
+  --on-accent: #17151b;
+  --on-accent-muted: #564c50;
+  --on-deep: #fffdf8;
+  --nav: rgba(20, 19, 26, 0.96);
+  --field: #17161d;
+  --danger-bg: #3a1f22;
+  --danger-line: #6b3439;
+  --danger-ink: #f2b8b5;
+  --danger-solid: #a83f47;
+  --notice-bg: #16302b;
+  --notice-ink: #7bd8cf;
+  --loading-bg: #241f33;
+  --neutral-bg: #2a2830;
+  --accent-bg: #33291a;
+  --teal-soft: #22443f;
+  --on-teal-soft: #7bd8cf;
 }
 
 * {
@@ -306,8 +385,32 @@ body {
   width: 42px;
   height: 42px;
   background: var(--pink);
-  border: 2px solid var(--ink);
-  box-shadow: 3px 3px 0 var(--ink);
+  border: 2px solid var(--edge);
+  box-shadow: 3px 3px 0 var(--edge);
+}
+
+.topbar__actions {
+  align-items: center;
+  gap: 10px;
+  display: flex;
+}
+
+.theme-toggle {
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  border: 2px solid var(--edge);
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow: 3px 3px 0 var(--edge);
+}
+
+.theme-toggle__mark {
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 900;
 }
 
 .hero-card {
@@ -319,9 +422,9 @@ body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  border: 2px solid var(--ink);
+  border: 2px solid var(--edge);
   border-radius: 26px;
-  box-shadow: 5px 5px 0 var(--ink);
+  box-shadow: 5px 5px 0 var(--edge);
 }
 
 .hero-card--teal {
@@ -333,11 +436,11 @@ body {
 .hero-card__title {
   position: relative;
   z-index: 1;
-  color: #fffdf8;
+  color: var(--on-deep);
 }
 
 .hero-card__eyebrow {
-  color: #d7ffef;
+  color: var(--on-deep);
 }
 
 .hero-card__title {
@@ -350,7 +453,7 @@ body {
 
 .hero-card__body {
   max-width: 245px;
-  color: #e4fff8;
+  color: var(--on-deep);
   font-size: 13px;
   line-height: 19px;
 }
@@ -378,14 +481,14 @@ body {
   align-items: center;
   justify-content: center;
   display: flex;
-  border: 2px solid var(--ink);
+  border: 2px solid var(--edge);
   border-radius: 13px;
   background: var(--ink);
-  box-shadow: 3px 3px 0 rgba(23, 21, 27, 0.24);
+  box-shadow: 3px 3px 0 var(--edge-soft);
 }
 
 .button__text {
-  color: #fffdf8;
+  color: var(--on-ink);
   font-size: 13px;
   font-weight: 800;
   text-align: center;
@@ -396,9 +499,18 @@ body {
 }
 
 .button--secondary .button__text,
-.button--ghost .button__text,
-.button--on-color .button__text {
+.button--ghost .button__text {
   color: var(--ink);
+}
+
+/**
+ * The button that sits on a dark colour.
+ *
+ * It is white in both themes, so the words on it are the dark ones in both
+ * themes too.
+ */
+.button--on-color .button__text {
+  color: #17151b;
 }
 
 .button--ghost {
@@ -410,8 +522,12 @@ body {
 }
 
 .button--danger {
-  border-color: #c95962;
-  background: #c95962;
+  border-color: var(--danger-solid);
+  background: var(--danger-solid);
+}
+
+.button--danger .button__text {
+  color: #fffdf8;
 }
 
 .button--on-color {
@@ -468,9 +584,9 @@ body {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  border: 2px solid var(--ink);
+  border: 2px solid var(--edge);
   border-radius: 19px;
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: 4px 4px 0 var(--edge);
 }
 
 .stat-card--peach {
@@ -499,7 +615,7 @@ body {
 
 .stat-card__hint {
   margin-top: auto;
-  color: rgba(23, 21, 27, 0.65);
+  color: var(--on-accent-muted);
   font-size: 10px;
   line-height: 13px;
 }
@@ -532,7 +648,7 @@ body {
   justify-content: center;
   display: flex;
   flex-shrink: 0;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--edge);
   border-radius: 12px;
   color: var(--ink);
   font-size: 16px;
@@ -546,6 +662,12 @@ body {
 .record-row__mark--bookmark,
 .record-row__mark--link {
   background: var(--lavender);
+}
+
+.record-row__mark--note,
+.record-row__mark--bookmark,
+.record-row__mark--link {
+  color: var(--on-accent);
 }
 
 .record-row__content,
@@ -616,11 +738,12 @@ body {
 }
 
 .badge--neutral {
-  background: #ede8df;
+  background: var(--neutral-bg);
 }
 
 .badge--teal {
-  background: #c9eee5;
+  background: var(--teal-soft);
+  color: var(--on-teal-soft);
 }
 
 .badge--pink {
@@ -629,6 +752,11 @@ body {
 
 .badge--warning {
   background: var(--yellow);
+}
+
+.badge--pink,
+.badge--warning {
+  color: var(--on-accent);
 }
 
 .soft-card,
@@ -675,12 +803,12 @@ body {
 }
 
 .state-card--loading {
-  background: #f6f0ff;
+  background: var(--loading-bg);
 }
 
 .state-card--error {
-  border-color: #e9b5b7;
-  background: #fff0ed;
+  border-color: var(--danger-line);
+  background: var(--danger-bg);
 }
 
 .state-card__mark {
@@ -692,7 +820,7 @@ body {
   display: flex;
   border-radius: 10px;
   background: var(--lavender);
-  color: var(--ink);
+  color: var(--on-accent);
   font-size: 17px;
   font-weight: 900;
 }
@@ -720,7 +848,7 @@ body {
   display: flex;
   border-radius: 50%;
   background: var(--yellow);
-  color: var(--ink);
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 900;
 }
@@ -746,9 +874,9 @@ body {
 .filter-chip--active,
 .type-chip--active,
 .direction-chip--active {
-  border-color: var(--ink);
+  border-color: var(--edge);
   background: var(--ink);
-  color: #fffdf8;
+  color: var(--on-ink);
 }
 
 .record-stack {
@@ -776,7 +904,7 @@ body {
   padding: 12px 13px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #fffefa;
+  background: var(--field);
   color: var(--ink);
   font-family: inherit;
   font-size: 14px;
@@ -810,8 +938,8 @@ body {
 }
 
 .form-card--accent {
-  border-color: var(--ink);
-  background: #fff4dc;
+  border-color: var(--edge);
+  background: var(--accent-bg);
 }
 
 .form-error,
@@ -823,23 +951,23 @@ body {
 }
 
 .form-error {
-  background: #ffe1df;
-  color: #8e3038;
+  background: var(--danger-bg);
+  color: var(--danger-ink);
 }
 
 .form-notice {
-  background: #d9f3ea;
-  color: #16675d;
+  background: var(--notice-bg);
+  color: var(--notice-ink);
 }
 
 .capture-intro {
   border: 0;
   background: var(--yellow);
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: 4px 4px 0 var(--edge);
 }
 
 .capture-tip {
-  border-color: var(--ink);
+  border-color: var(--edge);
   background: var(--lavender);
 }
 
@@ -848,13 +976,13 @@ body {
   gap: 12px;
   border: 0;
   background: var(--lavender);
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: 4px 4px 0 var(--edge);
 }
 
 .profile-card__avatar {
   width: 46px;
   height: 46px;
-  border: 2px solid var(--ink);
+  border: 2px solid var(--edge);
   background: var(--peach);
 }
 
@@ -870,7 +998,7 @@ body {
 
 .profile-card__email {
   margin-top: 4px;
-  color: rgba(23, 21, 27, 0.65);
+  color: var(--on-accent-muted);
   font-size: 11px;
 }
 
@@ -885,7 +1013,7 @@ body {
 .workspace-row__swatch {
   width: 34px;
   height: 34px;
-  border: 1px solid var(--ink);
+  border: 1px solid var(--edge);
   border-radius: 10px;
 }
 
@@ -920,21 +1048,21 @@ body {
 }
 
 .detail-card--lavender {
-  border: 2px solid var(--ink);
+  border: 2px solid var(--edge);
   background: var(--lavender);
-  box-shadow: 4px 4px 0 var(--ink);
+  box-shadow: 4px 4px 0 var(--edge);
 }
 
 .detail-card--teal {
-  border: 2px solid var(--ink);
+  border: 2px solid var(--edge);
   background: var(--teal);
-  color: #fffdf8;
-  box-shadow: 4px 4px 0 var(--ink);
+  color: var(--on-deep);
+  box-shadow: 4px 4px 0 var(--edge);
 }
 
 .detail-card--teal .section-title__eyebrow,
 .detail-card--teal .section-title__title {
-  color: #fffdf8;
+  color: var(--on-deep);
 }
 
 .detail-card__date,
@@ -984,7 +1112,7 @@ body {
 }
 
 .detail-value--inverse {
-  color: #fffdf8;
+  color: var(--on-deep);
 }
 
 .evidence-row,
@@ -1050,7 +1178,7 @@ body {
   justify-content: space-around;
   display: flex;
   border-top: 1px solid var(--line);
-  background: rgba(255, 250, 240, 0.96);
+  background: var(--nav);
 }
 
 .nav-item {
@@ -1097,11 +1225,11 @@ body {
   align-items: center;
   justify-content: center;
   display: flex;
-  border: 2px solid var(--ink);
+  border: 2px solid var(--edge);
   border-radius: 17px;
   background: var(--peach);
-  box-shadow: 3px 3px 0 var(--ink);
-  color: var(--ink);
+  box-shadow: 3px 3px 0 var(--edge);
+  color: var(--on-accent);
   font-size: 29px;
   font-weight: 500;
 }
@@ -1129,10 +1257,10 @@ body {
 .brand-mark {
   width: 35px;
   height: 35px;
-  border: 2px solid var(--ink);
+  border: 2px solid var(--edge);
   border-radius: 12px;
   background: var(--peach);
-  box-shadow: 3px 3px 0 var(--ink);
+  box-shadow: 3px 3px 0 var(--edge);
 }
 
 .brand-name {
@@ -1171,10 +1299,10 @@ body {
   gap: 17px;
   display: flex;
   flex-direction: column;
-  border: 2px solid var(--ink);
+  border: 2px solid var(--edge);
   border-radius: 22px;
   background: var(--paper);
-  box-shadow: 5px 5px 0 var(--ink);
+  box-shadow: 5px 5px 0 var(--edge);
 }
 
 .auth-links {
@@ -1187,4 +1315,42 @@ body {
   max-width: 330px;
   align-self: center;
   text-align: center;
+}
+
+/**
+ * The words on the bright shapes.
+ *
+ * The bright colours are the same in both themes, so the words on them are
+ * the dark ones in both themes too. Without this, the words would take the
+ * colour of the page and be unreadable in one of them.
+ */
+.stat-card,
+.detail-card--lavender,
+.capture-intro,
+.capture-tip,
+.profile-card {
+  color: var(--on-accent);
+}
+
+.stat-card__label,
+.stat-card__value,
+.capture-intro__title,
+.capture-tip__title,
+.profile-card__name,
+.detail-card--lavender .section-title__title,
+.detail-card--lavender .section-title__eyebrow {
+  color: var(--on-accent);
+}
+
+.stat-card__hint,
+.capture-intro__body,
+.capture-tip__body,
+.capture-tip__label {
+  color: var(--on-accent-muted);
+}
+
+.detail-card--lavender .detail-card__body,
+.detail-card--lavender .detail-card__date,
+.detail-card--lavender .muted-text {
+  color: var(--on-accent-muted);
 }
