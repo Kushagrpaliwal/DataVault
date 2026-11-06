@@ -419,7 +419,8 @@ function openSidePanelFromUserGesture(tab: chrome.tabs.Tab) {
  * same way, and the item is not left waiting where nobody can see it.
  */
 async function openReviewWindow(tab: chrome.tabs.Tab) {
-  if (await openReviewPanelWindow()) return true;  if (tab.id !== undefined) {
+  if (await openReviewPanelWindow()) return true;
+  if (tab.id !== undefined) {
     await showInPageToast(tab.id, "DataVault is holding that for review. Open the DataVault side panel to check it.");
   }
   return false;

@@ -2,12 +2,6 @@
   "name": "@data-vault/mobile",
   "version": "0.1.0",
   "description": "DataVault native mobile client built with Lynx and Sparkling",
-  "homepage": "https://tiktok.github.io/sparkling/",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/tiktok/sparkling",
-    "directory": "template/sparkling-app-template"
-  },
   "type": "module",
   "dependencies": {
     "@lynx-js/react": "^0.116.2",

@@ -53,7 +53,8 @@ export function DocsView({ onSignedOut }: { onSignedOut?: () => void }) {
         setCurrentHtml(generateHTML(markInlineClips(full.content as never) as never, extensions));
       } else {
         setCurrentHtml("");
-      }      await refreshCurrentDoc();
+      }
+      await refreshCurrentDoc();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Your docs could not be loaded.");
       onSignedOut?.();

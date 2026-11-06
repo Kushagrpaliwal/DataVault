@@ -70,7 +70,6 @@ android {
         implementation(libs.fresco.webp.support)
         implementation(libs.fresco.animated.base)
 
-//    kapt(libs.lynx.processor)
 
         // BEGIN SPARKLING AUTOLINK
         listOf(

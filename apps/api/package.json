@@ -8,8 +8,7 @@
     "build": "bun build src/index.ts --target bun --outdir dist",
     "start": "bun dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
-    "db:repair-accounts": "bun scripts/repair-passwordless-accounts.ts"
+    "test": "bun test"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.4.2",

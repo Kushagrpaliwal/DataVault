@@ -3,7 +3,6 @@ import type { ExtensionTokenSet } from "@data-vault/types";
 
 const AUTH_KEY = "dataVaultAuth";
 const PENDING_KEY = "dataVaultPendingCapturesV3";
-const LEGACY_PENDING_KEY = "dataVaultPendingCapture";
 const PREFERENCES_KEY = "dataVaultCapturePreferencesV2";
 
 export interface StoredAuth extends ExtensionTokenSet { expiresAt: number }
@@ -116,7 +115,9 @@ export async function setAuth(value?: StoredAuth) { if (value) await browser.sto
 export async function getPreferences() {
   const stored = (await browser.storage.local.get(PREFERENCES_KEY))[PREFERENCES_KEY] as Partial<ExtensionPreferences> | undefined;
   return { quickSaveSelectedText: false, pageCaptureMode: "visible" as const, theme: "system" as const, ...stored };
-}export async function setPreferences(value: ExtensionPreferences) { await browser.storage.local.set({ [PREFERENCES_KEY]: value }); }
+}
+
+export async function setPreferences(value: ExtensionPreferences) { await browser.storage.local.set({ [PREFERENCES_KEY]: value }); }
 
 /**
  * The workspace the extension saves into.
@@ -142,13 +143,7 @@ function normalizePending(value: Partial<PendingCapture>): PendingCapture {
 export async function getPendingCaptures(): Promise<PendingCapture[]> {
   const stored = (await browser.storage.local.get(PENDING_KEY))[PENDING_KEY];
   if (Array.isArray(stored)) return stored.map((value) => normalizePending(value as Partial<PendingCapture>));
-
-  const legacy = (await browser.storage.session.get(LEGACY_PENDING_KEY))[LEGACY_PENDING_KEY] as Partial<PendingCapture> | undefined;
-  if (!legacy) return [];
-  const migrated = [normalizePending(legacy)];
-  await browser.storage.local.set({ [PENDING_KEY]: migrated });
-  await browser.storage.session.remove(LEGACY_PENDING_KEY);
-  return migrated;
+  return [];
 }
 
 /**
@@ -196,10 +191,6 @@ export async function getRetryCaptures() {
   return all.filter((item) => item.queueState === "retry");
 }
 
-export async function getPendingCapture() {
-  return (await getPendingCaptures())[0];
-}
-
 export async function setPendingCapture(value?: PendingCapture) {
   const current = await getPendingCaptures();
   const review = current.filter((item) => item.queueState !== "retry");
@@ -228,7 +219,7 @@ export async function clearRetryCaptures() {
 
 export function subscribeStorage(listener: () => void) {
   const callback = (changes: Record<string, chrome.storage.StorageChange>) => {
-    if (changes[AUTH_KEY] || changes[PENDING_KEY] || changes[LEGACY_PENDING_KEY] || changes[PREFERENCES_KEY]) listener();
+    if (changes[AUTH_KEY] || changes[PENDING_KEY] || changes[PREFERENCES_KEY]) listener();
   };
   browser.storage.onChanged.addListener(callback);
   return () => browser.storage.onChanged.removeListener(callback);

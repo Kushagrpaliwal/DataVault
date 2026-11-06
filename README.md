@@ -95,8 +95,6 @@ bun run typecheck
 bun run db:generate
 bun run db:migrate
 bun run db:bootstrap
-bun run db:repair-accounts
-bun run db:remove-demo
 bun run db:check
 ```
 

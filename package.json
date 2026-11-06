@@ -28,9 +28,6 @@
     "db:bootstrap": "bun --env-file=.env run --filter @data-vault/database db:bootstrap",
     "db:create-role": "bun --env-file=.env run --filter @data-vault/database db:create-role",
     "db:migrate-test": "bun --env-file=.env run --filter @data-vault/database db:migrate-test",
-    "db:repair-accounts": "bun --env-file=.env run --filter @data-vault/api db:repair-accounts",
-    "db:remove-demo": "bun --env-file=.env run --filter @data-vault/database db:remove-demo",
-    "db:remove-test-data": "bun --env-file=.env run --filter @data-vault/database db:remove-test-data",
     "db:check": "bun --env-file=.env run --filter @data-vault/database db:check",
     "db:inspect-rls": "bun --env-file=.env run --filter @data-vault/database db:inspect-rls",
     "db:recreate-test": "bun --env-file=.env run --filter @data-vault/database db:recreate-test"

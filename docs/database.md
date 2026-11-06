@@ -62,10 +62,9 @@ One rule is narrower than the rest. The credit ledger follows the person, so the
 bun run db:migrate
 bun run db:create-role
 bun run db:bootstrap
-bun run db:remove-demo
 bun run db:check
 ```
 
 `DATABASE_URL` names the database and the application role. `DATABASE_ADMIN_URL` names the same database as the administrative role, so the migrations reach the right one. A missing database is created through the maintenance database.
 
-Review generated SQL before production deployment. `db:bootstrap` only ensures the global permission catalog exists. `db:remove-demo` removes the former local demo accounts and their two known demo workspaces while preserving other users and data.
+Review generated SQL before production deployment. `db:bootstrap` only ensures the global permission catalog exists.

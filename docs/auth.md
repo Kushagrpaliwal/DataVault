@@ -20,7 +20,7 @@ The web client receives a session-derived CSRF token and sends it on mutations. 
 | `GET /api/v1/auth/methods` | Which sign-in methods this server offers. |
 | `GET /api/v1/me` | The current session. |
 
-Google sign-in was removed. Accounts that were created with Google were given a single-use password setup link instead of being deleted, so nobody lost their saved items. The maintenance script is `bun run db:repair-accounts`.
+Google sign-in was removed. Accounts that were created with Google were given a single-use password setup link instead of being deleted, so nobody lost their saved items.
 
 ## Creating an account
 
