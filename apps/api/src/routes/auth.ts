@@ -42,7 +42,7 @@ export function createAuthRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
      */
     .get("/api/v1/auth/methods", () => success({
       emailAndPassword: true,
-      emailOtp: true,
+      emailOtp: false,
       twoFactor: true,
       captcha: Boolean(env.turnstileSecretKey && env.turnstileSiteKey),
       captchaSiteKey: env.turnstileSiteKey ?? null,

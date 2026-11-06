@@ -150,6 +150,44 @@ function parseEncryptionKey(value: string | undefined): Uint8Array | undefined {
   return bytes;
 }
 
+const PLACEHOLDER = /replace-with|change-me|changeme|example\.com|^ci-|your-|secret-here/i;
+
+function isLocalUrl(value: string): boolean {
+  try {
+    const { hostname } = new URL(value);
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname.endsWith(".localhost");
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * A production server refuses to start with settings that are only meant for
+ * a developer's machine: placeholder secrets, secrets that are shared,
+ * addresses on localhost, or origins that are not served over https.
+ */
+function assertProductionReady(parsed: z.infer<typeof serverEnvironmentSchema>, origins: string[]) {
+  const problems: string[] = [];
+  for (const name of ["SESSION_SECRET", "JWT_SECRET"] as const) {
+    if (PLACEHOLDER.test(parsed[name])) problems.push(`${name} is still a placeholder value.`);
+  }
+  if (parsed.SESSION_SECRET === parsed.JWT_SECRET) problems.push("SESSION_SECRET and JWT_SECRET must be different.");
+  for (const name of ["API_URL", "WEB_URL"] as const) {
+    if (isLocalUrl(parsed[name]) || !parsed[name].startsWith("https://")) problems.push(`${name} must be an https address that is not localhost.`);
+  }
+  if (!origins.length) problems.push("ALLOWED_ORIGINS must list at least one origin.");
+  for (const origin of origins) {
+    if (!origin.startsWith("https://") || isLocalUrl(origin)) problems.push(`ALLOWED_ORIGINS entry ${origin} must be an https origin that is not localhost.`);
+  }
+  if (/replace-with|your-extension/i.test(parsed.EXTENSION_REDIRECT_URL)) problems.push("EXTENSION_REDIRECT_URL still has the placeholder extension id.");
+  if (!parsed.SMTP_HOST?.trim()) problems.push("SMTP_HOST is required, because sign-in and reset links are sent by email.");
+  if (/example\.com/i.test(parsed.SMTP_FROM)) problems.push("SMTP_FROM still uses the example.com placeholder.");
+  if (parsed.AI_ALLOW_PRIVATE_ENDPOINTS === "true") problems.push("AI_ALLOW_PRIVATE_ENDPOINTS must be false in production, because it removes the protection against server-side request forgery.");
+  if (problems.length) {
+    throw new Error("The production configuration is not safe to start with:" + "\n" + "- " + problems.join("\n" + "- "));
+  }
+}
+
 export function getServerEnvironment(source: Record<string, string | undefined> = process.env): ServerEnvironment {
   const parsed = serverEnvironmentSchema.parse(source);
   const trim = (value: string | undefined) => value?.trim() || undefined;
@@ -158,9 +196,11 @@ export function getServerEnvironment(source: Record<string, string | undefined> 
   if (Boolean(turnstileSecretKey) !== Boolean(turnstileSiteKey)) {
     throw new Error("TURNSTILE_SECRET_KEY and TURNSTILE_SITE_KEY must be configured together.");
   }
+  const allowedOrigins = parsed.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean);
+  if (parsed.NODE_ENV === "production") assertProductionReady(parsed, allowedOrigins);
   return {
     ...parsed,
-    allowedOrigins: parsed.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean),
+    allowedOrigins,
     smtpSecure: parsed.SMTP_SECURE === "true",
     trustedProxyHops: parsed.TRUSTED_PROXY_HOPS,
     turnstileSecretKey,

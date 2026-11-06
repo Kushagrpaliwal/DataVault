@@ -118,6 +118,7 @@ export async function listGeminiModels(baseUrl: URL, apiKey: string): Promise<st
     candidates.map(async (model) => {
       const generateUrl = new URL(`${modelsEndpoint(baseUrl)}/${encodeURIComponent(model)}:generateContent`, baseUrl.origin);
       const res = await fetch(generateUrl, {
+        redirect: "manual",
         method: "POST",
         headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
         body: JSON.stringify({
@@ -190,6 +191,7 @@ export async function generateJsonFor(target: GeminiTarget, input: GeminiGenerat
   let response: Response;
   try {
     response = await fetch(endpoint, {
+      redirect: "manual",
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": target.apiKey },
       body: JSON.stringify(body),

@@ -218,7 +218,7 @@ describe("DataVault API integration", () => {
     expect(methods.response.status).toBe(200);
     const data = methods.payload.data as Record<string, unknown>;
     expect(data.emailAndPassword).toBe(true);
-    expect(data.emailOtp).toBe(true);
+    expect(data.emailOtp).toBe(false);
     expect(data.twoFactor).toBe(true);
     expect("google" in data).toBe(false);
   });
@@ -695,4 +695,19 @@ describe("DataVault API integration", () => {
     expect(login.response.status).toBe(200);
     expect(login.payload.data.user).toBeTruthy();
   }, 30_000);
+});
+
+describe("closed internal endpoints", () => {
+  test("the one-time-code endpoints are not reachable", async () => {
+    const { createApp } = await import("../src/index");
+    const app = createApp();
+    for (const path of ["/api/v1/internal-auth/sign-in/email-otp", "/api/v1/internal-auth/email-otp/send-verification-otp"]) {
+      const response = await app.handle(new Request(`http://localhost${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://localhost:5173" },
+        body: JSON.stringify({ email: "someone@example.org", otp: "123456" }),
+      }));
+      expect(response.status).toBe(404);
+    }
+  });
 });

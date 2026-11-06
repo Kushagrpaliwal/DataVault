@@ -1,5 +1,5 @@
 import { and, eq, gt } from "drizzle-orm";
-import { accounts, getDatabase, users, verifications } from "@data-vault/database";
+import { accounts, extensionRefreshTokens, extensionSessions, getDatabase, sessions, users, verifications } from "@data-vault/database";
 import type { ServerEnvironment } from "@data-vault/config";
 import { AppError } from "../lib/errors";
 import { randomToken, sha256 } from "../lib/crypto";
@@ -64,8 +64,15 @@ export async function completePasswordSetup(token: string, password: string): Pr
   } else {
     await db.insert(accounts).values({ accountId: target.userId, providerId: "credential", userId: target.userId, password: hashed });
   }
-  // The token is single use.
-  await db.delete(verifications).where(and(eq(verifications.identifier, `${SETUP_IDENTIFIER}:${target.userId}`), eq(verifications.value, hashed)));
+  // Every setup link for this account stops working, not only the one used.
+  await db.delete(verifications).where(eq(verifications.identifier, `${SETUP_IDENTIFIER}:${target.userId}`));
+  // A new password signs every other device out, the extension included.
+  await db.delete(sessions).where(eq(sessions.userId, target.userId));
+  const revokedAt = new Date();
+  const extension = await db.update(extensionSessions).set({ revokedAt }).where(eq(extensionSessions.userId, target.userId)).returning({ id: extensionSessions.id });
+  for (const { id } of extension) {
+    await db.update(extensionRefreshTokens).set({ revokedAt }).where(eq(extensionRefreshTokens.sessionId, id));
+  }
   return target;
 }
 

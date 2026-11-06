@@ -51,11 +51,17 @@ export interface ImportedItem {
  * it is a list of folders and links. The folders are read as they are
  * nested, so that a bookmark that was in a folder can be put back in one.
  */
-export function parseBookmarks(html: string): ImportedItem[] {
+export function parseBookmarks(input: string): ImportedItem[] {
+  /**
+   * Every part of the pattern below is bounded, and so is the input, so a
+   * crafted file cannot keep the server busy: the matching time grows with
+   * the size of the file and not with the square of it.
+   */
+  const html = input.slice(0, 4 * 1024 * 1024);
   const items: ImportedItem[] = [];
   const folders: (string | undefined)[] = [];
   let pending: string | undefined;
-  const pattern = /<dl[^>]*>|<\/dl>|<dt[^>]*>\s*<h3[^>]*>([\s\S]*?)<\/h3>|<dt[^>]*>\s*<a\s+([^>]*)>([\s\S]*?)<\/a>/gi;
+  const pattern = /<dl[^>]{0,200}>|<\/dl>|<dt[^>]{0,200}>\s{0,50}<h3[^>]{0,200}>([\s\S]{0,500}?)<\/h3>|<dt[^>]{0,200}>\s{0,50}<a\s{1,50}([^>]{0,4000})>([\s\S]{0,1000}?)<\/a>/gi;
   for (const match of html.matchAll(pattern)) {
     const [whole, heading, attributes, label] = match;
     if (/^<dl/i.test(whole)) {

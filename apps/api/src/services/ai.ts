@@ -346,7 +346,8 @@ export async function runAiFeature(
   const model = resolved.model ?? env.GEMINI_MODEL;
 
   // A repeat of the same request is served from cache and costs nothing.
-  const cached = await readCached(contents, feature, model);
+  const shareCache = resolved.source === "free";
+  const cached = shareCache ? await readCached(contents, feature, model) : undefined;
   if (cached) {
     const status = await readCreditStatus(env, context);
     return { data: cached, cached: true, remaining: status.remaining, inputTokens: 0, outputTokens: 0, source: resolved.source };
@@ -357,7 +358,12 @@ export async function runAiFeature(
    * the person is used, so that the credits are only spent when they are.
    */
   const result = await runModel(env, context, requestId, options, feature, { system, contents, schema, validate: RESULTS[feature] });
-  await writeCached(await cacheKeyFor({ system, contents, responseSchema: schema }, model), feature, model, result.data);
+  /**
+   * Only answers from the server's own key are shared. A model the person
+   * connected could say anything, and an answer from it must never be
+   * served to somebody else who asks for the same text.
+   */
+  if (shareCache && result.source === "free") await writeCached(await cacheKeyFor({ system, contents, responseSchema: schema }, model), feature, model, result.data);
 
   const status = await readCreditStatus(env, context);
   return { data: result.data, cached: false, remaining: result.remaining || status.remaining, inputTokens: result.inputTokens, outputTokens: result.outputTokens, source: result.source };

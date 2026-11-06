@@ -84,6 +84,7 @@ export function createAuth(env: ServerEnvironment) {
         async sendVerificationOTP({ email, otp }) {
           await mailer.sendOneTimeCode({ email, code: otp });
         },
+        disableSignUp: true,
         otpLength: 6,
         expiresIn: 60 * 10,
       }),

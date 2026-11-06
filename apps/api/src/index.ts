@@ -1,6 +1,8 @@
 import { cors } from "@elysiajs/cors";
 import { openapi } from "@elysiajs/openapi";
+import { sql } from "drizzle-orm";
 import { Elysia } from "elysia";
+import { getDatabase } from "@data-vault/database";
 import { getServerEnvironment, type ServerEnvironment } from "@data-vault/config";
 import { createAuth } from "./auth/better-auth";
 import { normalizeError } from "./lib/errors";
@@ -56,12 +58,14 @@ export function createApp(environment?: ServerEnvironment) {
       allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token", "X-Organization-Id", "Idempotency-Key", "X-Extension-Version"],
       exposeHeaders: ["X-Request-Id"],
     }))
-    .use(openapi({ path: "/api/v1/openapi", documentation: { info: { title: "DataVault API", version: "1.0.0" } } }))
+    .use(env.NODE_ENV === "production" ? new Elysia() : openapi({ path: "/api/v1/openapi", documentation: { info: { title: "DataVault API", version: "1.0.0" } } }))
     .onStart(() => ensurePermissionCatalog())
     .onBeforeHandle(async ({ request, set }) => {
+      set.headers["x-request-id"] = request.headers.get("x-request-id") ?? crypto.randomUUID();
       set.headers["x-content-type-options"] = "nosniff";
       set.headers["x-frame-options"] = "DENY";
       set.headers["referrer-policy"] = "no-referrer";
+      set.headers["cross-origin-resource-policy"] = "same-site";
       set.headers["permissions-policy"] = "camera=(), microphone=(), geolocation=()";
       if (env.NODE_ENV === "production") set.headers["strict-transport-security"] = "max-age=31536000; includeSubDomains";
       /**
@@ -103,6 +107,14 @@ export function createApp(environment?: ServerEnvironment) {
        * captcha and refuses throwaway addresses. Reached directly, the
        * internal sign-up endpoint would skip both of those checks.
        */
+      /**
+       * The one-time-code endpoints are not used by any client. Reached
+       * directly they would sign a person in without the second factor, and
+       * would create accounts without the captcha, so they are closed.
+       */
+      if (path.startsWith("/api/v1/internal-auth/") && path.includes("email-otp")) {
+        throw new AppError(404, "NOT_FOUND", "Not found.");
+      }
       if (path === "/api/v1/internal-auth/sign-up/email") {
         throw new AppError(404, "NOT_FOUND", "Use /api/v1/auth/register to create an account.");
       }
@@ -130,7 +142,16 @@ export function createApp(environment?: ServerEnvironment) {
       set.headers["x-request-id"] = requestId;
       return normalized.body;
     })
-    .get("/api/v1/health", () => success({ status: "ok", service: "data-vault-api" }))
+    .get("/api/v1/live", () => success({ status: "ok", service: "data-vault-api" }))
+    .get("/api/v1/health", async ({ set }) => {
+      try {
+        await getDatabase().execute(sql`select 1`);
+        return success({ status: "ok", service: "data-vault-api" });
+      } catch {
+        set.status = 503;
+        return success({ status: "unavailable", service: "data-vault-api" });
+      }
+    })
     .all("/api/v1/internal-auth/*", ({ request }) => auth.handler(request))
     .use(createAuthRoutes(auth, env))
     .use(createAiRoutes(auth, env))
@@ -148,16 +169,17 @@ export function createApp(environment?: ServerEnvironment) {
 export const app = createApp();
 
 if (import.meta.main) {
+  const env = getServerEnvironment();
   /**
    * The server refuses a body that is too large, so the limit is set on the
    * server as well. A request that arrives in chunks is turned away before
    * it is read, because there is no length to check.
    */
   app.listen({
-    port: Number(process.env.API_PORT ?? 3000),
+    port: env.API_PORT,
     maxRequestBodySize: MAX_REQUEST_BYTES,
   });
-  console.log(`DataVault API listening on http://localhost:${app.server?.port ?? 3000}`);
+  console.log(`DataVault API listening on port ${app.server?.port ?? env.API_PORT} (${env.API_URL})`);
 
   /**
    * The rows that expire are cleaned up every six hours.
@@ -166,7 +188,7 @@ if (import.meta.main) {
    * rate-limit buckets are all of no use once their time has passed, and
    * they would otherwise grow for ever.
    */
-  setInterval(() => {
+  const cleanupTimer = setInterval(() => {
     void pruneExpiredRows().catch((error: unknown) => {
       console.warn(JSON.stringify({
         level: "warn",
@@ -175,6 +197,26 @@ if (import.meta.main) {
       }));
     });
   }, 6 * 60 * 60 * 1000);
+
+  /** Finish the requests in flight, then close the database before exiting. */
+  let stopping = false;
+  const shutdown = async (signal: string) => {
+    if (stopping) return;
+    stopping = true;
+    console.log(JSON.stringify({ level: "info", event: "shutdown", signal }));
+    clearInterval(cleanupTimer);
+    const forced = setTimeout(() => process.exit(1), 10_000);
+    try {
+      await app.stop();
+      await (getDatabase() as unknown as { $client: { end: () => Promise<void> } }).$client.end();
+    } catch (error) {
+      console.error(error);
+    }
+    clearTimeout(forced);
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 
 export type App = typeof app;
