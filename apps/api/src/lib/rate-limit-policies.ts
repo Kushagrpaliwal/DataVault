@@ -116,6 +116,14 @@ export async function enforceScopeLimit(
 }
 
 async function consume(policy: Policy, key: string): Promise<LimitOutcome> {
+  /**
+   * On a developer's machine every request comes from the same place, so the
+   * limits only get in the way of testing sign-up and sign-in. They are
+   * always on in production (and in tests).
+   */
+  if (process.env.NODE_ENV === "development") {
+    return { allowed: true, remaining: policy.max, retryAfter: 0, policy: policy.name };
+  }
   const result = await consumeRateLimit({ key, limit: policy.max, windowSeconds: policy.windowSeconds });
   if (!result.allowed) {
     const minutes = Math.max(1, Math.ceil(result.retryAfter / 60));
