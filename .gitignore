@@ -6,8 +6,9 @@ coverage/
 playwright-report/
 test-results/
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.*.example
 *.log
 .DS_Store
 Thumbs.db
