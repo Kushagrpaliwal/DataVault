@@ -119,12 +119,17 @@ export function LoginPage() {
             <Input id="password" autoComplete="current-password" type={showPassword ? "text" : "password"} className="pr-11" {...form.register("password")} />
             <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
           </div>
+          <FieldError message={form.formState.errors.password?.message} />
         </div>
         <Button className="w-full" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Signing in…" : "Sign in"}</Button>
         <p className="text-center text-sm text-muted">New to DataVault? <NavLink to="/register" state={location.state} className="font-semibold text-ink underline">Create an account</NavLink></p>
       </form>
     </AuthFrame>
   );
+}
+
+function FieldError({ message }: { message?: string | undefined }) {
+  return message ? <p role="alert" className="mt-1 text-xs text-red-700 dark:text-red-300">{message}</p> : null;
 }
 
 export function RegisterPage() {
@@ -151,11 +156,13 @@ export function RegisterPage() {
         {error ? <ErrorMessage message={error} /> : null}
         <div>
           <Label htmlFor="name">Full name</Label>
-          <Input id="name" autoComplete="name" {...form.register("name")} />
+          <Input id="name" autoComplete="name" aria-invalid={Boolean(form.formState.errors.name)} {...form.register("name")} />
+          <FieldError message={form.formState.errors.name?.message} />
         </div>
         <div>
           <Label htmlFor="email">Email</Label>
-          <Input id="email" autoComplete="email" type="email" {...form.register("email")} />
+          <Input id="email" autoComplete="email" type="email" aria-invalid={Boolean(form.formState.errors.email)} {...form.register("email")} />
+          <FieldError message={form.formState.errors.email?.message} />
         </div>
         <div>
           <Label htmlFor="password">Password</Label>
@@ -163,6 +170,7 @@ export function RegisterPage() {
             <Input id="password" autoComplete="new-password" type={showPassword ? "text" : "password"} className="pr-11" {...form.register("password")} />
             <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
           </div>
+          <FieldError message={form.formState.errors.password?.message} />
           <p className="mt-1 text-xs text-muted">10 or more characters, with upper-case, lower-case, and a number.</p>
         </div>
         <Button className="w-full" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? "Creating…" : "Create account"}</Button>
@@ -201,6 +209,7 @@ export function ForgotPasswordPage() {
           <div>
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" {...form.register("email")} />
+            <FieldError message={form.formState.errors.email?.message} />
           </div>
           <Button className="w-full">Send reset link</Button>
         </form>
@@ -236,6 +245,7 @@ export function ResetPasswordPage() {
             <Input id="password" autoComplete="new-password" type={showPassword ? "text" : "password"} className="pr-11" {...form.register("password")} />
             <button type="button" aria-label={showPassword ? "Hide password" : "Show password"} title={showPassword ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink" onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
           </div>
+          <FieldError message={form.formState.errors.password?.message} />
         </div>
         <Button className="w-full">Update password</Button>
       </form>
