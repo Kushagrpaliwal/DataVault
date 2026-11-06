@@ -12,11 +12,11 @@ import { ExtensionHeader } from "../../components/header";
 import { LoggedOut } from "../../components/logged-out";
 import { ThemeOptions } from "../../components/theme-picker";
 import { RecordList } from "../../components/record-list";
-import { AiConsentPrompt, AiErrorNote, describeAiFailure } from "../../components/ai-strip";
+import { AiErrorNote, describeAiFailure } from "../../components/ai-strip";
 import { DocsView } from "../../components/docs-view";
 import { ShortcutHelp } from "../../components/shortcut-help";
 import { clearExtensionErrors, readExtensionErrors, type RecordedError } from "../../lib/errors";
-import { recordAiConsent, summariseItem, useAiCredits } from "../../lib/ai";
+import { summariseItem, useAiStatus } from "../../lib/ai";
 import { signOutExtension } from "../../lib/auth";
 import { WEB_URL, withOrganization } from "../../lib/api";
 import { currentFolderId, folderDepths, listFolders, rememberFolder, type FolderOption } from "../../lib/folders";
@@ -502,8 +502,7 @@ function QuickDetail({ record, onBack, onDeleted }: { record: SavedRecord; onBac
   const [summary, setSummary] = useState<AiSummaryResult | null>(null);
   const [summarising, setSummarising] = useState(false);
   const [aiError, setAiError] = useState<{ message: string; needsWebsite: boolean } | null>(null);
-  const [needsConsent, setNeedsConsent] = useState(false);
-  const { status, refresh } = useAiCredits();
+  const { status, refresh } = useAiStatus();
 
   const copy = () => {
     if (record.originalText) {
@@ -521,22 +520,13 @@ function QuickDetail({ record, onBack, onDeleted }: { record: SavedRecord; onBac
       void refresh();
     } catch (caught) {
       const failure = describeAiFailure(caught);
-      if (failure.reason === "consent") setNeedsConsent(true);
-      else setAiError({ message: failure.message, needsWebsite: failure.needsWebsite });
+      setAiError({ message: failure.message, needsWebsite: failure.needsWebsite });
     } finally {
       setSummarising(false);
     }
   };
 
-  const agree = async () => {
-    setNeedsConsent(false);
-    await recordAiConsent();
-    await summarise();
-  };
-
-  const aiReady = Boolean(
-    status?.available && (status.ownConnection ? status.ownConnection.keyReadable !== false : true)
-  );
+  const aiReady = Boolean(status?.available && status.ownConnection?.keyReadable !== false);
 
   return (
     <div className="p-4">
@@ -546,10 +536,6 @@ function QuickDetail({ record, onBack, onDeleted }: { record: SavedRecord; onBac
         <h2 className="mt-4 text-xl font-semibold">{record.title}</h2>
         <p className="mt-3 text-sm">{record.sourceDomain ?? "Saved in DataVault"}</p>
       </div>
-
-      {needsConsent ? (
-        <AiConsentPrompt onAgreed={() => void agree()} onDeclined={() => setNeedsConsent(false)} />
-      ) : null}
 
       {aiError ? <div className="mt-4"><AiErrorNote message={aiError.message} onOpenWebsite={aiError.needsWebsite} /></div> : null}
 
@@ -563,16 +549,19 @@ function QuickDetail({ record, onBack, onDeleted }: { record: SavedRecord; onBac
             </ul>
           ) : null}
         </div>
-      ) : (
+      ) : aiReady ? (
         <Button
           className="mt-4 w-full"
           variant="secondary"
-          disabled={!aiReady || summarising}
+          disabled={summarising}
           onClick={() => void summarise()}
-          title={aiReady ? undefined : status?.reason ?? "AI features are not available yet."}
         >
           <Wand2 className="size-4" />
           {summarising ? "Working it out…" : "Summarise this"}
+        </Button>
+      ) : (
+        <Button className="mt-4 w-full" variant="secondary" onClick={() => void browser.tabs.create({ url: `${WEB_URL}/settings` })}>
+          Connect AI provider in Settings
         </Button>
       )}
 
@@ -600,7 +589,7 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
   const [preferences, setPreferenceState] = useState<ExtensionPreferences>({ quickSaveSelectedText: false, pageCaptureMode: "visible", theme: "system" });
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [errors, setErrors] = useState<RecordedError[]>([]);
-  const credits = useAiCredits();
+  const aiStatus = useAiStatus();
 
   /**
    * The problems the extension has run into.
@@ -711,9 +700,9 @@ function SettingsView({ onSignedOut }: { onSignedOut: () => void }) {
 
       <div className="mt-4 rounded-2xl border bg-surface p-4 text-sm">
         <h3 className="font-semibold">AI (BYOK)</h3>
-        {credits.status?.ownConnection ? (
+        {aiStatus.status?.ownConnection ? (
           <p className="mt-2 text-xs leading-5 text-muted">
-            Connected: {credits.status.ownConnection.label} · {credits.status.ownConnection.model}
+            Connected: {aiStatus.status.ownConnection.label} · {aiStatus.status.ownConnection.model}
           </p>
         ) : (
           <p className="mt-2 text-xs leading-5 text-muted">

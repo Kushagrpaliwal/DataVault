@@ -1,33 +1,26 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@data-vault/ui";
 import { DataVaultApiError } from "@data-vault/api-client";
 import type { AiClassificationResult, AiExtractionResult, AiSummaryResult } from "@data-vault/types";
 import { useAuth } from "../lib/auth";
-import { ErrorMessage, Modal, useToast } from "./feedback";
+import { useToast } from "./feedback";
 
-/**
- * The free AI allowance.
- *
- * The wording deliberately avoids the word "quota". Users are given a number
- * of credits that comes back each day, which is a far easier thing to
- * understand than a rate limit.
- */
-export function useAiCredits() {
+/** The provider connection currently used by AI features. */
+export function useAiStatus() {
   const { api } = useAuth();
-  return useQuery({ queryKey: ["ai-credits"], queryFn: () => api.aiCredits() });
+  return useQuery({ queryKey: ["ai-status"], queryFn: () => api.aiStatus() });
 }
 
-export function AiCreditBadge() {
-  const credits = useAiCredits();
-  if (!credits.data?.available) return null;
-  if (credits.data.ownConnection) {
+export function AiProviderBadge() {
+  const status = useAiStatus();
+  if (status.data?.available && status.data.ownConnection) {
     return (
       <Link
         to="/settings"
-        title={`Using your own key · ${credits.data.ownConnection.model}`}
+        title={`Using ${status.data.ownConnection.label} · ${status.data.ownConnection.model}`}
         className="flex items-center gap-1.5 rounded-full bg-soft px-2.5 py-1 text-xs font-medium text-strong hover:bg-soft/80"
       >
         <Sparkles className="size-3.5" />
@@ -36,13 +29,9 @@ export function AiCreditBadge() {
     );
   }
   return (
-    <Link
-      to="/settings"
-      title="Connect your API key in Settings (BYOK)"
-      className="flex items-center gap-1.5 rounded-full bg-soft px-2.5 py-1 text-xs font-medium text-muted hover:text-strong"
-    >
+    <Link to="/settings" title="Connect an AI provider in Settings" className="flex items-center gap-1.5 rounded-full bg-soft px-2.5 py-1 text-xs font-medium text-muted hover:text-strong">
       <Sparkles className="size-3.5" />
-      Connect AI
+      Set up AI
     </Link>
   );
 }
@@ -56,60 +45,20 @@ export interface AiPanelProps {
   onApply?: (result: AiClassificationResult) => void;
 }
 
-/**
- * The reason the AI features are closed, and the way to open them.
- *
- * Two things stop every AI feature: the address has not been confirmed,
- * or the person has not agreed to send content to the model provider. The
- * search by meaning is an AI feature as well, so it says the same thing
- * here and offers the same way out, instead of showing a bare error.
- */
-export function AiAccessNotice({ error, onAgreed }: { error: unknown; onAgreed?: () => void }) {
-  const { api } = useAuth();
-  const client = useQueryClient();
+/** Explain the BYOK setup needed for an AI feature. */
+export function AiAccessNotice({ error }: { error: unknown }) {
   const code = error instanceof DataVaultApiError ? error.code : "";
-  const consent = useMutation({
-    mutationFn: () => api.aiConsent(),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ["ai-credits"] });
-      onAgreed?.();
-    },
-  });
-
-  if (code === "EMAIL_NOT_VERIFIED") {
+  if (["AI_CONNECTION_REQUIRED", "AI_KEY_UNREADABLE", "AI_KEYS_UNAVAILABLE", "AI_EMBEDDING_UNSUPPORTED"].includes(code)) {
     return (
       <div className="rounded-2xl bg-soft p-4">
-        <p className="text-sm font-semibold">Confirm your email address to use this.</p>
+        <p className="text-sm font-semibold">Connect your AI provider</p>
         <p className="mt-1 text-sm leading-6 text-muted">
-          The confirmation link was sent when the account was made. A new one can be sent from Settings.
+          {error instanceof Error ? error.message : "Add your provider and API key in Settings to use AI features."}
         </p>
-        <Link to="/settings" className="mt-3 inline-block text-sm font-medium underline">Open Settings</Link>
+        <Link to="/settings" className="mt-3 inline-block text-sm font-medium underline">Open AI settings</Link>
       </div>
     );
   }
-
-  if (code === "AI_CONSENT_REQUIRED") {
-    return (
-      <div className="rounded-2xl bg-soft p-4">
-        <p className="text-sm font-semibold">Agree to send content to Google for AI features</p>
-        <p className="mt-1 text-sm leading-6 text-muted">
-          AI features work by sending the text you choose to Google&apos;s Gemini model. The free tier we use may allow
-          Google to use that content to improve their products.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button size="sm" disabled={consent.isPending} onClick={() => consent.mutate()}>
-            {consent.isPending ? "Saving…" : "Agree and continue"}
-          </Button>
-        </div>
-        {consent.error ? (
-          <div className="mt-3">
-            <ErrorMessage message={consent.error instanceof Error ? consent.error.message : "Could not save your choice."} />
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
   return (
     <p className="rounded-2xl bg-soft p-4 text-sm leading-6 text-muted">
       {error instanceof Error ? error.message : "That did not work."}
@@ -117,27 +66,14 @@ export function AiAccessNotice({ error, onAgreed }: { error: unknown; onAgreed?:
   );
 }
 
-/**
- * The three AI actions: summarise, classify, and pull out fields.
- *
- * Each one spends a credit, so the buttons say how many are left. The first
- * use asks for permission to send content to the model provider, because on
- * the free tier that content may be used to improve the provider's products.
- */
+/** The three AI actions use the provider connected in Settings. */
 export function AiPanel({ content, recordId, onApply }: AiPanelProps) {
   const { api } = useAuth();
-  const client = useQueryClient();
   const { notify } = useToast();
-  const credits = useAiCredits();
+  const status = useAiStatus();
   const [summary, setSummary] = useState<AiSummaryResult | null>(null);
   const [classification, setClassification] = useState<AiClassificationResult | null>(null);
   const [extraction, setExtraction] = useState<AiExtractionResult | null>(null);
-  const [declined, setDeclined] = useState(false);
-
-  const consent = useMutation({
-    mutationFn: () => api.aiConsent(),
-    onSuccess: () => void credits.refetch(),
-  });
 
   const run = useMutation({
     mutationFn: async (feature: "summarize" | "classify" | "extract") => {
@@ -147,51 +83,20 @@ export function AiPanel({ content, recordId, onApply }: AiPanelProps) {
       return api.aiExtract(body);
     },
     onSuccess: (result, feature) => {
-      void client.invalidateQueries({ queryKey: ["ai-credits"] });
       if (feature === "summarize") setSummary(result.data as AiSummaryResult);
       else if (feature === "classify") {
         const data = result.data as AiClassificationResult;
         setClassification(data);
         onApply?.(data);
       } else setExtraction(result.data as AiExtractionResult);
-      notify(result.cached ? "Already worked out" : "Done");
+      notify("Done");
     },
     onError: (error) => notify(error instanceof Error ? error.message : "That did not work", "error"),
   });
 
-  const status = credits.data;
-  const locked = status?.available === false;
-  const reason = status?.reason;
-  /**
-   * A provider of their own answers, so the agreement to send content to
-   * Google does not apply to them.
-   */
-  const own = status?.ownConnection;
-  const needsConsent = status?.available === true && !own && !status.consented && !declined;
-
-  if (needsConsent) {
-    return (
-      <Modal open onClose={() => setDeclined(true)} title="Send content to Google for AI features">
-        <p className="text-sm leading-6 text-strong">
-          AI features work by sending the text you choose to Google&apos;s Gemini model. The free tier we use may allow Google to use that content to improve their products.
-        </p>
-        <p className="mt-3 text-sm leading-6 text-strong">
-          We send only the text you ask about, never your whole library, and you can stop at any time by not using AI features.
-        </p>
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Button disabled={consent.isPending} onClick={() => consent.mutate()}>
-            {consent.isPending ? "Saving…" : "Agree and continue"}
-          </Button>
-          <Button variant="ghost" onClick={() => setDeclined(true)}>Not now</Button>
-        </div>
-        {consent.error ? (
-          <div className="mt-4">
-            <ErrorMessage message={consent.error instanceof Error ? consent.error.message : "Could not save your choice."} />
-          </div>
-        ) : null}
-      </Modal>
-    );
-  }
+  const locked = status.data?.available !== true;
+  const reason = status.data?.reason ?? "Connect an AI provider in Settings to use AI features.";
+  const own = status.data?.ownConnection;
 
   return (
     <section className="panel p-6">
@@ -202,10 +107,9 @@ export function AiPanel({ content, recordId, onApply }: AiPanelProps) {
           <p className="mt-1 text-sm leading-6 text-muted">
             {own
               ? `Summarise this, suggest a type and tags, or pull out the details. Using ${own.label} · ${own.model}.`
-              : locked
-                ? reason
-                : `Summarise this, suggest a type and tags, or pull out the details.`}
+              : reason}
           </p>
+          {!own ? <Link to="/settings" className="mt-2 inline-block text-sm font-medium underline">Connect a provider</Link> : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <Button size="sm" disabled={locked || run.isPending} onClick={() => run.mutate("summarize")}>
               <Wand2 className="size-4" />Summarise

@@ -2,38 +2,29 @@ import { Elysia } from "elysia";
 import { z } from "zod";
 import type { ServerEnvironment } from "@data-vault/config";
 import type { DataVaultAuth } from "../auth/better-auth";
-import { getActor, getTenantContext } from "../auth/context";
+import { getTenantContext } from "../auth/context";
 import { requireCsrf } from "../auth/csrf";
 import { AppError } from "../lib/errors";
 import { success } from "../lib/http";
-import { enforceRateLimit, RATE_LIMITS } from "../lib/rate-limit-policies";import { listCreditActivity, readCreditStatus } from "../services/ai-credits";
-import { grantConsent, loadItemText, runAiFeature } from "../services/ai";
+import { enforceRateLimit, RATE_LIMITS } from "../lib/rate-limit-policies";
+import { loadItemText, ownConnectionSummary, runAiFeature } from "../services/ai";
 
 const summarySchema = z.object({ recordId: z.string().uuid().optional(), text: z.string().max(200_000).optional() });
 const classifySchema = z.object({ recordId: z.string().uuid().optional(), text: z.string().max(200_000).optional() });
 const extractSchema = z.object({ recordId: z.string().uuid().optional(), text: z.string().max(200_000).optional() });
-const consentSchema = z.object({ accepted: z.literal(true) });
-
 export function createAiRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
   return new Elysia({ name: "ai-routes" })
-    /** The current allowance, and why the AI features are unavailable if they are. */
-    .get("/api/v1/ai/credits", async ({ request }) => {
-      const context = await getTenantContext(request, auth, env);
-      const status = await readCreditStatus(env, { userId: context.userId, organizationId: context.organizationId });
-      return success(status);
-    })
-    /** Recent credit movements, so the user can see where their allowance went. */
-    .get("/api/v1/ai/activity", async ({ request }) => {
-      const context = await getTenantContext(request, auth, env);
-      return success(await listCreditActivity({ userId: context.userId, organizationId: context.organizationId }));
-    })
-    /** Record the agreement to send content to the model provider. */
-    .post("/api/v1/ai/consent", async ({ body, request }) => {
-      await requireCsrf(request, auth, env);
-      consentSchema.parse(body);
-      const actor = await getActor(request, auth, env);
-      await grantConsent(actor.userId);
-      return success({ consented: true });
+    .get("/api/v1/ai/status", async ({ request }) => {
+      const context = await getTenantContext(request, auth, env, "ai.use");
+      const ownConnection = await ownConnectionSummary(env, context.userId);
+      const available = Boolean(ownConnection?.keyReadable);
+      return success({
+        available,
+        ownConnection,
+        reason: available ? null : ownConnection
+          ? "Your saved provider key cannot be read. Re-enter it in Settings."
+          : "Connect an AI provider in Settings to use AI features.",
+      });
     })
     .post("/api/v1/ai/summarize", async ({ body, request }) => {
       await requireCsrf(request, auth, env);
@@ -81,13 +72,7 @@ async function resolveText(
   throw new AppError(400, "AI_NO_INPUT", "Choose a saved item, or paste some text.");
 }
 
-/**
- * A stable identifier for one attempt.
- *
- * The client sends an Idempotency-Key, so a retry after a network blip is
- * charged once rather than twice. The key is scoped to the account, so one
- * person cannot spend another person's request by guessing their key.
- */
+/** Give each account its own usage-event namespace for a client request key. */
 function requestId(request: Request, userId: string): string {
   const key = request.headers.get("idempotency-key");
   return key ? `${userId}:${key}` : crypto.randomUUID();

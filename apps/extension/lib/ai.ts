@@ -1,23 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { DataVaultApiError } from "@data-vault/api-client";
-import type { AiCreditStatus, AiSummaryResult } from "@data-vault/types";
+import type { AiStatus, AiSummaryResult } from "@data-vault/types";
 import { withOrganization } from "./api";
 
-/**
- * The user's free AI allowance.
- *
- * The extension asks the same API the website uses, so the two never show
- * different numbers.
- */
-export function useAiCredits(enabled = true) {
-  const [status, setStatus] = useState<AiCreditStatus>();
+/** Read the BYOK provider state used by the website and extension. */
+export function useAiStatus(enabled = true) {
+  const [status, setStatus] = useState<AiStatus>();
   const [loading, setLoading] = useState(enabled);
 
   const refresh = useCallback(async () => {
     if (!enabled) return;
     setLoading(true);
     try {
-      setStatus(await withOrganization((api) => api.aiCredits()));
+      setStatus(await withOrganization((api) => api.aiStatus()));
     } catch {
       setStatus(undefined);
     } finally {
@@ -26,40 +21,29 @@ export function useAiCredits(enabled = true) {
   }, [enabled]);
 
   useEffect(() => { void refresh(); }, [refresh]);
-
   return { status, loading, refresh };
 }
 
-export type AiBlockReason = "unavailable" | "unverified" | "consent" | "no-credits" | "busy" | "forbidden" | "error";
+export type AiBlockReason = "setup" | "busy" | "forbidden" | "error";
 
 export interface AiFailure {
   reason: AiBlockReason;
   message: string;
-  /** Set when the user has to do something on the website first. */
+  /** Set when the user has to open Settings first. */
   needsWebsite: boolean;
 }
 
-/**
- * Turn an API error into something a person can act on.
- *
- * The API deliberately distinguishes the reasons, so the extension can say
- * the right thing instead of showing a generic failure.
- */
+/** Turn provider setup and API errors into a useful next step. */
 export function describeAiFailure(error: unknown): AiFailure {
   if (error instanceof DataVaultApiError) {
     switch (error.code) {
-      case "AI_NOT_AVAILABLE":
-        return { reason: "unavailable", message: "AI features are not switched on for this server yet.", needsWebsite: false };
-      case "EMAIL_NOT_VERIFIED":
-        return { reason: "unverified", message: "Confirm your email address on the DataVault website.", needsWebsite: true };
-      case "AI_CONSENT_REQUIRED":
-        return { reason: "consent", message: "Agree to send content to Google before using AI features.", needsWebsite: true };
-      case "NO_CREDITS_REMAINING":
-        return { reason: "no-credits", message: "Configure your API key in DataVault Settings (BYOK).", needsWebsite: true };
-      case "AI_BUDGET_EXHAUSTED":
-        return { reason: "busy", message: "The free AI allowance for today has been used up. Please try again tomorrow.", needsWebsite: false };
+      case "AI_CONNECTION_REQUIRED":
+      case "AI_KEY_UNREADABLE":
+      case "AI_KEYS_UNAVAILABLE":
+      case "AI_EMBEDDING_UNSUPPORTED":
+        return { reason: "setup", message: error.message || "Configure your AI provider in DataVault Settings (BYOK).", needsWebsite: true };
       case "AI_RATE_LIMITED":
-        return { reason: "busy", message: "Too many AI requests in a row. Give it a moment.", needsWebsite: false };
+        return { reason: "busy", message: "Your provider is busy. Give it a moment and try again.", needsWebsite: false };
       case "PERMISSION_DENIED":
         return { reason: "forbidden", message: "You do not have permission to use AI features in this workspace.", needsWebsite: true };
       default:
@@ -69,13 +53,8 @@ export function describeAiFailure(error: unknown): AiFailure {
   return { reason: "error", message: error instanceof Error ? error.message : "That did not work.", needsWebsite: false };
 }
 
-/** Summarise a saved item, spending one credit. */
+/** Summarise a saved item with the user's connected provider. */
 export async function summariseItem(recordId: string): Promise<AiSummaryResult> {
   const result = await withOrganization((api) => api.aiSummarize({ recordId }));
   return result.data;
-}
-
-/** Record the agreement to send content to the model provider. */
-export async function recordAiConsent(): Promise<void> {
-  await withOrganization((api) => api.aiConsent());
 }

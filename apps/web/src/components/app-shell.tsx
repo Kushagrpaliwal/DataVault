@@ -363,7 +363,7 @@ function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => void })
             </div>
           ) : null}
           {byMeaning && meaning.error ? (
-            <AiAccessNotice error={meaning.error} onAgreed={() => { void meaning.refetch(); }} />
+            <AiAccessNotice error={meaning.error} />
           ) : null}
           {!hasNotes && !hasRecords && !query.isLoading && !meaning.isLoading && !meaning.error ? (
             <EmptyState title="No matches" description="Try a different word, or check the spelling. Search looks through titles, saved text, website names and your docs." />

@@ -101,17 +101,11 @@ The folders are a tree on the website, and a sub-folder is offered under the fol
 
 The item being reviewed in the panel starts with the folder that is set, and it can be changed for that item alone. The **Saved** tab can be narrowed to a folder, which shows the items of the folders under it as well.
 
-## Free AI credits in the extension
+## AI with your provider
 
-The extension asks the same API the website uses, so the two never show a different allowance.
+The extension uses the same BYOK connection as the website. The **Saved** tab can summarise an item through the API and your configured provider. If no provider is connected, the extension sends you to DataVault Settings to add one.
 
-- A **credit strip** sits under the tabs. It says how many credits are left today, or why there are none: the address is not confirmed, the content agreement has not been made, the day's credits are used up, or AI is switched off on the server.
-- The **Saved** tab has a **Summarise this** action on every item. It spends one credit, and the summary appears above the saved text.
-- The **settings** view shows the allowance and a shortcut to confirm the email address.
-
-The Gemini key is never in the extension. The extension calls DataVault's API, and the API calls Gemini.
-
-The free tier may use submitted content to improve Google's products, so the first AI request asks for agreement, in the panel where the request is made. The API refuses the request with `AI_CONSENT_REQUIRED` until that agreement is recorded, so the panel can explain what is needed rather than failing silently.
+Provider keys stay out of the extension. DataVault encrypts them on the API server and sends requests to the provider you chose. Provider charges and limits apply to your account; DataVault does not include an AI key or free credits.
 
 ## Permission rationale
 

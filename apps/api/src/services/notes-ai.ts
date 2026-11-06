@@ -8,9 +8,7 @@ import { z } from "zod";
 import type { ServerEnvironment } from "@data-vault/config";
 import type { TenantContext } from "../auth/context";
 import { AppError } from "../lib/errors";
-import { readCreditStatus, type CreditStatus } from "./ai-credits";
-import { runModel } from "./ai";
-import { loadItemText } from "./ai";
+import { loadItemText, resolveAi, runModel } from "./ai";
 import { writeAudit } from "./audit";
 
 /**
@@ -130,21 +128,6 @@ const CHAT_SYSTEM = [
 
 /** How long an answer waits to be applied. */
 const PREVIEW_TTL_MS = 30 * 60_000;
-
-/**
- * The checks that have to pass before the model is asked.
- *
- * A provider that the person connected answers, and nothing is spent from
- * the shared allowance. Without one, the free key answers and a credit is
- * spent.
- */
-function assertAiAllowed(status: CreditStatus): void {
-  if (status.ownConnection) return;
-  if (!status.available) throw new AppError(503, "AI_NOT_AVAILABLE", status.reason ?? "AI features are not available.");
-  if (!status.emailVerified) throw new AppError(403, "EMAIL_NOT_VERIFIED", "Confirm your email address to unlock AI credits.");
-  if (!status.consented) throw new AppError(403, "AI_CONSENT_REQUIRED", "Agree to send content to Google before using AI features.");
-  if (status.remaining <= 0) throw new AppError(429, "NO_CREDITS_REMAINING", "You have used all of today's free AI credits.");
-}
 
 /**
  * The text of a doc, with the pieces and the writing that is already there.
@@ -419,7 +402,7 @@ async function applyNotesToSubpage(
  * server. The user looks at them and decides where they go: into the doc
  * itself, or into a new doc inside it. With `apply`, the answer that was
  * shown is written, an earlier version is kept so the change can be undone,
- * and no second credit is spent.
+ * and the provider is called only when the suggestion is first created.
  */
 export async function notesFromDoc(
   env: ServerEnvironment,
@@ -434,8 +417,7 @@ export async function notesFromDoc(
     const target = input.target ?? "replace";
     if (target === "subpage") {
       const applied = await applyNotesToSubpage(context, request, id, input.previewId);
-      const status = await readCreditStatus(env, { userId: context.userId, organizationId: context.organizationId });
-      return { preview: false, target, subpageId: applied.subpageId, title: applied.title, sections: applied.sections, remaining: status.remaining };
+      return { preview: false, target, subpageId: applied.subpageId, title: applied.title, sections: applied.sections };
     }
     const applied = await applyAnswer(context, id, input.previewId, (payload, note) => {
       const stored = notesSchema.safeParse(payload);
@@ -444,8 +426,7 @@ export async function notesFromDoc(
       if (!sections.length) throw new AppError(502, "AI_EMPTY_RESPONSE", "There was nothing to apply. Please ask again.");
       return { content: notesToDoc(sections), result: { title: stored.data.title.trim() || note.title, sections } };
     });
-    const status = await readCreditStatus(env, { userId: context.userId, organizationId: context.organizationId });
-    return { preview: false, target, subpageId: null, title: applied.title, sections: applied.sections, remaining: status.remaining };
+    return { preview: false, target, subpageId: null, title: applied.title, sections: applied.sections };
   }
 
   const note = await withTenant(context.organizationId, async (tx) => {
@@ -459,28 +440,18 @@ export async function notesFromDoc(
     throw new AppError(400, "NOTHING_TO_NOTE", "There is not enough in this doc to make notes from yet.");
   }
 
-  const creditContext = { userId: context.userId, organizationId: context.organizationId };
-  const status = await readCreditStatus(env, creditContext);
-  assertAiAllowed(status);
-  const own = status.ownConnection;
-
-  const limit = (own ? env.AI_BYO_MAX_INPUT_TOKENS : env.AI_MAX_INPUT_TOKENS) * 4;
+  const aiContext = { userId: context.userId, organizationId: context.organizationId };
+  await resolveAi(env, aiContext);
+  const limit = env.AI_BYO_MAX_INPUT_TOKENS * 4;
   const clamped = text.length > limit ? `${text.slice(0, limit)}\n[content truncated]` : text;
 
   const requestId = scopedRequestId(request, context.userId);
-  const result = await runModel(env, creditContext, requestId, { idempotencyKey: request.headers.get("idempotency-key") ?? undefined }, "notes-doc", {
+  const result = await runModel(env, aiContext, requestId, { idempotencyKey: request.headers.get("idempotency-key") ?? undefined }, "notes-doc", {
     system: NOTES_PROMPT,
     contents: clamped,
     schema: NOTES_RESPONSE_SCHEMA as unknown as Record<string, unknown>,
-    /**
-     * The whole allowance is asked for, because a doc turned into notes is
-     * a long answer and a cut-off one cannot be read.
-     */
-    maxOutputTokens: Math.max(env.AI_MAX_OUTPUT_TOKENS, 8_192),
-    /**
-     * The answer is read inside the credit, so that an answer that cannot
-     * read gives the credit back.
-     */
+    /** A whole doc turned into notes is a long answer, so allow a full response. */
+    maxOutputTokens: env.AI_BYO_MAX_OUTPUT_TOKENS,
     validate: (data) => {
       const parsed = notesSchema.safeParse(data);
       if (!parsed.success) throw new AppError(502, "AI_INVALID_RESPONSE", "The AI service returned an answer we could not read. Please try again.");
@@ -496,7 +467,7 @@ export async function notesFromDoc(
 
   const title = parsed.title.trim() || note.title;
   const previewId = await savePreview(context, id, "notes", note.version, { title, sections });
-  return { preview: true, previewId, title, sections, remaining: result.remaining, source: result.source };
+  return { preview: true, previewId, title, sections };
 }
 
 /**
@@ -523,25 +494,18 @@ export async function summarizeDoc(
     throw new AppError(400, "NOTHING_TO_SUMMARIZE", "There is not enough in this doc to summarize yet.");
   }
 
-  const creditContext = { userId: context.userId, organizationId: context.organizationId };
-  const status = await readCreditStatus(env, creditContext);
-  assertAiAllowed(status);
-  const own = status.ownConnection;
-
-  const limit = (own ? env.AI_BYO_MAX_INPUT_TOKENS : env.AI_MAX_INPUT_TOKENS) * 4;
+  const aiContext = { userId: context.userId, organizationId: context.organizationId };
+  await resolveAi(env, aiContext);
+  const limit = env.AI_BYO_MAX_INPUT_TOKENS * 4;
   const clamped = text.length > limit ? `${text.slice(0, limit)}\n[content truncated]` : text;
 
   const requestId = scopedRequestId(request, context.userId);
-  const result = await runModel(env, creditContext, requestId, { idempotencyKey: request.headers.get("idempotency-key") ?? undefined }, "doc-summary", {
+  const result = await runModel(env, aiContext, requestId, { idempotencyKey: request.headers.get("idempotency-key") ?? undefined }, "doc-summary", {
     system: SUMMARY_PROMPT,
     contents: clamped,
     schema: SUMMARY_RESPONSE_SCHEMA as unknown as Record<string, unknown>,
-    /**
-     * A breakdown of a whole doc is a long answer, so the whole allowance is
-     * asked for. An answer that is cut short cannot be read, and it would
-     * give the credit back for nothing.
-     */
-    maxOutputTokens: Math.max(env.AI_MAX_OUTPUT_TOKENS, 8_192),
+    /** A breakdown of a whole doc is a long answer, so allow a full response. */
+    maxOutputTokens: env.AI_BYO_MAX_OUTPUT_TOKENS,
     validate: (data) => {
       const parsed = summarySchema.safeParse(data);
       if (!parsed.success) throw new AppError(502, "AI_INVALID_RESPONSE", "The AI service returned an answer we could not read. Please try again.");
@@ -556,8 +520,6 @@ export async function summarizeDoc(
     sections: parsed.sections.filter((section) => section.heading || section.summary),
     keyPoints: parsed.keyPoints.filter(Boolean),
     questions: parsed.questions.filter(Boolean),
-    remaining: result.remaining,
-    source: result.source,
   };
 }
 
@@ -589,10 +551,8 @@ export async function askDoc(
     throw new AppError(400, "NOTHING_TO_ASK_ABOUT", "There is nothing in this doc to answer a question about yet.");
   }
 
-  const creditContext = { userId: context.userId, organizationId: context.organizationId };
-  const status = await readCreditStatus(env, creditContext);
-  assertAiAllowed(status);
-  const own = status.ownConnection;
+  const aiContext = { userId: context.userId, organizationId: context.organizationId };
+  await resolveAi(env, aiContext);
 
   const parts: string[] = [];
   if (text) parts.push("THE DOC", text);
@@ -610,15 +570,13 @@ export async function askDoc(
 
   const contents = parts.join("\n\n");
 
-  const limit = (own ? env.AI_BYO_MAX_INPUT_TOKENS : env.AI_MAX_INPUT_TOKENS) * 4;
+  const limit = env.AI_BYO_MAX_INPUT_TOKENS * 4;
   if (contents.length > limit) {
-    throw new AppError(413, "AI_SELECTION_TOO_LONG", own
-      ? "That is more than your model can take in one go. Ask about less of it."
-      : "That is more than the free allowance can take in one go. Ask about less of it, or connect a key of your own.");
+    throw new AppError(413, "AI_SELECTION_TOO_LONG", "That is more than your model can take in one go. Ask about less of it.");
   }
 
   const requestId = scopedRequestId(request, context.userId);
-  const result = await runModel(env, creditContext, requestId, { idempotencyKey: request.headers.get("idempotency-key") ?? undefined }, "doc-chat", {
+  const result = await runModel(env, aiContext, requestId, { idempotencyKey: request.headers.get("idempotency-key") ?? undefined }, "doc-chat", {
     system: CHAT_SYSTEM,
     contents,
     schema: AI_BLOCKS_JSON_SCHEMA as unknown as Record<string, unknown>,
@@ -636,8 +594,6 @@ export async function askDoc(
 
   return {
     blocks: parsed.blocks,
-    source: result.source,
-    remaining: result.remaining,
     /** The title of the doc, so that the person can see what it was. */
     title: note.title,
   };
@@ -743,9 +699,8 @@ export async function selectionAssist(
    */
   if (!markdown && !instruction) throw new AppError(400, "NOTHING_TO_WORK_WITH", "Select some text, or say what you want written.");
 
-  const creditContext = { userId: context.userId, organizationId: context.organizationId };
-  const status = await readCreditStatus(env, creditContext);
-  assertAiAllowed(status);
+  const aiContext = { userId: context.userId, organizationId: context.organizationId };
+  await resolveAi(env, aiContext);
 
   /**
    * The saved items the person chose.
@@ -757,7 +712,7 @@ export async function selectionAssist(
   const sources: string[] = [];
   if (input.context.mode === "sources") {
     for (const recordId of input.context.recordIds.slice(0, 10)) {
-      const record = await loadItemText(creditContext, recordId);
+      const record = await loadItemText(aiContext, recordId);
       sources.push(`[saved] ${record.title}\n${record.text}`);
     }
   }
@@ -777,12 +732,9 @@ export async function selectionAssist(
   }
   const contents = parts.join("\n\n");
 
-  const own = status.ownConnection;
-  const limit = (own ? env.AI_BYO_MAX_INPUT_TOKENS : env.AI_MAX_INPUT_TOKENS) * 4;
+  const limit = env.AI_BYO_MAX_INPUT_TOKENS * 4;
   if (contents.length > limit) {
-    throw new AppError(413, "AI_SELECTION_TOO_LONG", own
-      ? "That is more than your model can take in one go. Select less of it."
-      : "That is more than the free allowance can take in one go. Select less of it, or connect a key of your own.");
+    throw new AppError(413, "AI_SELECTION_TOO_LONG", "That is more than your model can take in one go. Select less of it.");
   }
 
   /**
@@ -799,7 +751,7 @@ export async function selectionAssist(
   ].filter(Boolean).join(" ");
 
   const requestId = scopedRequestId(request, context.userId);
-  const result = await runModel(env, creditContext, requestId, { idempotencyKey: request.headers.get("idempotency-key") ?? undefined }, "ai-selection", {
+  const result = await runModel(env, aiContext, requestId, { idempotencyKey: request.headers.get("idempotency-key") ?? undefined }, "ai-selection", {
     system,
     contents,
     schema: AI_BLOCKS_JSON_SCHEMA as unknown as Record<string, unknown>,
@@ -819,8 +771,6 @@ export async function selectionAssist(
     blocks: parsed.blocks,
     action: input.action,
     context: input.context.mode,
-    source: result.source,
-    remaining: result.remaining,
     /** The title of the doc, so that the person can see what it was. */
     title: note.title,
   };

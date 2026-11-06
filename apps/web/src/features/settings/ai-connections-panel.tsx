@@ -172,7 +172,7 @@ export function AiConnectionsPanel() {
       setNewChosenModel("");
       notify(`${created.label} is connected.`);
       await client.invalidateQueries({ queryKey: ["ai-connections"] });
-      await client.invalidateQueries({ queryKey: ["ai-credits"] });
+      await client.invalidateQueries({ queryKey: ["ai-status"] });
     },
     onError: (error) => notify(friendlyErrorMessage(error), "error"),
   });
@@ -194,7 +194,7 @@ export function AiConnectionsPanel() {
     mutationFn: (id: string) => api.patchAiConnection(id, { isDefault: true }),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["ai-connections"] });
-      await client.invalidateQueries({ queryKey: ["ai-credits"] });
+      await client.invalidateQueries({ queryKey: ["ai-status"] });
     },
     onError: (error) => notify(friendlyErrorMessage(error), "error"),
   });
@@ -203,7 +203,7 @@ export function AiConnectionsPanel() {
     mutationFn: (id: string) => api.deleteAiConnection(id),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["ai-connections"] });
-      await client.invalidateQueries({ queryKey: ["ai-credits"] });
+      await client.invalidateQueries({ queryKey: ["ai-status"] });
     },
     onError: (error) => notify(friendlyErrorMessage(error), "error"),
   });

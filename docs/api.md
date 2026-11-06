@@ -82,13 +82,11 @@ The heading names the source of the pieces under it, so the link is written once
 
 ## AI
 
-The AI features need a workspace, a confirmed email address and the agreement to send content to the model provider. The allowance belongs to the person, so it is the same in every workspace.
+AI text features require a connected BYOK provider and the `ai.use` workspace permission. There is no shared provider key or credit allowance.
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/ai/credits` | The allowance left today, and why the features are unavailable if they are. It also names the provider of the person, when they have connected one. |
-| `GET` | `/ai/activity` | The recent movements of the allowance. |
-| `POST` | `/ai/consent` | Record the agreement to send content to the model provider. |
+| `GET` | `/ai/status` | Whether a readable default provider connection is configured. |
 | `POST` | `/ai/summarize` | Summarise a saved item or a piece of text. The body is `{ recordId?, text? }`. |
 | `POST` | `/ai/classify` | Suggest a type and some tags. |
 | `POST` | `/ai/extract` | Pull the fields out of a piece of text. |
@@ -98,7 +96,7 @@ The AI features need a workspace, a confirmed email address and the agreement to
 | `DELETE` | `/ai/connections/:id` | Remove a connection. The key goes with it. |
 | `POST` | `/ai/connections/test` | Try a provider and ask it which models it has. The body may name a saved connection or an unsaved one. |
 
-A request that has been made is not made again: send an `Idempotency-Key`, and a retry is charged once. A key that another account has already used is refused.
+Provider requests are sent through the user's default connection. Provider pricing and rate limits apply to the connected account.
 
 ## Extension authorization
 

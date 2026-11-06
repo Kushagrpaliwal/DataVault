@@ -25,16 +25,15 @@ export async function setTenantContext(transaction: DatabaseTransaction, organiz
 /**
  * Tell the database which person is asking.
  *
- * The credit tables follow the person rather than the workspace, because the
- * allowance belongs to the person. The row-level security rules on those
- * tables read this value.
+ * Account-owned provider connections and legacy credit records use this
+ * context in their row-level security policies.
  */
 export async function setUserContext(transaction: DatabaseTransaction, userId: string) {
   await transaction.execute(sql`select set_config('app.user_id', ${userId}, true)`);
 }
 
 /**
- * Name the request key this transaction is about.
+ * Name the request key this transaction is about for the legacy credit ledger.
  *
  * The credit ledger follows the person, so the rule on that table only shows
  * a person their own rows. The server has to find out whether a request key
@@ -60,9 +59,8 @@ export function withTenant<T>(organizationId: string, operation: (transaction: D
 /**
  * A transaction that knows the person but not the workspace.
  *
- * Some things belong to the person rather than to a workspace, such as the
- * agreement to send content to the model provider. Those tables are read
- * with the person set and nothing else.
+ * Some records belong to a person rather than a workspace, such as their AI
+ * provider connections. Those tables are read with the person set.
  */
 export function withAccount<T>(userId: string, operation: (transaction: DatabaseTransaction) => Promise<T>): Promise<T> {
   return getDatabase().transaction(async (transaction) => {
@@ -74,8 +72,8 @@ export function withAccount<T>(userId: string, operation: (transaction: Database
 /**
  * A transaction that knows both the workspace and the person.
  *
- * The credit tables are shared across a person's workspaces, so reading them
- * needs the person as well as the workspace.
+ * Workspace usage events include both the workspace and the person. The
+ * legacy credit tables also use this context.
  */
 export function withUser<T>(userId: string, organizationId: string, operation: (transaction: DatabaseTransaction) => Promise<T>): Promise<T> {
   return getDatabase().transaction(async (transaction) => {

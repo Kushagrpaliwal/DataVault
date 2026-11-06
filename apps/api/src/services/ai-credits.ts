@@ -1,3 +1,7 @@
+/**
+ * @deprecated Legacy shared-provider credit implementation. Current API
+ * routes do not import this service; DataVault AI is BYOK-only.
+ */
 import { and, desc, eq, sql } from "drizzle-orm";
 import {
   aiConsents, aiCreditLedger, aiCreditPeriods, aiGlobalCounters, aiUsageEvents, getDatabase, setClaimKey, users,

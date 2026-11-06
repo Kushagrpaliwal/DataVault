@@ -13,7 +13,7 @@ interface Policy {
 }
 
 export const RATE_LIMITS = {
-  /** Creating accounts. The tightest limit, because each account can earn credits. */
+  /** Creating accounts. The tightest limit, to limit automated sign-ups. */
   signup: { name: "signup", max: 5, windowSeconds: 3_600 },
   /** Signing in. */
   login: { name: "login", max: 20, windowSeconds: 900 },

@@ -1,6 +1,4 @@
-import type { ServerEnvironment } from "@data-vault/config";
 import { AppError } from "../lib/errors";
-import { sha256 } from "../lib/crypto";
 import { guardedFetchOptions } from "../lib/endpoint-guard";
 
 export interface GeminiGenerateInput {
@@ -19,8 +17,6 @@ export interface GeminiGenerateResult {
   data: unknown;
   inputTokens: number;
   outputTokens: number;
-  /** A stable key for the request, used to serve repeats from cache. */
-  cacheKey: string;
 }
 
 const GEMINI_ROOT = "https://generativelanguage.googleapis.com";
@@ -28,8 +24,7 @@ const GEMINI_ROOT = "https://generativelanguage.googleapis.com";
 /**
  * The Google model a request is made to.
  *
- * The key and the model are given, so that the server's own key and the
- * key of a person are asked in exactly the same way.
+ * The key and model come from the provider connection selected by the user.
  */
 export interface GeminiTarget {
   apiKey: string;
@@ -143,35 +138,7 @@ export async function listGeminiModels(baseUrl: URL, apiKey: string): Promise<st
 }
 
 /**
- * A stable key for a request.
- *
- * Repeating the same request must not spend another credit, so the answer is
- * cached against a hash of everything that could change the result.
- */
-export async function cacheKeyFor(input: GeminiGenerateInput, model: string): Promise<string> {
-  return sha256(JSON.stringify({ model, system: input.system, contents: input.contents, schema: input.responseSchema ?? null }));
-}
-
-/**
- * Ask the model for an answer.
- *
- * The API key never leaves the server: it is only ever read from the
- * environment here, and the request is made by the API, not by the browser or
- * the extension.
- */
-export async function generateJson(env: ServerEnvironment, input: GeminiGenerateInput): Promise<GeminiGenerateResult> {
-  if (!env.geminiApiKey) throw new AppError(503, "AI_NOT_AVAILABLE", "AI features are not switched on for this server yet.");
-  return generateJsonFor({ apiKey: env.geminiApiKey, model: env.GEMINI_MODEL }, {
-    ...input,
-    maxOutputTokens: Math.min(Math.max(input.maxOutputTokens ?? env.AI_MAX_OUTPUT_TOKENS, env.AI_MAX_OUTPUT_TOKENS), 8_192),
-  });
-}
-
-/**
- * Ask a Google model for an answer.
- *
- * This is the same code the server's own key uses, with the key and the
- * model of whoever is asking.
+ * Ask the Google model connected by the user for an answer.
  */
 export async function generateJsonFor(target: GeminiTarget, input: GeminiGenerateInput): Promise<GeminiGenerateResult> {
   const model = target.model;
@@ -267,7 +234,7 @@ export async function generateJsonFor(target: GeminiTarget, input: GeminiGenerat
     }
   }
 
-  return { data, inputTokens, outputTokens, cacheKey: await cacheKeyFor(input, model) };
+  return { data, inputTokens, outputTokens };
 }
 
 /**
@@ -381,18 +348,24 @@ const EMBEDDING_DIMENSIONS = 768;
  * this used to ask for was switched off by Google, and a name written in the
  * code cannot be changed without a new release.
  */
-export async function embedText(env: ServerEnvironment, text: string, purpose: EmbeddingPurpose = "document"): Promise<number[]> {
-  if (!env.geminiApiKey) throw new AppError(503, "AI_NOT_AVAILABLE", "AI features are not switched on for this server yet.");
-  const model = env.GEMINI_EMBEDDING_MODEL;
+export async function embedGeminiText(
+  target: GeminiTarget,
+  embeddingModel: string,
+  text: string,
+  purpose: EmbeddingPurpose = "document",
+): Promise<number[]> {
+  const model = embeddingModel;
   const contents = text.trim().slice(0, 8_000);
   if (!contents) throw new AppError(400, "AI_EMPTY_INPUT", "There is nothing to work with yet.");
 
   let response: Response;
   try {
-    const endpoint = new URL(`${modelsEndpoint(new URL(GEMINI_ROOT))}/${encodeURIComponent(model)}:embedContent`, GEMINI_ROOT);
+    const baseUrl = target.baseUrl ?? new URL(GEMINI_ROOT);
+    const endpoint = new URL(`${modelsEndpoint(baseUrl)}/${encodeURIComponent(model)}:embedContent`, baseUrl.origin);
     response = await fetch(endpoint, {
+      ...guardedFetchOptions(30_000),
       method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": env.geminiApiKey },
+      headers: { "content-type": "application/json", "x-goog-api-key": target.apiKey },
       body: JSON.stringify({
         content: { parts: [{ text: contents }] },
         outputDimensionality: EMBEDDING_DIMENSIONS,
@@ -403,7 +376,7 @@ export async function embedText(env: ServerEnvironment, text: string, purpose: E
     throw new AppError(502, "AI_UNREACHABLE", "The AI service could not be reached. Please try again.");
   }
   if (response.status === 429) {
-    throw new AppError(429, "AI_RATE_LIMITED", "The free AI allowance is busy right now. Please try again in a few minutes.");
+    throw new AppError(429, "AI_RATE_LIMITED", "Google AI is busy right now. Please try again in a few minutes.");
   }
   if (!response.ok) {
     throw new AppError(502, "AI_FAILED", "The AI service could not answer right now. Please try again.");

@@ -1,8 +1,4 @@
-/**
- * The Gemini free tier resets its requests-per-day quota at midnight Pacific.
- * User credits follow the same clock, so a user's allowance and the shared
- * quota they draw from refresh at the same instant and nothing is wasted.
- */
+/** Legacy date helpers retained for the unused credit module. */
 
 const PACIFIC = "America/Los_Angeles";
 

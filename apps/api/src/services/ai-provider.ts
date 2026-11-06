@@ -1,7 +1,7 @@
 import type { ServerEnvironment } from "@data-vault/config";
 import { AppError } from "../lib/errors";
 import { assertSafeEndpoint, guardedFetchOptions } from "../lib/endpoint-guard";
-import { generateJsonFor, listGeminiModels, tryRepairTruncatedJson } from "./gemini";
+import { embedGeminiText, generateJsonFor, listGeminiModels, tryRepairTruncatedJson, type EmbeddingPurpose } from "./gemini";
 
 /**
  * The providers a person can bring.
@@ -32,6 +32,58 @@ export interface StructuredResult {
   inputTokens: number;
   outputTokens: number;
   model: string;
+}
+
+/** Model used for semantic search with OpenAI-compatible providers. */
+const OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
+const EMBEDDING_DIMENSIONS = 768;
+
+/** Pick the embedding model for the provider the user connected. */
+export function embeddingModelFor(target: AiTarget, env: ServerEnvironment): string {
+  if (target.kind === "gemini") return env.GEMINI_EMBEDDING_MODEL;
+  if (target.kind === "openai-compatible") return OPENAI_EMBEDDING_MODEL;
+  throw new AppError(422, "AI_EMBEDDING_UNSUPPORTED", "This provider does not support semantic search. Connect Gemini or an OpenAI-compatible provider.");
+}
+
+/** Generate a vector through the user's connected provider. */
+export async function embedTextForTarget(
+  env: ServerEnvironment,
+  target: AiTarget,
+  text: string,
+  purpose: EmbeddingPurpose = "document",
+): Promise<number[]> {
+  const model = embeddingModelFor(target, env);
+  const contents = text.trim().slice(0, 8_000);
+  if (!contents) throw new AppError(400, "AI_EMPTY_INPUT", "There is nothing to work with yet.");
+  const normalized = { ...target, baseUrl: normalizeBaseUrl(target.baseUrl) };
+  const url = await assertSafeEndpoint(env, normalized.baseUrl);
+  if (normalized.kind === "gemini") {
+    return embedGeminiText({ apiKey: normalized.apiKey, model: normalized.model, baseUrl: url }, model, contents, purpose);
+  }
+
+  const endpoint = new URL("embeddings", ensureTrailingSlash(url));
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      ...guardedFetchOptions(30_000),
+      method: "POST",
+      headers: { "content-type": "application/json", ...authHeaders(normalized) },
+      body: JSON.stringify({ model, input: contents, dimensions: EMBEDDING_DIMENSIONS }),
+    });
+  } catch {
+    throw new AppError(502, "AI_UNREACHABLE", "The AI provider could not be reached. Please check your network connection.");
+  }
+  if (response.status === 429) throw new AppError(429, "AI_RATE_LIMITED", "Your AI provider is busy. Please try again in a few minutes.");
+  if (response.status === 401 || response.status === 403) throw new AppError(502, "AI_PROVIDER_REFUSED", "Your AI provider refused the key. Please check it in Settings.");
+  if (!response.ok) {
+    throw new AppError(422, "AI_EMBEDDING_UNSUPPORTED", "This provider could not create embeddings with text-embedding-3-small. Use a compatible provider or Gemini for semantic search.");
+  }
+  const payload = await response.json() as { data?: { embedding?: unknown }[] };
+  const values = payload.data?.[0]?.embedding;
+  if (!Array.isArray(values) || values.length !== EMBEDDING_DIMENSIONS || !values.every((value) => typeof value === "number" && Number.isFinite(value))) {
+    throw new AppError(422, "AI_EMBEDDING_UNSUPPORTED", "This provider returned an unsupported embedding format. Use a compatible provider or Gemini for semantic search.");
+  }
+  return values as number[];
 }
 
 /**
@@ -349,7 +401,7 @@ async function openAiStructured(url: URL, target: AiTarget, input: StructuredInp
           // fall through
         }
       }
-      throw new AppError(402, "AI_CREDITS_EXHAUSTED", "Your OpenRouter balance is too low for this request. Top up your OpenRouter account or choose a cheaper model.");
+      throw new AppError(402, "AI_PROVIDER_BALANCE_LOW", "Your OpenRouter balance is too low for this request. Top up your OpenRouter account or choose a cheaper model.");
     }
     if (response.status === 429) throw new AppError(429, "AI_RATE_LIMITED", "That provider is busy right now. Please try again in a few minutes.");
     if (response.status === 401 || response.status === 403 || /incorrect api key|invalid api key/i.test(detail)) {
@@ -384,8 +436,8 @@ const STRICT_KEYWORDS_IGNORED = new Set([
  * be in the list of the ones that are required. A property that was not
  * required is made able to be null, so that a model may still leave it out.
  *
- * The shape is copied and never changed in place, because the same shape is
- * used for the free path, where the limits do matter.
+ * The shape is copied and never changed in place, because callers can reuse
+ * it to validate multiple provider responses.
  */
 export function strictSchema(schema: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -496,8 +548,7 @@ async function anthropicStructured(url: URL, target: AiTarget, input: Structured
 /**
  * Google.
  *
- * The same request the server's own key makes, with the key and the model
- * of the person instead.
+ * The request sent through the user's selected provider connection.
  */
 async function geminiStructured(url: URL, target: AiTarget, input: StructuredInput): Promise<StructuredResult> {
   const result = await generateJsonFor({ apiKey: target.apiKey, model: target.model, baseUrl: url }, {

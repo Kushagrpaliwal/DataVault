@@ -235,33 +235,10 @@ export interface AuthMethods {
   captchaSiteKey: string | null;
 }
 
-/** The user's free AI allowance and why it may be locked. */
-export interface AiCreditStatus {
-  /** Credits left in the current period. */
-  remaining: number;
-  /** The allowance the user is currently entitled to. */
-  allowance: number;
-  /** The allowance the account was granted at the start of the period. */
-  baseAllowance: number;
-  used: number;
-  periodStart: string;
-  periodEnd: string;
-  /** Requests left in the shared daily budget. */
-  dailyBudgetRemaining: number;
-  /** The email address has been confirmed. */
-  emailVerified: boolean;
-  /** The user agreed to send content to the model provider. */
-  consented: boolean;
-  /** True when the AI features are switched off entirely. */
+/** Whether AI is ready, and which user-owned provider will receive requests. */
+export interface AiStatus {
   available: boolean;
-  /** Why the AI features are unavailable, when they are. */
   reason: string | null;
-  /**
-   * The provider of the user, when they have connected one.
-   *
-   * Their own key is used instead of the shared one, so the words about
-   * credits and about Google do not apply to them.
-   */
   ownConnection: { label: string; preset: string; model: string; keyReadable: boolean } | null;
 }
 
@@ -281,14 +258,6 @@ export interface AiConnection {
   keyHint: string | null;
   isDefault: boolean;
   lastVerifiedAt: string | null;
-  createdAt: string;
-}
-
-export interface AiActivityEntry {
-  id: string;
-  kind: string;
-  credits: number;
-  reason: string | null;
   createdAt: string;
 }
 
@@ -319,10 +288,6 @@ export interface AiExtractionResult {
 
 export interface AiRunResult<T = unknown> {
   data: T;
-  /** True when the answer was served from cache and cost no credit. */
-  cached: boolean;
-  /** Credits left after this request. */
-  remaining: number;
   inputTokens: number;
   outputTokens: number;
 }

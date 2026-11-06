@@ -4,9 +4,8 @@ import type { ServerEnvironment } from "@data-vault/config";
 import type { TenantContext } from "../auth/context";
 import { AppError } from "../lib/errors";
 import { sha256 } from "../lib/crypto";
-import { pacificDayStart } from "../lib/pacific";
-import { assertEmbeddingAllowed, countEmbedding, embeddingBudgetRemaining } from "./ai-credits";
-import { embedText } from "./gemini";
+import { resolveAi } from "./ai";
+import { embedTextForTarget, embeddingModelFor } from "./ai-provider";
 
 /**
  * The numbers that say what a saved item is about.
@@ -46,11 +45,8 @@ export function textForEmbedding(title: string | null | undefined, text: string 
  * The numbers are made once and kept, so that a search does not have to ask
  * the model about every item in the workspace.
  *
- * Making numbers is a call to the model provider, so it goes through the
- * same checks as the other AI features: the person must have agreed to
- * send content to the provider, and there must be room in the shared
- * budget. When either is missing the item is simply not given numbers, and
- * it does not turn up in a search by meaning.
+ * Embeddings are created only through the user's connected provider. If no
+ * provider is configured or it cannot embed, saving the item still succeeds.
  */
 export async function indexRecord(
   env: ServerEnvironment,
@@ -58,22 +54,23 @@ export async function indexRecord(
   recordId: string,
   title: string,
   text: string | null,
-  model = env.GEMINI_EMBEDDING_MODEL,
 ): Promise<boolean> {
   const body = textForEmbedding(title, text);
   if (!body.trim()) return false;
-  /**
-   * The check comes before the call, so that an item that may not be given
-   * numbers never reaches the model provider at all.
-   */
+  let resolved: Awaited<ReturnType<typeof resolveAi>>;
   try {
-    await assertEmbeddingAllowed(env, { userId: context.userId, organizationId: context.organizationId });
+    resolved = await resolveAi(env, { userId: context.userId, organizationId: context.organizationId });
   } catch {
     return false;
   }
-  const embedding = await embedText(env, body, "document").catch(() => null);
-  if (!embedding) return false;
-  await countEmbedding(pacificDayStart());
+  let model: string;
+  let embedding: number[];
+  try {
+    model = embeddingIndexKey(resolved.connectionId, resolved.target, env);
+    embedding = await embedTextForTarget(env, resolved.target, body, "document");
+  } catch {
+    return false;
+  }
   return withTenant(context.organizationId, async (tx) => {
     await tx.delete(recordEmbeddings).where(and(eq(recordEmbeddings.organizationId, context.organizationId), eq(recordEmbeddings.savedRecordId, recordId)));
     await tx.insert(recordEmbeddings).values({ organizationId: context.organizationId, savedRecordId: recordId, model, embedding });
@@ -88,9 +85,10 @@ export async function indexRecord(
  * kept in the same place the written answers are kept, and the second
  * question is answered from there.
  */
-export async function embedQuery(env: ServerEnvironment, question: string): Promise<number[]> {
-  const model = env.GEMINI_EMBEDDING_MODEL;
-  const contentHash = await sha256(`${model}\n${question.trim()}`);
+export async function embedQuery(env: ServerEnvironment, context: TenantContext, question: string): Promise<{ values: number[]; model: string }> {
+  const resolved = await resolveAi(env, { userId: context.userId, organizationId: context.organizationId });
+  const model = embeddingIndexKey(resolved.connectionId, resolved.target, env);
+  const contentHash = await sha256(`${context.userId}\n${resolved.connectionId}\n${model}\n${question.trim()}`);
   const [row] = await getDatabase()
     .select({ response: aiResponseCache.response })
     .from(aiResponseCache)
@@ -98,16 +96,22 @@ export async function embedQuery(env: ServerEnvironment, question: string): Prom
     .limit(1);
   const cached = row?.response?.values;
   if (Array.isArray(cached) && cached.length && cached.every((value) => typeof value === "number")) {
-    return cached as number[];
+    return { values: cached as number[], model };
   }
-  const values = await embedText(env, question, "query");
+  const values = await embedTextForTarget(env, resolved.target, question, "query");
   await getDatabase()
     .insert(aiResponseCache).values({ contentHash, feature: "embed-query", model, response: { values } })
     .onConflictDoUpdate({
       target: [aiResponseCache.contentHash, aiResponseCache.feature],
       set: { response: { values }, createdAt: new Date() },
     });
-  return values;
+  return { values, model };
+}
+
+function embeddingIndexKey(connectionId: string, target: Parameters<typeof embeddingModelFor>[0], env: ServerEnvironment): string {
+  const model = embeddingModelFor(target, env);
+  const host = new URL(target.baseUrl).host.toLowerCase();
+  return `${connectionId}:${target.kind}:${host}:${model}`;
 }
 
 /**
@@ -117,11 +121,10 @@ export async function embedQuery(env: ServerEnvironment, question: string): Prom
  * itself is only about the numbers and not about the model.
  */
 export async function semanticSearch(
-  env: ServerEnvironment,
   context: TenantContext,
   embedding: number[],
+  model: string,
   limit = 20,
-  model = env.GEMINI_EMBEDDING_MODEL,
 ): Promise<{ items: SemanticResult[]; total: number }> {
   if (!embedding.length) throw new AppError(400, "AI_EMPTY_INPUT", "There is nothing to work with yet.");
   /**
@@ -162,19 +165,18 @@ export async function semanticSearch(
  * This is what is needed after the model has changed, or after material
  * has been brought in from somewhere else.
  *
- * The items that already have numbers for the model in use are left alone,
- * and the trashed ones are left out. The work stops when the shared budget
- * for the day runs out, and the number of items still waiting is returned
- * so that the rest can be done later.
+ * The items that already have numbers for the connected provider are left
+ * alone, and the trashed ones are left out. The number still waiting is
+ * returned so that a large workspace can be handled in batches.
  */
 export async function reindexWorkspace(
   context: TenantContext,
   env: ServerEnvironment,
   options: { limit?: number } = {},
 ): Promise<{ indexed: number; skipped: number; remaining: number }> {
-  const model = env.GEMINI_EMBEDDING_MODEL;
+  const resolved = await resolveAi(env, { userId: context.userId, organizationId: context.organizationId });
+  const model = embeddingIndexKey(resolved.connectionId, resolved.target, env);
   const limit = options.limit ?? 200;
-  const periodStart = pacificDayStart();
 
   const records = await withTenant(context.organizationId, (tx) => tx
     .select({ id: savedRecords.id, title: savedRecords.title, text: savedRecords.originalText })
@@ -190,8 +192,7 @@ export async function reindexWorkspace(
 
   /**
    * The items that already have numbers for this model are not given them
-   * again. Making numbers costs the shared budget, so the ones that are
-   * already right are left alone.
+   * again, so the ones that are already right are left alone.
    */
   const done = new Set((await withTenant(context.organizationId, (tx) => tx
     .select({ recordId: recordEmbeddings.savedRecordId })
@@ -211,14 +212,8 @@ export async function reindexWorkspace(
       skipped += 1;
       continue;
     }
-    /**
-     * The budget is looked at before each item, so that the work stops
-     * before the day's allowance is used up rather than after.
-     */
-    if (await embeddingBudgetRemaining(env, periodStart) <= 0) break;
     try {
-      const embedding = await embedText(env, body, "document");
-      await countEmbedding(periodStart);
+      const embedding = await embedTextForTarget(env, resolved.target, body, "document");
       await withTenant(context.organizationId, async (tx) => {
         await tx.delete(recordEmbeddings).where(and(eq(recordEmbeddings.organizationId, context.organizationId), eq(recordEmbeddings.savedRecordId, record.id)));
         await tx.insert(recordEmbeddings).values({ organizationId: context.organizationId, savedRecordId: record.id, model, embedding });
@@ -230,8 +225,7 @@ export async function reindexWorkspace(
   }
   /**
    * The items that were not looked at are the ones that are still waiting,
-   * either because the budget ran out or because the run only covers a
-   * number of items at a time.
+   * because the run only covers a number of items at a time.
    */
   const looked = indexed + skipped;
   return { indexed, skipped, remaining: Math.max(0, total - looked) };

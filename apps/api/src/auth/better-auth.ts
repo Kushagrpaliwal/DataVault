@@ -36,7 +36,7 @@ export function createAuth(env: ServerEnvironment) {
       /**
        * A session younger than this counts as "fresh". Sensitive actions ask
        * for one so a stolen long-lived cookie cannot change an email address
-       * or spend credits.
+       * or change a user's AI provider connections.
        */
       freshAge: 60 * 15,
     },
@@ -46,10 +46,8 @@ export function createAuth(env: ServerEnvironment) {
       maxPasswordLength: 128,
       revokeSessionsOnPasswordReset: true,
       /**
-       * The app stays usable with an unconfirmed address. Only the free AI
-       * credits require a verified email, which is checked when a credit is
-       * granted rather than at sign-in, so nobody is locked out of the
-       * product they came for.
+       * The app stays usable with an unconfirmed address. Email verification
+       * is not a prerequisite for connecting or using a BYOK provider.
        */
       requireEmailVerification: false,
       password: {

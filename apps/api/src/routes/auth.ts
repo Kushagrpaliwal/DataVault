@@ -57,8 +57,7 @@ export function createAuthRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
        */
       await verifyTurnstile(env, request.headers.get("x-captcha-response"), clientIp(request, env));
       /**
-       * A throwaway inbox is the cheapest way to farm accounts, and every
-       * account that can be verified with one is another set of free credits.
+       * A throwaway inbox is a common source of automated account abuse.
        */
       if (!await canReceiveVerification(input.email)) {
         throw new AppError(400, "EMAIL_NOT_ACCEPTED", "Use an email address that can receive mail.");

@@ -44,7 +44,7 @@ export function createMailer(env: ServerEnvironment): Mailer {
       await mailer.send({
         to: email,
         subject: "Welcome to DataVault",
-        text: `Hi ${name},\n\nDataVault is ready. Save anything from the web with the browser extension, then find it again here.\n\nConfirm your email address to unlock your free AI credits.`,
+        text: `Hi ${name},\n\nDataVault is ready. Save anything from the web with the browser extension, then find it again here.\n\nConfirm your email address to finish setting up your account.`,
       });
     },
   };

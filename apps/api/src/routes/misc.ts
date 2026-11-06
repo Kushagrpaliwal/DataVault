@@ -11,8 +11,8 @@ import { getDashboard } from "../services/dashboard";
 import { globalSearch } from "../services/search";
 import { listAuditLogs } from "../services/audit";
 import { getAttachment, saveScreenshot } from "../services/attachments";
-import { assertEmbeddingAllowed } from "../services/ai-credits";
 import { embedQuery, reindexWorkspace, semanticSearch } from "../services/semantic";
+import { AppError } from "../lib/errors";
 
 const auditQuerySchema = paginationQuerySchema.extend({ resourceType: z.string().max(80).optional() });
 
@@ -29,18 +29,16 @@ export function createMiscRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
      * item about the sea is found by a question that never says the word
      * sea.
      *
-     * The numbers are made by the model, so the search is behind the same
-     * controls as the other AI features: the person must have agreed to
-     * send content to the provider, and the search is limited so that it
-     * cannot be used to grind the shared allowance down.
+     * Embeddings are generated through the person's connected provider.
+     * The request is rate limited and requires the AI permission.
      */
     .get("/api/v1/search/semantic", async ({ query, request }) => {
       await enforceRateLimit(request, env, RATE_LIMITS.semanticSearch);
       const context = await getTenantContext(request, auth, env, "captures.read");
-      await assertEmbeddingAllowed(env, { userId: context.userId, organizationId: context.organizationId });
+      if (!context.permissions.has("ai.use")) throw new AppError(403, "PERMISSION_DENIED", "You do not have permission to use AI features in this workspace.");
       const input = searchQuerySchema.parse(query);
-      const embedding = await embedQuery(env, input.q);
-      return success(await semanticSearch(env, context, embedding, input.limit));
+      const embedded = await embedQuery(env, context, input.q);
+      return success(await semanticSearch(context, embedded.values, embedded.model, input.limit));
     })
     /**
      * Make the numbers of every item in the workspace again.
@@ -52,7 +50,7 @@ export function createMiscRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
       await requireCsrf(request, auth, env);
       await enforceRateLimit(request, env, RATE_LIMITS.semanticReindex);
       const context = await getTenantContext(request, auth, env, "captures.update");
-      await assertEmbeddingAllowed(env, { userId: context.userId, organizationId: context.organizationId });
+      if (!context.permissions.has("ai.use")) throw new AppError(403, "PERMISSION_DENIED", "You do not have permission to use AI features in this workspace.");
       return success(await reindexWorkspace(context, env));
     })
     .post("/api/v1/saved-records/:id/attachments", async ({ params, request, set }) => { await requireCsrf(request, auth, env); set.status = 201; return success(await saveScreenshot(await getTenantContext(request, auth, env, "captures.update"), request, env, uuidSchema.parse(params.id))); })

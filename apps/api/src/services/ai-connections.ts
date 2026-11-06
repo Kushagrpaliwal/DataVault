@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { aiConnections, aiConsents, withAccount, withUser } from "@data-vault/database";
+import { aiConnections, withAccount, withUser } from "@data-vault/database";
 import type { ServerEnvironment } from "@data-vault/config";
 import type { z } from "zod";
 import { detectProviderFromKey } from "@data-vault/schemas";
@@ -177,11 +177,6 @@ export async function createConnection(
       isDefault: input.isDefault,
     }).returning();
     if (!created) throw new Error("Connection insert failed");
-    /**
-     * The person has chosen to use this provider, so the agreement to send
-     * content to it is recorded.
-     */
-    await tx.insert(aiConsents).values({ userId: context.userId, provider: consentFor(input.kind, input.preset) }).onConflictDoNothing();
     await writeAudit(tx, context, request, { action: "created", resourceType: "ai_connection", resourceId: created.id, newValues: { label: created.label, kind: created.kind, preset: created.preset, model: created.model } });
     return created;
   });
@@ -386,16 +381,4 @@ export async function testConnection(env: ServerEnvironment, context: TenantCont
         : `Your key works, but ${probe.detail}`)
       : `Your key works. ${models.length} model${models.length === 1 ? " is" : "s are"} available.`,
   };
-}
-
-/**
- * The name the agreement is recorded under.
- *
- * The agreement is about the provider, and a provider of one's own is not
- * Google, so the name says which one it is.
- */
-function consentFor(kind: string, preset: string): string {
-  if (kind === "anthropic") return "anthropic";
-  if (kind === "gemini") return "gemini";
-  return `own:${preset}`;
 }

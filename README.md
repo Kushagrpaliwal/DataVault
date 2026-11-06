@@ -11,25 +11,35 @@ The web app has four destinations:
 | **Docs** | Long-form notes, written like a document and fed by the browser. |
 | **Settings** | Your account, sign-in methods, AI keys, and connected browsers. |
 
+## Screenshots
+
+The screenshots use sample content to show the web app's main views.
+
+| Overview | Saved items |
+| --- | --- |
+| ![DataVault overview with saved item activity](docs/screenshots/overview.png) | ![Saved items with folders, search, and filters](docs/screenshots/saved-items.png) |
+
+![DataVault docs editor](docs/screenshots/docs.png)
+
 ## Stack
 
 - Web: React 19, TypeScript, Vite, React Router, Tailwind CSS, shadcn-style shared primitives, TanStack Query, React Hook Form, Zod, date-fns, Lucide, Tiptap v3
 - Extension: WXT, React, Manifest V3, background service worker, popup, Chrome side panel, context menus, keyboard commands, extension storage
 - API: Bun, Elysia, Better Auth, Zod, Drizzle ORM, PostgreSQL
-- AI: Gemini (`gemini-3.1-flash-lite` on the free tier), called only from the server
+- AI: BYOK providers connected by the user (OpenAI-compatible APIs, Anthropic, and Gemini)
 - Shared workspaces: types, schemas, typed API client, deterministic capture parser, shared doc schema, UI primitives, config, and database package
 
 ## Signing in
 
 Email and password, with optional two-factor and one-time codes. Google sign-in was removed.
 
-The app works with an unconfirmed address, but **free AI credits need a confirmed one**. Disposable email domains are rejected, every domain must resolve an MX record, and sign-up, sign-in, and email requests are rate limited against a Postgres-backed counter that survives restarts. See [authentication](docs/auth.md).
+Accounts can use DataVault before confirming their email. Disposable email domains are rejected, every other domain must resolve an MX record, and sign-up, sign-in, and email requests are rate limited against a Postgres-backed counter that survives restarts. See [authentication](docs/auth.md).
 
-## Free AI credits
+## Bring your own AI provider
 
-Every confirmed user gets a daily allowance of AI credits for summarising a saved item, suggesting its type and tags, and pulling out its details. Credits come back when the day rolls over at midnight Pacific, which is the same moment the Gemini free-tier quota resets.
+AI features use a provider and API key that you connect in Settings. DataVault does not provide a shared model key or free AI credits. Requests go through the API using your encrypted connection, and provider charges belong to the account behind your key.
 
-The Gemini key never leaves the server. Answers are cached, so the same request never costs a second credit. See [AI features and free credits](docs/ai.md).
+The key is encrypted at rest and never returned to the browser or extension. See [AI setup and providers](docs/ai.md).
 
 ## Docs
 
@@ -141,10 +151,10 @@ bun run build
 
 The same four run on every push, in `.github/workflows/ci.yml`, against a Postgres service.
 
-The integration suite covers auth, organization isolation, RBAC, captures, extension authorization and revocation, sign-in renewal races, docs, idempotency, validation, tenant-scoped search, the credit allowance, and the checks that keep one workspace from reaching into another. It runs against its own database, taken from `TEST_DATABASE_URL`, so it never touches the data a person is working in.
+The integration suite covers auth, organization isolation, RBAC, captures, extension authorization and revocation, sign-in renewal races, docs, idempotency, validation, tenant-scoped search, BYOK provider connections, and the checks that keep one workspace from reaching into another. It runs against its own database, taken from `TEST_DATABASE_URL`, so it never touches the data a person is working in.
 
 With the API and web development servers running, set `SMOKE_EMAIL` and `SMOKE_PASSWORD` to a real account, then run `bun run smoke:web`. It signs in, opens every page, shares a page into the app, checks that every folder is shown, and copies a doc. `bun run make-smoke-account` makes an account to use.
 
 Going live: [deployment](docs/deployment.md) and [security](docs/security.md).
 
-More detail: [architecture](docs/architecture.md), [database](docs/database.md), [authentication](docs/auth.md), [AI credits](docs/ai.md), [API](docs/api.md), [extension](docs/extension.md), and [development](docs/development.md).
+More detail: [architecture](docs/architecture.md), [database](docs/database.md), [authentication](docs/auth.md), [AI setup and providers](docs/ai.md), [API](docs/api.md), [extension](docs/extension.md), and [development](docs/development.md).

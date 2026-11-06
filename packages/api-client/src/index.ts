@@ -1,5 +1,5 @@
 import type {
-  AiActivityEntry, AiClassificationResult, AiConnection, AiCreditStatus, AiExtractionResult, AiRunResult, AiSummaryResult,
+  AiClassificationResult, AiConnection, AiExtractionResult, AiRunResult, AiStatus, AiSummaryResult,
   ApiResponse, AuthMethods, AuthSession, CaptureCreateInput, ExtensionSession, ExtensionTokenSet, Note, NoteChatTurn, NoteClipResult,
   NoteNotesSection, NoteRevision, NoteSummary, NoteSummaryDetail, Organization, PaginationResult, SavedRecord, SearchResult, SemanticResult, Vault,
   VaultCreateInput, VaultTag,
@@ -125,9 +125,7 @@ export class DataVaultApiClient {
   resendVerificationEmail = (email: string) => this.request<void>("/api/v1/auth/verify-email", { method: "POST", body: JSON.stringify({ email }) });
   setPassword = (token: string, password: string) => this.request<{ email: string }>("/api/v1/auth/set-password", { method: "POST", body: JSON.stringify({ token, password }) });
   requestPasswordSetup = (email: string) => this.request<void>("/api/v1/auth/request-password-setup", { method: "POST", body: JSON.stringify({ email }) });
-  aiCredits = () => this.request<AiCreditStatus>("/api/v1/ai/credits");
-  aiActivity = () => this.request<AiActivityEntry[]>("/api/v1/ai/activity");
-  aiConsent = () => this.request<{ consented: boolean }>("/api/v1/ai/consent", { method: "POST", body: JSON.stringify({ accepted: true }) });
+  aiStatus = () => this.request<AiStatus>("/api/v1/ai/status");
   /** The model providers the user has connected. The key is never in it. */
   listAiConnections = () => this.request<AiConnection[]>("/api/v1/ai/connections");
   createAiConnection = (body: { label: string; kind: "openai-compatible" | "anthropic" | "gemini"; preset: string; baseUrl: string; model: string; apiKey?: string; isDefault?: boolean }) => this.request<AiConnection>("/api/v1/ai/connections", { method: "POST", body: JSON.stringify(body) });
@@ -221,18 +219,18 @@ export class DataVaultApiClient {
    * `{ apply: true, previewId, target }` the notes that were shown are
    * written, either into the doc itself or into a new doc inside it.
    */
-  notesFromNote = (id: string, body: { apply?: boolean; previewId?: string; target?: NoteNotesTarget } = {}) => this.request<{ preview: boolean; previewId?: string; target?: NoteNotesTarget; subpageId?: string | null; title?: string; sections: NoteNotesSection[]; remaining: number; source?: "own" | "free" }>(`/api/v1/notes/${id}/notes`, { method: "POST", body: JSON.stringify(body) });
+  notesFromNote = (id: string, body: { apply?: boolean; previewId?: string; target?: NoteNotesTarget } = {}) => this.request<{ preview: boolean; previewId?: string; target?: NoteNotesTarget; subpageId?: string | null; title?: string; sections: NoteNotesSection[] }>(`/api/v1/notes/${id}/notes`, { method: "POST", body: JSON.stringify(body) });
   /**
    * Do something with a selection of the doc.
    *
    * The answer is a list of blocks, and it is not written into the doc: the
    * person sees it first and accepts it.
    */
-  noteAiSelection = (id: string, body: { action: NoteAiAction; instruction?: string; selection: { markdown: string; clips: { clipId: string; text: string }[] }; context: { mode: NoteAiContextMode; recordIds?: string[] } }) => this.request<{ blocks: AiBlock[]; action: NoteAiAction; context: NoteAiContextMode; source: "own" | "free"; remaining: number; title: string }>(`/api/v1/notes/${id}/ai/selection`, { method: "POST", body: JSON.stringify(body) });
+  noteAiSelection = (id: string, body: { action: NoteAiAction; instruction?: string; selection: { markdown: string; clips: { clipId: string; text: string }[] }; context: { mode: NoteAiContextMode; recordIds?: string[] } }) => this.request<{ blocks: AiBlock[]; action: NoteAiAction; context: NoteAiContextMode; title: string }>(`/api/v1/notes/${id}/ai/selection`, { method: "POST", body: JSON.stringify(body) });
   /** Ask a question about the doc, and get a direct answer. */
-  noteAiChat = (id: string, body: { question: string; history?: NoteChatTurn[]; selection?: { markdown: string; clips: { clipId: string; text: string }[] } }) => this.request<{ blocks: AiBlock[]; source: "own" | "free"; remaining: number; title: string }>(`/api/v1/notes/${id}/ai/chat`, { method: "POST", body: JSON.stringify(body) });
+  noteAiChat = (id: string, body: { question: string; history?: NoteChatTurn[]; selection?: { markdown: string; clips: { clipId: string; text: string }[] } }) => this.request<{ blocks: AiBlock[]; title: string }>(`/api/v1/notes/${id}/ai/chat`, { method: "POST", body: JSON.stringify(body) });
   /** A detailed summary of the doc: what it is about, and what each part says. */
-  summarizeNote = (id: string) => this.request<NoteSummaryDetail & { remaining: number; source: "own" | "free" }>(`/api/v1/notes/${id}/summary`, { method: "POST", body: "{}" });
+  summarizeNote = (id: string) => this.request<NoteSummaryDetail>(`/api/v1/notes/${id}/summary`, { method: "POST", body: "{}" });
   /** Sort the pieces of a doc again, using the mode the doc is set to. */
   rearrangeNote = (id: string) => this.request<Note>(`/api/v1/notes/${id}/rearrange`, { method: "POST", body: "{}" });
   /** The doc the keyboard shortcut adds to. */

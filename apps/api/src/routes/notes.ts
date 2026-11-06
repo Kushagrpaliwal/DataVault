@@ -2,8 +2,9 @@ import { Elysia } from "elysia";
 import { noteAiSelectionSchema, noteChatSchema, noteClipSchema, noteCreateSchema, noteCurrentSchema, noteListQuerySchema, noteNotesRequestSchema, notePatchSchema, uuidSchema } from "@data-vault/schemas";
 import type { ServerEnvironment } from "@data-vault/config";
 import type { DataVaultAuth } from "../auth/better-auth";
-import { getTenantContext } from "../auth/context";
+import { getTenantContext, type TenantContext } from "../auth/context";
 import { requireCsrf } from "../auth/csrf";
+import { AppError } from "../lib/errors";
 import { success } from "../lib/http";
 import { enforceRateLimit, RATE_LIMITS } from "../lib/rate-limit-policies";
 import {
@@ -102,6 +103,7 @@ export function createNoteRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
     .post("/api/v1/notes/:id/notes", async ({ body, params, request }) => {
       await requireCsrf(request, auth, env);
       const context = await getTenantContext(request, auth, env, "captures.update");
+      requireAiPermission(context);
       return success(await notesFromDoc(env, context, request, uuidSchema.parse(params.id), noteNotesRequestSchema.parse(body ?? {})));
     })
 
@@ -109,6 +111,7 @@ export function createNoteRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
     .post("/api/v1/notes/:id/summary", async ({ params, request }) => {
       await requireCsrf(request, auth, env);
       const context = await getTenantContext(request, auth, env, "captures.update");
+      requireAiPermission(context);
       return success(await summarizeDoc(env, context, request, uuidSchema.parse(params.id)));
     })
 
@@ -117,6 +120,7 @@ export function createNoteRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
       await requireCsrf(request, auth, env);
       await enforceRateLimit(request, env, RATE_LIMITS.aiSelection);
       const context = await getTenantContext(request, auth, env, "captures.update");
+      requireAiPermission(context);
       return success(await askDoc(env, context, request, uuidSchema.parse(params.id), noteChatSchema.parse(body)));
     })
 
@@ -131,6 +135,7 @@ export function createNoteRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
       await requireCsrf(request, auth, env);
       await enforceRateLimit(request, env, RATE_LIMITS.aiSelection);
       const context = await getTenantContext(request, auth, env, "captures.update");
+      requireAiPermission(context);
       return success(await selectionAssist(env, context, request, uuidSchema.parse(params.id), noteAiSelectionSchema.parse(body)));
     })
 
@@ -147,4 +152,10 @@ export function createNoteRoutes(auth: DataVaultAuth, env: ServerEnvironment) {
       set.status = 201;
       return success(result);
     });
+}
+
+function requireAiPermission(context: TenantContext) {
+  if (!context.permissions.has("ai.use")) {
+    throw new AppError(403, "PERMISSION_DENIED", "You do not have permission to use AI features in this workspace.");
+  }
 }

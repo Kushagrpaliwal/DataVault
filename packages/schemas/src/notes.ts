@@ -62,7 +62,7 @@ export const noteCurrentSchema = z.object({
  *
  * `apply` says the answer the user agreed to should be written into the
  * doc, and `previewId` says which answer that is. The answer is kept on the
- * server, so applying it costs no second credit and writes exactly what was
+ * server, so applying it makes no second model request and writes exactly what was
  * shown.
  */
 export const noteAiRequestSchema = z.object({
@@ -85,7 +85,7 @@ export const noteNotesTargetSchema = z.enum(["replace", "subpage"]);
 /**
  * What is asked for when a whole doc is turned into notes.
  *
- * The answer is kept on the server, so applying it costs no second credit
+ * The answer is kept on the server, so applying it makes no second model request
  * and writes exactly what was shown.
  */
 export const noteNotesRequestSchema = z.object({

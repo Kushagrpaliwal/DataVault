@@ -62,8 +62,9 @@ const serverEnvironmentSchema = z.object({
   /** Cloudflare Turnstile. The signup captcha stays inert while these are blank. */
   TURNSTILE_SECRET_KEY: z.string().optional(),
   TURNSTILE_SITE_KEY: z.string().optional(),
-  /** Gemini. The AI features stay inert while the key is blank. */
+  /** Legacy setting accepted for upgrades; current AI routes do not use server model keys. */
   GEMINI_API_KEY: z.string().optional(),
+  /** Legacy shared-provider setting accepted for older environment files. */
   GEMINI_MODEL: z.string().default("gemini-3.1-flash-lite"),
   /**
    * The model that turns text into numbers.
@@ -73,31 +74,19 @@ const serverEnvironmentSchema = z.object({
    * rather than a constant in the code.
    */
   GEMINI_EMBEDDING_MODEL: z.string().default("gemini-embedding-2"),
-  /**
-   * The Gemini free tier enforces requests-per-day per project, shared by
-   * every user of the product. These mirror the quota shown in AI Studio so
-   * the server throttles itself before Google does.
-   */
+  /** Legacy shared-provider quota settings accepted for existing environment files. */
   AI_GLOBAL_DAILY_REQUESTS: z.coerce.number().int().min(0).default(900),
-  /**
-   * The budget for the numbers that make a search by meaning work.
-   *
-   * Making numbers is cheaper than writing, but it is not free, and it is
-   * shared by everybody, so it has a budget of its own.
-   */
   AI_GLOBAL_DAILY_EMBEDDINGS: z.coerce.number().int().min(0).default(900),
   AI_GLOBAL_MINUTE_REQUESTS: z.coerce.number().int().min(0).default(12),
   AI_USER_DAILY_CREDITS: z.coerce.number().int().min(0).default(20),
+  /** Per-user limit for AI requests through a connected provider. */
   AI_USER_MINUTE_REQUESTS: z.coerce.number().int().min(0).default(5),
+  /** Legacy shared-provider token caps accepted for existing environment files. */
   AI_MAX_INPUT_TOKENS: z.coerce.number().int().min(256).default(4_000),
   AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(64).default(8_192),
   /**
-   * The key that encrypts the keys people bring themselves.
-   *
-   * It is thirty-two bytes, written as base64. The keys of the users are
-   * encrypted with it and are never held in plain text. Without it nobody
-   * can bring a key of their own, and the free credits are the only way to
-   * use the AI.
+   * The key that encrypts provider keys users connect themselves.
+   * It is thirty-two bytes, written as base64.
    */
   AI_KEY_ENCRYPTION_KEY: z.string().optional(),
   /**
@@ -109,16 +98,9 @@ const serverEnvironmentSchema = z.object({
    * things that are not meant to be reached.
    */
   AI_ALLOW_PRIVATE_ENDPOINTS: z.enum(["true", "false"]).default("false"),
-  /**
-   * The caps for a request that is paid for by the person.
-   *
-   * Their own key has no free tier to run out of, so the caps are larger
-   * than the ones the shared key has.
-   */
+  /** Input and output safety caps for requests through user-connected providers. */
   AI_BYO_MAX_INPUT_TOKENS: z.coerce.number().int().min(256).default(32_000),
   AI_BYO_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(64).default(8_192),
-  /** Free-tier Gemini may use submitted content to improve Google's products. */
-  AI_FREE_TIER_CONTENT_NOTICE: z.enum(["true", "false"]).default("true"),
 });
 
 export type ServerEnvironment = z.infer<typeof serverEnvironmentSchema> & {
@@ -127,8 +109,8 @@ export type ServerEnvironment = z.infer<typeof serverEnvironmentSchema> & {
   trustedProxyHops: number;
   turnstileSecretKey?: string | undefined;
   turnstileSiteKey?: string | undefined;
+  /** Legacy setting; active AI routes use user-connected provider keys. */
   geminiApiKey?: string | undefined;
-  aiFreeTierContentNotice: boolean;
   /** The key the connections of the users are encrypted with. */
   aiKeyEncryptionKey?: Uint8Array | undefined;
   /** True when the server may call a model on the local network. */
@@ -206,7 +188,6 @@ export function getServerEnvironment(source: Record<string, string | undefined> 
     turnstileSecretKey,
     turnstileSiteKey,
     geminiApiKey: trim(parsed.GEMINI_API_KEY),
-    aiFreeTierContentNotice: parsed.AI_FREE_TIER_CONTENT_NOTICE === "true",
     aiKeyEncryptionKey: parseEncryptionKey(parsed.AI_KEY_ENCRYPTION_KEY),
     aiAllowPrivateEndpoints: parsed.AI_ALLOW_PRIVATE_ENDPOINTS === "true",
   };

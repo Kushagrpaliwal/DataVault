@@ -3,18 +3,7 @@ import { users } from "./auth";
 import { notes } from "./notes";
 import { savedRecords } from "./records";
 
-/**
- * The allowance a user holds for one day.
- *
- * The period matches the Gemini free tier, which resets requests per day at
- * midnight Pacific, so a user's credits and the shared quota refresh at the
- * same moment.
- *
- * The row belongs to the user and not to a workspace, because the allowance
- * belongs to the user too. It used to be counted per workspace, which meant
- * a new workspace was a fresh allowance, and the free credits could be
- * multiplied simply by making another one.
- */
+/** Legacy table retained for existing installations; the current runtime is BYOK-only. */
 export const aiCreditPeriods = pgTable("ai_credit_periods", {
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   /** The first instant of the period, in UTC. */
@@ -28,7 +17,7 @@ export const aiCreditPeriods = pgTable("ai_credit_periods", {
   index("ai_credit_periods_period_idx").on(table.periodStart),
 ]);
 
-/** Append-only audit trail for every credit movement. */
+/** Legacy table retained for existing installations; current routes do not write credits. */
 export const aiCreditLedger = pgTable("ai_credit_ledger", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
@@ -54,7 +43,7 @@ export const aiCreditLedger = pgTable("ai_credit_ledger", {
   uniqueIndex("ai_credit_ledger_request_unique").on(table.requestId),
 ]);
 
-/** Token-level metering for every request that reached the model. */
+/** Token-level usage for requests made through a user's provider connection. */
 export const aiUsageEvents = pgTable("ai_usage_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
@@ -63,7 +52,7 @@ export const aiUsageEvents = pgTable("ai_usage_events", {
   model: text("model").notNull(),
   inputTokens: integer("input_tokens").notNull().default(0),
   outputTokens: integer("output_tokens").notNull().default(0),
-  /** True when the answer was served from cache and cost no quota. */
+  /** Legacy field retained for existing rows. */
   cached: integer("cached").notNull().default(0),
   requestId: text("request_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -71,12 +60,7 @@ export const aiUsageEvents = pgTable("ai_usage_events", {
   index("ai_usage_events_user_idx").on(table.userId, table.createdAt),
 ]);
 
-/**
- * Consent for sending saved content to a third-party model.
- *
- * The Gemini free tier may use submitted content to improve Google's products,
- * so the user has to agree to that explicitly before anything is sent.
- */
+/** Legacy consent table retained for existing installations; the current BYOK flow does not use it. */
 export const aiConsents = pgTable("ai_consents", {
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   provider: text("provider").notNull().default("gemini"),
@@ -85,13 +69,7 @@ export const aiConsents = pgTable("ai_consents", {
   primaryKey({ columns: [table.userId, table.provider] }),
 ]);
 
-/**
- * Cached model output, keyed by a hash of the exact prompt.
- *
- * The Gemini free tier allows only a few hundred requests a day for the whole
- * product, so serving a repeated request from cache is the single biggest
- * way to stretch it.
- */
+/** Query-embedding cache. Its content hash is scoped to the user and connection. */
 export const aiResponseCache = pgTable("ai_response_cache", {
   contentHash: text("content_hash").notNull(),
   feature: text("feature").notNull(),
@@ -103,14 +81,7 @@ export const aiResponseCache = pgTable("ai_response_cache", {
   index("ai_response_cache_created_idx").on(table.createdAt),
 ]);
 
-/**
- * The counters the whole product shares.
- *
- * The daily budget and the number of people using it are about everybody, so
- * they cannot live in a table that is scoped to one person or one workspace.
- * They hold nothing but two numbers, and they carry no information about
- * who made a request.
- */
+/** Legacy counters retained for existing installations; the current runtime does not use them. */
 export const aiGlobalCounters = pgTable("ai_global_counters", {
   /** "requests" or "users". */
   key: text("key").notNull(),

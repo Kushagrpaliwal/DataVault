@@ -29,16 +29,15 @@ There is one way in, and it is `POST /api/v1/auth/register`. Better Auth's own s
 - **The captcha is checked here.** Better Auth's captcha plugin only guards requests that arrive over HTTP, and this route calls the sign-up endpoint directly, so the token is verified here instead. The client sends it in the `X-Captcha-Response` header.
 - **The address must be able to receive mail.** Disposable domains are refused outright, and every other domain must resolve an MX record.
 
-A throwaway inbox is the cheapest way to farm accounts, and every account that can be confirmed with one is another set of free credits.
+A throwaway inbox is a common source of automated account abuse, so disposable domains are refused.
 
 ## Confirming the email address
 
-The app works with an unconfirmed address. **Free AI credits require a confirmed one**, because a throwaway inbox is the cheapest way to farm accounts, and every confirmed account is another set of credits.
+The app works with an unconfirmed address. Email confirmation supports account security and recovery; it is not required to use AI. AI features use a provider key connected by the user.
 
 Two things protect this beyond the confirmation itself:
 
-- **Disposable domains are rejected.** Known throwaway services are on a blocklist, and every other domain must resolve an MX record. A domain that cannot receive mail can never be confirmed, so it can never earn credits.
-- **A confirmed address is not enough on its own.** Credits are also capped per user per day, and the whole product shares a daily budget that is enforced server-side.
+- **Disposable domains are rejected.** Known throwaway services are on a blocklist, and every other domain must resolve an MX record so that it can receive account mail.
 
 The confirmation link points at the API, which verifies the token and then sends the browser to `/verified` on the website.
 
@@ -116,7 +115,7 @@ Roles are organization-scoped. Built-ins are Super Admin, Admin, Editor, Viewer,
 - Set `TRUSTED_PROXY_HOPS` to the number of proxies in front of the API, and zero when there are none.
 - Configure SMTP. It is required in production; in development the reset and verification mails are printed to the API console.
 - Configure `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY` to turn on the sign-up captcha. Both must be set together.
-- Configure `GEMINI_API_KEY` to turn on the AI features, and set `AI_GLOBAL_DAILY_REQUESTS` to the free-tier quota shown in AI Studio.
-- Store `GEMINI_API_KEY` and `TURNSTILE_SECRET_KEY` only in the API environment.
+- Set `AI_KEY_ENCRYPTION_KEY` to a base64-encoded 32-byte value to enable encrypted user AI provider connections. See [AI setup](ai.md).
+- Store `AI_KEY_ENCRYPTION_KEY` and `TURNSTILE_SECRET_KEY` only in the API environment.
 - Keep secure cookies enabled (`NODE_ENV=production`).
 - Put the API behind a trusted TLS reverse proxy, and normalise forwarded client addresses there.

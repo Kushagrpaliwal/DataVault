@@ -3,10 +3,8 @@ import { resolveMx } from "node:dns/promises";
 /**
  * Domains that hand out throwaway inboxes.
  *
- * A disposable inbox is the cheapest way to farm accounts, and every account
- * that can be verified with one is another set of free AI credits. The list
- * below covers the services that are actually used for this; it is a first
- * filter, not the only one.
+ * Disposable inboxes are often used for automated account abuse. The list
+ * below covers commonly used services; it is a first filter, not the only one.
  */
 const DISPOSABLE_DOMAINS = new Set([
   "0-mail.com", "10minutemail.com", "10minutemail.net", "20minutemail.com", "33mail.com",
@@ -61,8 +59,8 @@ const MX_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
  * Confirm the domain can actually receive mail.
  *
  * A domain with no MX record cannot receive a verification email, so it can
- * never be verified, and therefore can never earn credits. This catches the
- * long tail of throwaway services that are not on the list above.
+ * never be verified. This catches the long tail of throwaway services that
+ * are not on the list above.
  */
 export async function hasMailbox(email: string): Promise<DisposableEmailVerdict> {
   const domain = emailDomain(email);
@@ -83,7 +81,7 @@ export async function hasMailbox(email: string): Promise<DisposableEmailVerdict>
 }
 
 /**
- * The full check used before credits are granted.
+ * The full check used before an account is created.
  *
  * Known-good providers short-circuit. Everything else must resolve an MX
  * record, which rules out the overwhelming majority of disposable inboxes.
